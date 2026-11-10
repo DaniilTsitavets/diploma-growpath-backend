@@ -1,0 +1,65 @@
+name: growpath
+
+x-postgres: &postgres
+  image: postgres:16.15-alpine
+  restart: unless-stopped
+  healthcheck:
+    test: ["CMD-SHELL", "pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB"]
+    interval: 5s
+    timeout: 3s
+    retries: 10
+
+services:
+  localstack:
+    image: localstack/localstack:2026.10.6
+    ports:
+      - "127.0.0.1:4566:4566"
+    environment:
+      LOCALSTACK_AUTH_TOKEN: ${LOCALSTACK_AUTH_TOKEN:?export LOCALSTACK_AUTH_TOKEN before starting}
+      SERVICES: apigateway,cognito-idp,sns,sqs,sts,iam
+      AWS_DEFAULT_REGION: ${AWS_DEFAULT_REGION:-us-east-1}
+    volumes:
+      - ./infra/localstack/init:/etc/localstack/init:ro
+    depends_on:
+      echo:
+        condition: service_started
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fs http://localhost:4566/_localstack/init/ready | grep -Eq '\"completed\": ?true'"]
+      interval: 5s
+      timeout: 5s
+      retries: 30
+
+  # Stand-in upstream for the gateway proxy check; replaced by real services later.
+  echo:
+    image: mendhak/http-https-echo:43
+    environment:
+      HTTP_PORT: "8080"
+      HTTPS_PORT: "8443"
+
+  commerce-db:
+    <<: *postgres
+    environment:
+      POSTGRES_DB: commerce
+      POSTGRES_USER: commerce
+      POSTGRES_PASSWORD: ${COMMERCE_DB_PASSWORD:?set COMMERCE_DB_PASSWORD}
+
+  entitlement-db:
+    <<: *postgres
+    environment:
+      POSTGRES_DB: entitlement
+      POSTGRES_USER: entitlement
+      POSTGRES_PASSWORD: ${ENTITLEMENT_DB_PASSWORD:?set ENTITLEMENT_DB_PASSWORD}
+
+  plant-care-db:
+    <<: *postgres
+    environment:
+      POSTGRES_DB: plant_care
+      POSTGRES_USER: plant_care
+      POSTGRES_PASSWORD: ${PLANT_CARE_DB_PASSWORD:?set PLANT_CARE_DB_PASSWORD}
+
+  expert-db:
+    <<: *postgres
+    environment:
+      POSTGRES_DB: expert
+      POSTGRES_USER: expert
+      POSTGRES_PASSWORD: ${EXPERT_DB_PASSWORD:?set EXPERT_DB_PASSWORD}
