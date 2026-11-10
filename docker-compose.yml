@@ -24,7 +24,7 @@ services:
       echo:
         condition: service_started
     healthcheck:
-      test: ["CMD-SHELL", "curl -fs http://localhost:4566/_localstack/init/ready | grep -Eq '\"completed\": ?true'"]
+      test: ["CMD", "python3", "-c", "import json, sys, urllib.request; sys.exit(0 if json.load(urllib.request.urlopen('http://localhost:4566/_localstack/init/ready', timeout=3))['completed'] else 1)"]
       interval: 5s
       timeout: 5s
       retries: 30
