@@ -33,7 +33,7 @@ echo "valid token:   $(curl -s -o /dev/null -w '%{http_code}' -H "Authorization:
 echo "upstream saw:"
 curl -s -H "Authorization: $token" "$base/ping" | jq '{path, headers: (.headers | {"x-correlation-id", host})}'
 
-say "4. Throttling (limit configured: rate 2 / burst 2; 30 rapid requests, expect some 429)"
+say "4. Throttling (informational: LocalStack stores the limit but does not enforce it, so only 200 is expected)"
 for _ in $(seq 30); do curl -s -o /dev/null -w '%{http_code}\n' -H "Authorization: $token" "$base/ping"; done | sort | uniq -c
 
 say "5. SNS -> SQS and DLQ"
