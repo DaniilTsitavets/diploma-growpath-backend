@@ -1,10 +1,12 @@
-from functools import lru_cache
-
+from fastapi import Request
 from sqlalchemy import Engine, create_engine
 
-from app.config import get_settings
+from app.config import Settings
 
 
-@lru_cache
-def get_engine() -> Engine:
-    return create_engine(get_settings().database_url, pool_pre_ping=True)
+def create_db_engine(settings: Settings) -> Engine:
+    return create_engine(settings.database_url.get_secret_value(), pool_pre_ping=True)
+
+
+def get_engine(request: Request) -> Engine:
+    return request.app.state.engine

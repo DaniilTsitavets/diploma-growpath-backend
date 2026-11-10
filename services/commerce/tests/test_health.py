@@ -1,58 +1,120 @@
+import json
+
 import pytest
+from fastapi import FastAPI
 from fastapi.testclient import TestClient
 from growpath_observability import CORRELATION_HEADER
+from pydantic import BaseModel, ValidationError
 from sqlalchemy import create_engine
 
-from app.db import get_engine
+from app.config import Settings
 from app.main import create_app
+
+PROBLEM_JSON = "application/problem+json"
 
 
 @pytest.fixture
-def app(monkeypatch):
-    monkeypatch.setenv("COMMERCE_DATABASE_URL", "sqlite://")
-    return create_app()
+def app() -> FastAPI:
+    return create_app(Settings(database_url="sqlite://"))
 
 
-def test_live_is_ok(app):
-    response = TestClient(app).get("/health/live")
+@pytest.fixture
+def client(app: FastAPI) -> TestClient:
+    return TestClient(app, raise_server_exceptions=False)
+
+
+def test_live_is_ok(client):
+    response = client.get("/health/live")
 
     assert response.status_code == 200
     assert response.json() == {"status": "ok"}
 
 
-def test_ready_is_ok_when_database_reachable(app):
-    app.dependency_overrides[get_engine] = lambda: create_engine("sqlite://")
-
-    response = TestClient(app).get("/health/ready")
+def test_ready_is_ok_when_database_reachable(client):
+    response = client.get("/health/ready")
 
     assert response.status_code == 200
+    assert response.json() == {"status": "ok"}
 
 
-def test_ready_reports_problem_when_database_down(app):
-    app.dependency_overrides[get_engine] = lambda: create_engine("sqlite:////nonexistent/dir/db")
+def test_ready_reports_problem_when_database_down(app, client):
+    app.state.engine = create_engine("sqlite:////nonexistent/dir/db")
 
-    response = TestClient(app).get("/health/ready")
+    response = client.get("/health/ready")
 
+    body = response.json()
     assert response.status_code == 503
-    assert response.headers["content-type"] == "application/problem+json"
-    assert response.json()["detail"] == "database unavailable"
+    assert response.headers["content-type"] == PROBLEM_JSON
+    assert body["title"] == "Service Unavailable"
+    assert body["detail"] == "database unavailable"
 
 
-def test_unknown_route_is_problem_json_with_correlation_id(app):
-    response = TestClient(app).get("/nope", headers={CORRELATION_HEADER: "corr-9"})
+def test_unknown_route_is_problem_json_with_correlation_id(client):
+    response = client.get("/nope", headers={CORRELATION_HEADER: "corr-9"})
 
     assert response.status_code == 404
+    assert response.headers["content-type"] == PROBLEM_JSON
     assert response.json()["correlation_id"] == "corr-9"
     assert response.headers[CORRELATION_HEADER] == "corr-9"
 
 
-def test_unexpected_error_is_500_problem_json(app):
+def test_invalid_request_is_422_problem_json(app, client):
+    class Payload(BaseModel):
+        quantity: int
+
+    @app.post("/echo")
+    def echo(payload: Payload) -> Payload:
+        return payload
+
+    response = client.post("/echo", json={"quantity": "many"})
+
+    body = response.json()
+    assert response.status_code == 422
+    assert response.headers["content-type"] == PROBLEM_JSON
+    assert body["errors"][0]["loc"] == ["body", "quantity"]
+
+
+def test_unexpected_error_is_500_problem_json(app, client):
     @app.get("/boom")
-    def boom():
+    def boom() -> None:
         raise RuntimeError("secret internals")
 
-    response = TestClient(app, raise_server_exceptions=False).get("/boom")
+    response = client.get("/boom")
 
     assert response.status_code == 500
-    assert response.json()["title"] == "Internal server error"
+    assert response.json()["title"] == "Internal Server Error"
     assert "secret internals" not in response.text
+
+
+def test_settings_require_database_url(monkeypatch):
+    monkeypatch.delenv("COMMERCE_DATABASE_URL", raising=False)
+
+    with pytest.raises(ValidationError):
+        Settings()
+
+
+def test_settings_do_not_reveal_database_url():
+    settings = Settings(database_url="postgresql://user:hunter2@db/commerce")
+
+    assert "hunter2" not in repr(settings)
+
+
+def test_error_log_is_json_with_correlation_id(capsys):
+    app = create_app(Settings(database_url="sqlite://"))
+
+    @app.get("/boom")
+    def boom() -> None:
+        raise RuntimeError("secret internals")
+
+    response = TestClient(app, raise_server_exceptions=False).get(
+        "/boom", headers={CORRELATION_HEADER: "corr-log"}
+    )
+
+    entries = [json.loads(line) for line in capsys.readouterr().out.splitlines() if line]
+    (entry,) = [e for e in entries if e["message"] == "unhandled error"]
+    assert entry["service"] == "commerce"
+    assert entry["level"] == "ERROR"
+    assert entry["correlation_id"] == "corr-log"
+    assert response.json()["correlation_id"] == "corr-log"
+    assert response.headers[CORRELATION_HEADER] == "corr-log"
+    assert "RuntimeError: secret internals" in entry["exception"]

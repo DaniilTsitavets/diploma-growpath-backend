@@ -24,6 +24,7 @@ include = ["app*"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+addopts = "--cov=app --cov-fail-under=70"
 
 [tool.ruff]
 line-length = 100

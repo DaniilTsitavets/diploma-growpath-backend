@@ -1,9 +1,12 @@
+import re
 import uuid
 from contextvars import ContextVar
 
 from starlette.types import ASGIApp, Message, Receive, Scope, Send
 
 CORRELATION_HEADER = "X-Correlation-Id"
+
+_VALID_ID = re.compile(r"[A-Za-z0-9._-]{1,128}")
 
 _correlation_id: ContextVar[str | None] = ContextVar("correlation_id", default=None)
 
@@ -29,20 +32,21 @@ class CorrelationIdMiddleware:
             return
 
         correlation_id = self._incoming_id(scope) or str(uuid.uuid4())
-        token = _correlation_id.set(correlation_id)
+        # Never reset: Starlette's ServerErrorMiddleware handles unhandled errors outside this
+        # middleware and must still see the ID. Each request runs in its own task context,
+        # so the value cannot leak into another request.
+        _correlation_id.set(correlation_id)
 
         async def send_with_header(message: Message) -> None:
             if message["type"] == "http.response.start":
                 message.setdefault("headers", []).append((self._header, correlation_id.encode()))
             await send(message)
 
-        try:
-            await self._app(scope, receive, send_with_header)
-        finally:
-            _correlation_id.reset(token)
+        await self._app(scope, receive, send_with_header)
 
     def _incoming_id(self, scope: Scope) -> str | None:
         for name, value in scope["headers"]:
-            if name == self._header and value:
-                return value.decode()
+            if name == self._header:
+                candidate = value.decode("latin-1")
+                return candidate if _VALID_ID.fullmatch(candidate) else None
         return None

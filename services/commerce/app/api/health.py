@@ -1,28 +1,32 @@
 import logging
-from typing import Annotated
+from typing import Annotated, Literal
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, HTTPException
+from pydantic import BaseModel
 from sqlalchemy import Engine, text
 from sqlalchemy.exc import SQLAlchemyError
 
-from app.api.errors import problem_response
 from app.db import get_engine
 
 router = APIRouter(prefix="/health", tags=["health"])
 logger = logging.getLogger(__name__)
 
 
+class HealthStatus(BaseModel):
+    status: Literal["ok"] = "ok"
+
+
 @router.get("/live")
-def live() -> dict[str, str]:
-    return {"status": "ok"}
+def live() -> HealthStatus:
+    return HealthStatus()
 
 
 @router.get("/ready")
-def ready(engine: Annotated[Engine, Depends(get_engine)]):
+def ready(engine: Annotated[Engine, Depends(get_engine)]) -> HealthStatus:
     try:
         with engine.connect() as connection:
             connection.execute(text("SELECT 1"))
-    except SQLAlchemyError:
-        logger.exception("readiness check failed: database unavailable")
-        return problem_response(503, "Service not ready", "database unavailable")
-    return {"status": "ok"}
+    except SQLAlchemyError as exc:
+        logger.error("readiness check failed", exc_info=exc)
+        raise HTTPException(status_code=503, detail="database unavailable") from exc
+    return HealthStatus()

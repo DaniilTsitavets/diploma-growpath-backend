@@ -1,3 +1,4 @@
+import pytest
 from starlette.applications import Starlette
 from starlette.requests import Request
 from starlette.responses import JSONResponse
@@ -30,6 +31,14 @@ def test_generates_correlation_id_when_missing():
     generated = response.headers[CORRELATION_HEADER]
     assert generated
     assert response.json() == {"correlation_id": generated}
+
+
+@pytest.mark.parametrize("bad_id", ["has space", "x" * 129, "semi;colon"])
+def test_rejects_malformed_incoming_id(bad_id):
+    response = make_client().get("/", headers={CORRELATION_HEADER: bad_id})
+
+    assert response.headers[CORRELATION_HEADER] != bad_id
+    assert response.json() == {"correlation_id": response.headers[CORRELATION_HEADER]}
 
 
 def test_correlation_id_does_not_leak_between_requests():
