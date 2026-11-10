@@ -1,6 +1,7 @@
 COMPOSE := docker compose --env-file .env
+UV ?= uv
 
-.PHONY: up down verify logs
+.PHONY: up down verify logs sync lock lint test
 
 .env:
 	cp .env.example .env
@@ -17,3 +18,17 @@ verify:
 
 logs:
 	$(COMPOSE) logs -f
+
+sync:
+	$(UV) sync --all-packages
+
+lock:
+	$(UV) lock
+
+lint:
+	$(UV) run ruff check libs services
+	$(UV) run ruff format --check libs services
+
+test:
+	$(UV) run --all-packages pytest libs/observability
+	cd services/commerce && $(UV) run --all-packages pytest

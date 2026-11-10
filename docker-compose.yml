@@ -24,7 +24,7 @@ services:
       echo:
         condition: service_started
     healthcheck:
-      test: ["CMD-SHELL", "curl -fs http://localhost:4566/_localstack/init/ready | grep -Eq '\"completed\": ?true'"]
+      test: ["CMD", "python3", "-c", "import json, sys, urllib.request; sys.exit(0 if json.load(urllib.request.urlopen('http://localhost:4566/_localstack/init/ready', timeout=3))['completed'] else 1)"]
       interval: 5s
       timeout: 5s
       retries: 30
@@ -35,6 +35,23 @@ services:
     environment:
       HTTP_PORT: "8080"
       HTTPS_PORT: "8443"
+
+  commerce:
+    build:
+      context: .
+      dockerfile: services/commerce/Dockerfile
+    environment:
+      COMMERCE_DATABASE_URL: postgresql+psycopg://commerce:${COMMERCE_DB_PASSWORD:?set COMMERCE_DB_PASSWORD}@commerce-db:5432/commerce
+    ports:
+      - "127.0.0.1:8001:8000"
+    depends_on:
+      commerce-db:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health/live', timeout=2)"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
 
   commerce-db:
     <<: *postgres

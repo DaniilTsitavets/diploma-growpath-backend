@@ -1,0 +1,16 @@
+[build-system]
+requires = ["setuptools>=69"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "growpath-observability"
+version = "0.1.0"
+description = "JSON logging and correlation ID propagation shared by GrowPath services"
+requires-python = ">=3.12"
+dependencies = ["starlette>=0.40"]
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
