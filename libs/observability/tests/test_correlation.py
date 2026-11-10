@@ -1,11 +1,10 @@
 import pytest
+from growpath_observability import CORRELATION_HEADER, CorrelationIdMiddleware, get_correlation_id
 from starlette.applications import Starlette
 from starlette.requests import Request
 from starlette.responses import JSONResponse
 from starlette.routing import Route
 from starlette.testclient import TestClient
-
-from growpath_observability import CORRELATION_HEADER, CorrelationIdMiddleware, get_correlation_id
 
 
 async def echo_id(_: Request) -> JSONResponse:
