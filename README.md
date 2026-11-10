@@ -60,3 +60,16 @@ On real AWS API Gateway the same configuration returns `429`. Rate limiting is t
 at the gateway and is not demonstrable locally. Status: the service-side fallback (a per-user rate
 limit middleware returning `429` as RFC 7807) is **not implemented yet**; it will be added only if a
 demonstrable limit is required.
+
+## Development
+
+Python dependencies are managed with [uv](https://docs.astral.sh/uv/) as one workspace: a single
+`uv.lock` pins every package for all services, and Docker images are built from it with
+`uv sync --frozen`.
+
+```
+make sync   # create .venv with all services and dev tools
+make lint   # ruff check and format check
+make test   # unit tests with coverage (each service must stay at 70% or above)
+make lock   # refresh uv.lock after changing dependencies
+```
