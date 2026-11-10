@@ -13,6 +13,7 @@ dependencies = [
     "sqlalchemy>=2.0",
     "psycopg[binary]>=3.2",
     "pydantic-settings>=2.5",
+    "alembic>=1.13",
     "growpath-observability",
 ]
 
