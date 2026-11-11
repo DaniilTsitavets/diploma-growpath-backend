@@ -16,7 +16,12 @@ PROBLEM_JSON = "application/problem+json"
 
 
 def build(queue: FakeQueue | None = None) -> FastAPI:
-    return create_app(make_settings(), queue or FakeQueue(), photo_storage=FakePhotoStorage())
+    return create_app(
+        make_settings(),
+        queue or FakeQueue(),
+        photo_storage=FakePhotoStorage(),
+        ticket_queue=FakeQueue(),
+    )
 
 
 @pytest.fixture

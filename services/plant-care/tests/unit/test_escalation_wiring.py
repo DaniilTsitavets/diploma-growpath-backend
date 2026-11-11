@@ -31,6 +31,7 @@ def test_the_repeater_runs_while_the_application_is_up():
         FakeQueue(),
         photo_storage=FakePhotoStorage(),
         escalation_events=FakeEscalationEvents(),
+        ticket_queue=FakeQueue(),
     )
     app.state.escalation_repeater.run_once = ran.set
 

@@ -17,6 +17,7 @@ class Settings(BaseSettings):
     aws_max_attempts: int = 3
 
     order_placed_queue_url: str
+    ticket_events_queue_url: str
     consumer_wait_seconds: int = 5
     consumer_batch_size: int = 5
     consumer_interval_seconds: float = 0.5

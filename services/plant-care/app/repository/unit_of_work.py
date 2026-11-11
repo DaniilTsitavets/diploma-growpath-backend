@@ -7,6 +7,7 @@ from app.repository.escalation_delivery import SqlAlchemyEscalationDeliveryRepos
 from app.repository.escalations import SqlAlchemyEscalationRepository
 from app.repository.journals import SqlAlchemyJournalRepository
 from app.repository.photos import SqlAlchemyPhotoRepository
+from app.repository.ticket_events import SqlAlchemyTicketEventRepository
 from app.repository.updates import SqlAlchemyUpdateRepository
 
 
@@ -22,6 +23,7 @@ class SqlAlchemyUnitOfWork:
         self.photos = SqlAlchemyPhotoRepository(self._session)
         self.escalations = SqlAlchemyEscalationRepository(self._session)
         self.escalation_delivery = SqlAlchemyEscalationDeliveryRepository(self._session)
+        self.ticket_events = SqlAlchemyTicketEventRepository(self._session)
         return self
 
     def __exit__(self, *exc_info: object) -> None:

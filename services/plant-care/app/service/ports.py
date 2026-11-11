@@ -145,6 +145,24 @@ class EscalationDeliveryRepository(Protocol):
         ...
 
 
+class TicketEventRepository(Protocol):
+    """Each method sets `ticket_id` and moves the escalation only from the states its event may
+    follow, and only when the escalation has no other ticket; False means a duplicate or late event.
+    """
+
+    def mark_ticket_open(self, escalation_id: uuid.UUID, ticket_id: uuid.UUID) -> bool: ...
+
+    def mark_answered(
+        self,
+        escalation_id: uuid.UUID,
+        ticket_id: uuid.UUID,
+        answer_text: str,
+        answered_at: datetime,
+    ) -> bool: ...
+
+    def mark_cancelled(self, escalation_id: uuid.UUID, ticket_id: uuid.UUID) -> bool: ...
+
+
 class UnitOfWork(Protocol):
     """One business action in one transaction: leaving the block without commit rolls back."""
 
@@ -154,6 +172,7 @@ class UnitOfWork(Protocol):
     photos: PhotoRepository
     escalations: EscalationRepository
     escalation_delivery: EscalationDeliveryRepository
+    ticket_events: TicketEventRepository
 
     def __enter__(self) -> Self: ...
 

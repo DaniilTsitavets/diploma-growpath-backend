@@ -17,6 +17,7 @@ from app.llm.factory import create_diagnosis_model
 from app.messaging.codec import order_routes
 from app.messaging.sns import SnsEscalationEvents, create_sns_client
 from app.messaging.sqs import SqsQueue, create_sqs_client
+from app.messaging.ticket_codec import ticket_routes
 from app.quota import create_entitlement_client
 from app.repository.unit_of_work import SqlAlchemyUnitOfWork
 from app.service.ai_quota import AiQuota, TierLookup
@@ -32,6 +33,7 @@ from app.service.event_handlers import EventHandlers
 from app.service.expert_quota import ExpertQuota
 from app.service.journals import JournalService
 from app.service.photos import PhotoService, PhotoStorage
+from app.service.ticket_handlers import TicketEventHandlers
 from app.service.updates import UpdateService
 from app.storage.s3 import S3PhotoReader, S3PhotoStorage, create_s3_client
 
@@ -69,11 +71,15 @@ def create_app(
     diagnosis_model: DiagnosisModel | None = None,
     expert_quota: ExpertQuota | None = None,
     escalation_events: EscalationEvents | None = None,
+    ticket_queue: MessageQueue | None = None,
 ) -> FastAPI:
     settings = settings or Settings()
     configure_logging(settings.service_name, settings.log_level)
     order_queue = order_queue or SqsQueue(
         create_sqs_client(settings), settings.order_placed_queue_url
+    )
+    ticket_queue = ticket_queue or SqsQueue(
+        create_sqs_client(settings), settings.ticket_events_queue_url
     )
     photo_storage = photo_storage or S3PhotoStorage(
         create_s3_client(settings), settings.photos_bucket, settings.photo_url_ttl_seconds
@@ -130,7 +136,8 @@ def create_app(
     app.state.escalation_repeater_interval_seconds = settings.escalation_repeater_interval_seconds
 
     handlers = EventHandlers(unit_of_work)
-    app.state.queues = [order_queue]
+    ticket_handlers = TicketEventHandlers(unit_of_work)
+    app.state.queues = [order_queue, ticket_queue]
     app.state.consumers = [
         QueueConsumer(
             order_queue,
@@ -138,7 +145,14 @@ def create_app(
             frozenset(),
             settings.consumer_batch_size,
             settings.consumer_wait_seconds,
-        )
+        ),
+        QueueConsumer(
+            ticket_queue,
+            ticket_routes(ticket_handlers),
+            frozenset(),
+            settings.consumer_batch_size,
+            settings.consumer_wait_seconds,
+        ),
     ]
     app.state.consumer_interval_seconds = settings.consumer_interval_seconds
 

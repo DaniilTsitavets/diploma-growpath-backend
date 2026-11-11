@@ -56,7 +56,10 @@ def test_application_runs_the_order_consumer_while_it_is_up():
     orders.send("order.placed", {})
     handled = threading.Event()
     app = create_app(
-        make_settings(consumer_interval_seconds=0.01), orders, photo_storage=FakePhotoStorage()
+        make_settings(consumer_interval_seconds=0.01),
+        orders,
+        photo_storage=FakePhotoStorage(),
+        ticket_queue=FakeQueue(),
     )
     app.state.consumers = [
         QueueConsumer(orders, {"order.placed": lambda body: handled.set()}, frozenset(), 5, 0)
@@ -66,3 +69,23 @@ def test_application_runs_the_order_consumer_while_it_is_up():
         assert handled.wait(timeout=5)
 
     assert len(orders.deleted) == 1
+
+
+def test_application_consumes_the_ticket_queue_with_all_three_event_types():
+    tickets = FakeQueue()
+    app = create_app(
+        make_settings(consumer_interval_seconds=0.01),
+        FakeQueue(),
+        photo_storage=FakePhotoStorage(),
+        ticket_queue=tickets,
+    )
+
+    routed = {
+        event_type
+        for consumer in app.state.consumers
+        for event_type in consumer._routes
+        if event_type.startswith("ticket.")
+    }
+
+    assert routed == {"ticket.created", "ticket.answered", "ticket.cancelled"}
+    assert app.state.queues[1] is tickets

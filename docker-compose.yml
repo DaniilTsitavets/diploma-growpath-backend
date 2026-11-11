@@ -93,6 +93,7 @@ services:
     environment:
       PLANT_CARE_DATABASE_URL: postgresql+psycopg://plant_care:${PLANT_CARE_DB_PASSWORD:?set PLANT_CARE_DB_PASSWORD}@plant-care-db:5432/plant_care
       PLANT_CARE_ORDER_PLACED_QUEUE_URL: http://localstack:4566/000000000000/plant-care-order-placed
+      PLANT_CARE_TICKET_EVENTS_QUEUE_URL: http://localstack:4566/000000000000/plant-care-ticket-events
       PLANT_CARE_ENTITLEMENT_URL: http://entitlement:8000
       PLANT_CARE_ESCALATION_TOPIC_ARN: arn:aws:sns:us-east-1:000000000000:escalation-requested
       # Equal to the entitlement default (ENTITLEMENT_EXPERT_RESERVATION_TTL_HOURS = 24).

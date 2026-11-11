@@ -76,6 +76,12 @@ ticket_topic_arn=$(awslocal sns create-topic --name ticket-events --query TopicA
 subscribe_queue "$ticket_topic_arn" \
   "$(create_queue_with_dlq entitlement-ticket-events entitlement-ticket-events-dlq)" \
   '{"event_type":["ticket.created","ticket.cancelled"]}'
+# plant-care shows the whole ticket lifecycle, so its subscription has no filter.
+subscribe_queue "$ticket_topic_arn" \
+  "$(create_queue_with_dlq plant-care-ticket-events plant-care-ticket-events-dlq)"
+
+# plant-care publishes escalation.requested; expert-consultation subscribes with its own queue.
+awslocal sns create-topic --name escalation-requested >/dev/null
 
 # plant-care issues presigned URLs for update photos; only object keys are stored in its database.
 awslocal s3api create-bucket --bucket growpath-photos >/dev/null
