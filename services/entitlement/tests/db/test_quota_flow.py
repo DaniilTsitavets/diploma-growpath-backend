@@ -159,7 +159,7 @@ def test_an_expired_reservation_does_not_hold_quota(ai_quota: QuotaService, engi
     assert ai_quota.reserve(uuid.uuid4(), user_id).created
 
 
-def test_an_expert_reservation_is_committed_after_expiry_and_released_after_commit(
+def test_an_expert_reservation_is_committed_after_expiry_and_released_only_by_an_event(
     expert_quota: QuotaService, engine: Engine
 ):
     user_id = uuid.uuid4()
@@ -173,9 +173,12 @@ def test_an_expert_reservation_is_committed_after_expiry_and_released_after_comm
     )
 
     committed = expert_quota.commit(escalation, user_id)
-    released = expert_quota.release(escalation, user_id)
+    with pytest.raises(ReservationUnusable, match="committed"):
+        expert_quota.release(escalation, user_id)
+    released = expert_quota.release_by_event(escalation, user_id)
 
     assert (committed.status, released.status) == (COMMITTED, RELEASED)
+    assert expert_quota.release(escalation, user_id).status is RELEASED
     with pytest.raises(ReservationUnusable, match="released"):
         expert_quota.commit(escalation, user_id)
 

@@ -37,7 +37,7 @@ class EventHandlers:
         self._apply_to_reservation("ticket.created", event, self._expert_quota.commit)
 
     def ticket_cancelled(self, event: TicketCancelled) -> None:
-        self._apply_to_reservation("ticket.cancelled", event, self._expert_quota.release)
+        self._apply_to_reservation("ticket.cancelled", event, self._expert_quota.release_by_event)
 
     @staticmethod
     def _apply_to_reservation(

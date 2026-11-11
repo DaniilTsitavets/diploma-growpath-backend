@@ -31,6 +31,7 @@ class QuotaKind:
     ttl: timedelta
     commit_requires_unexpired: bool
     release_from: frozenset[ReservationStatus]
+    event_release_from: frozenset[ReservationStatus]
 
 
 def ai_quota_kind(limits: Mapping[Tier, int], ttl: timedelta) -> QuotaKind:
@@ -42,18 +43,24 @@ def ai_quota_kind(limits: Mapping[Tier, int], ttl: timedelta) -> QuotaKind:
         ttl,
         commit_requires_unexpired=True,
         release_from=frozenset({RESERVED}),
+        event_release_from=frozenset({RESERVED}),
     )
 
 
 def expert_quota_kind(limits: Mapping[Tier, int], ttl: timedelta) -> QuotaKind:
-    """A ticket exists once `ticket.created` arrives, so it is paid for even after the TTL."""
+    """A ticket exists once `ticket.created` arrives, so it is paid for even after the TTL.
+
+    The REST release of a committed reservation is a 409: it tells plant-care that a ticket exists.
+    Only the event of an expired ticket returns a committed reservation's quota.
+    """
     return QuotaKind(
         "expert",
         lambda uow: uow.expert_reservations,
         limits,
         ttl,
         commit_requires_unexpired=False,
-        release_from=frozenset({RESERVED, COMMITTED}),
+        release_from=frozenset({RESERVED}),
+        event_release_from=frozenset({RESERVED, COMMITTED}),
     )
 
 
@@ -102,6 +109,16 @@ class QuotaService:
             user_id,
             target=RELEASED,
             sources=self._kind.release_from,
+            unexpired_only=False,
+        )
+
+    def release_by_event(self, reservation_id: uuid.UUID, user_id: uuid.UUID) -> Reservation:
+        """Release for a broker event, which may return the quota of a committed reservation."""
+        return self._transition(
+            reservation_id,
+            user_id,
+            target=RELEASED,
+            sources=self._kind.event_release_from,
             unexpired_only=False,
         )
 
