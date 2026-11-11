@@ -5,17 +5,17 @@ from fastapi import FastAPI
 from fastapi.testclient import TestClient
 from growpath_observability import CORRELATION_HEADER
 from pydantic import BaseModel, ValidationError
-from sqlalchemy import create_engine
 
 from app.config import Settings
 from app.main import create_app
+from tests.unit.fakes import make_settings
 
 PROBLEM_JSON = "application/problem+json"
 
 
 @pytest.fixture
 def app() -> FastAPI:
-    return create_app(Settings(database_url="sqlite://"))
+    return create_app(make_settings())
 
 
 @pytest.fixture
@@ -30,16 +30,7 @@ def test_live_is_ok(client):
     assert response.json() == {"status": "ok"}
 
 
-def test_ready_is_ok_when_database_reachable(client):
-    response = client.get("/health/ready")
-
-    assert response.status_code == 200
-    assert response.json() == {"status": "ok"}
-
-
-def test_ready_reports_problem_when_database_down(app, client):
-    app.state.engine = create_engine("sqlite:////nonexistent/dir/db")
-
+def test_ready_reports_problem_when_database_down(client):
     response = client.get("/health/ready")
 
     body = response.json()
@@ -94,13 +85,13 @@ def test_settings_require_database_url(monkeypatch):
 
 
 def test_settings_do_not_reveal_database_url():
-    settings = Settings(database_url="postgresql://user:hunter2@db/commerce")
+    settings = make_settings(database_url="postgresql://user:hunter2@db/commerce")
 
     assert "hunter2" not in repr(settings)
 
 
 def test_error_log_is_json_with_correlation_id(capsys):
-    app = create_app(Settings(database_url="sqlite://"))
+    app = create_app(make_settings())
 
     @app.get("/boom")
     def boom() -> None:

@@ -8,6 +8,8 @@ from fastapi.responses import JSONResponse
 from growpath_observability import CORRELATION_HEADER, get_correlation_id
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
+from app.service.errors import IdempotencyKeyReused, ItemNotFound, PaymentFailed
+
 PROBLEM_JSON = "application/problem+json"
 logger = logging.getLogger(__name__)
 
@@ -45,7 +47,20 @@ async def handle_unexpected_error(request: Request, exc: Exception) -> JSONRespo
     return response
 
 
+def domain_error_handler(status: int, detail: str | None = None):
+    async def handle(_: Request, exc: Exception) -> JSONResponse:
+        return problem_response(status, detail or str(exc))
+
+    return handle
+
+
 def register_error_handlers(app: FastAPI) -> None:
+    app.add_exception_handler(ItemNotFound, domain_error_handler(404))
+    app.add_exception_handler(
+        IdempotencyKeyReused,
+        domain_error_handler(422, "Idempotency-Key was already used for a different item"),
+    )
+    app.add_exception_handler(PaymentFailed, domain_error_handler(402, "Payment was declined"))
     app.add_exception_handler(StarletteHTTPException, handle_http_exception)
     app.add_exception_handler(RequestValidationError, handle_validation_error)
     app.add_exception_handler(Exception, handle_unexpected_error)
