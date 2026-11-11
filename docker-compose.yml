@@ -61,6 +61,31 @@ services:
       timeout: 3s
       retries: 10
 
+  entitlement:
+    build:
+      context: .
+      dockerfile: services/entitlement/Dockerfile
+    environment:
+      ENTITLEMENT_DATABASE_URL: postgresql+psycopg://entitlement:${ENTITLEMENT_DB_PASSWORD:?set ENTITLEMENT_DB_PASSWORD}@entitlement-db:5432/entitlement
+      ENTITLEMENT_ORDER_PLACED_QUEUE_URL: http://localstack:4566/000000000000/entitlement-order-placed
+      ENTITLEMENT_TICKET_EVENTS_QUEUE_URL: http://localstack:4566/000000000000/entitlement-ticket-events
+      # LocalStack only; see the commerce service for why the code never reads keys itself.
+      ENTITLEMENT_AWS_ENDPOINT_URL: http://localstack:4566
+      AWS_ACCESS_KEY_ID: ${AWS_ACCESS_KEY_ID:-test}
+      AWS_SECRET_ACCESS_KEY: ${AWS_SECRET_ACCESS_KEY:-test}
+    ports:
+      - "127.0.0.1:8002:8000"
+    depends_on:
+      entitlement-db:
+        condition: service_healthy
+      localstack:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health/live', timeout=2)"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
   commerce-db:
     <<: *postgres
     environment:
