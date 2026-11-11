@@ -74,14 +74,15 @@ def test_nothing_leaves_a_terminal_state(session: Session):
     answered = add_escalation(session)["id"]
     cancelled = add_escalation(session)["id"]
     repository(session).mark_answered(answered, TICKET, "Done.", ANSWERED_AT)
-    repository(session).mark_cancelled(cancelled, TICKET)
+    cancelled_ticket = uuid.uuid4()
+    repository(session).mark_cancelled(cancelled, cancelled_ticket)
 
     repo = repository(session)
     assert not repo.mark_ticket_open(answered, TICKET)
     assert not repo.mark_cancelled(answered, TICKET)
     assert not repo.mark_answered(answered, TICKET, "Other.", ANSWERED_AT)
-    assert not repo.mark_ticket_open(cancelled, TICKET)
-    assert not repo.mark_answered(cancelled, TICKET, "Late.", ANSWERED_AT)
+    assert not repo.mark_ticket_open(cancelled, cancelled_ticket)
+    assert not repo.mark_answered(cancelled, cancelled_ticket, "Late.", ANSWERED_AT)
 
     assert stored(session, answered)["answer_text"] == "Done."
     assert stored(session, cancelled)["answer_text"] is None
