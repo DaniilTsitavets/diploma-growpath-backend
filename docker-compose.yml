@@ -20,21 +20,11 @@ services:
       AWS_DEFAULT_REGION: ${AWS_DEFAULT_REGION:-us-east-1}
     volumes:
       - ./infra/localstack/init:/etc/localstack/init:ro
-    depends_on:
-      echo:
-        condition: service_started
     healthcheck:
       test: ["CMD", "python3", "-c", "import json, sys, urllib.request; sys.exit(0 if json.load(urllib.request.urlopen('http://localhost:4566/_localstack/init/ready', timeout=3))['completed'] else 1)"]
       interval: 5s
       timeout: 5s
       retries: 30
-
-  # Stand-in upstream for the gateway proxy check; replaced by real services later.
-  echo:
-    image: mendhak/http-https-echo:43
-    environment:
-      HTTP_PORT: "8080"
-      HTTPS_PORT: "8443"
 
   commerce:
     build:

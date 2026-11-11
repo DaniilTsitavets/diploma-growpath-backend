@@ -1,13 +1,20 @@
 #!/bin/bash
-# Runs inside LocalStack once it is ready: Cognito, API Gateway (authorizer, proxy, throttling), SNS/SQS/DLQ.
+# Runs inside LocalStack once it is ready: Cognito, API Gateway (authorizer, routes, throttling), SNS/SQS/DLQ.
 set -euo pipefail
 
 POOL_NAME=growpath
 CLIENT_NAME=growpath-client
 TEST_USER=check@growpath.test
 TEST_PASSWORD='Passw0rd!Check'
+EXPERT_USER=expert@growpath.test
+EXPERT_PASSWORD='Passw0rd!Expert'
+USER_GROUP=users
+EXPERT_GROUP=experts
 STAGE=v1
-UPSTREAM=http://echo:8080
+COMMERCE=http://commerce:8000
+ENTITLEMENT=http://entitlement:8000
+PLANT_CARE=http://plant-care:8000
+EXPERT_CONSULTATION=http://expert-consultation:8000
 RATE_LIMIT=2
 BURST_LIMIT=2
 
@@ -19,20 +26,72 @@ awslocal cognito-idp admin-create-user --user-pool-id "$pool_id" --username "$TE
   --message-action SUPPRESS >/dev/null
 awslocal cognito-idp admin-set-user-password --user-pool-id "$pool_id" --username "$TEST_USER" \
   --password "$TEST_PASSWORD" --permanent
+awslocal cognito-idp create-group --user-pool-id "$pool_id" --group-name "$USER_GROUP" >/dev/null
+awslocal cognito-idp create-group --user-pool-id "$pool_id" --group-name "$EXPERT_GROUP" >/dev/null
+awslocal cognito-idp admin-create-user --user-pool-id "$pool_id" --username "$EXPERT_USER" \
+  --message-action SUPPRESS >/dev/null
+awslocal cognito-idp admin-set-user-password --user-pool-id "$pool_id" --username "$EXPERT_USER" \
+  --password "$EXPERT_PASSWORD" --permanent
+for member in "$TEST_USER" "$EXPERT_USER"; do
+  awslocal cognito-idp admin-add-user-to-group --user-pool-id "$pool_id" --username "$member" \
+    --group-name "$USER_GROUP"
+done
+awslocal cognito-idp admin-add-user-to-group --user-pool-id "$pool_id" --username "$EXPERT_USER" \
+  --group-name "$EXPERT_GROUP"
 
 api_id=$(awslocal apigateway create-rest-api --name growpath-gateway --query id --output text)
 root_id=$(awslocal apigateway get-resources --rest-api-id "$api_id" --query 'items[0].id' --output text)
 v1_id=$(awslocal apigateway create-resource --rest-api-id "$api_id" --parent-id "$root_id" --path-part v1 --query id --output text)
-proxy_id=$(awslocal apigateway create-resource --rest-api-id "$api_id" --parent-id "$v1_id" --path-part '{proxy+}' --query id --output text)
 auth_id=$(awslocal apigateway create-authorizer --rest-api-id "$api_id" --name cognito --type COGNITO_USER_POOLS \
   --provider-arns "$pool_arn" --identity-source method.request.header.Authorization --query id --output text)
 
-awslocal apigateway put-method --rest-api-id "$api_id" --resource-id "$proxy_id" --http-method ANY \
-  --authorization-type COGNITO_USER_POOLS --authorizer-id "$auth_id" \
-  --request-parameters method.request.path.proxy=true >/dev/null
-awslocal apigateway put-integration --rest-api-id "$api_id" --resource-id "$proxy_id" --http-method ANY \
-  --type HTTP_PROXY --integration-http-method ANY --uri "${UPSTREAM}/v1/{proxy}" \
-  --request-parameters '{"integration.request.path.proxy":"method.request.path.proxy","integration.request.header.X-Correlation-Id":"context.requestId"}' >/dev/null
+# Every route sets the identity headers from the verified JWT claims. A mapped header replaces the one
+# the client sent, but only when the claim has a value: a token without `cognito:groups` would let a
+# forged X-User-Groups through. That is why every user belongs to the `users` group.
+IDENTITY_HEADERS="\"integration.request.header.X-Correlation-Id\":\"context.requestId\",\"integration.request.header.X-User-Id\":\"context.authorizer.claims.sub\",\"integration.request.header.X-User-Groups\":\"context.authorizer.claims['cognito:groups']\""
+
+# Prints the id of /v1/<path>, creating the missing parts.
+resource_for() {
+  local parent=$v1_id part id
+  for part in ${1//\// }; do
+    id=$(awslocal apigateway get-resources --rest-api-id "$api_id" \
+      --query "items[?parentId=='${parent}' && pathPart=='${part}'].id|[0]" --output text)
+    if [ "$id" = None ]; then
+      id=$(awslocal apigateway create-resource --rest-api-id "$api_id" --parent-id "$parent" \
+        --path-part "$part" --query id --output text)
+    fi
+    parent=$id
+  done
+  echo "$parent"
+}
+
+# route <path under /v1> <http method> <upstream uri> [extra integration parameters] [method parameters]
+route() {
+  local resource_id method=$2 uri=$3 extra=${4:+$4,} declared=${5:-}
+  resource_id=$(resource_for "$1")
+  awslocal apigateway put-method --rest-api-id "$api_id" --resource-id "$resource_id" --http-method "$method" \
+    --authorization-type COGNITO_USER_POOLS --authorizer-id "$auth_id" \
+    ${declared:+--request-parameters "$declared"} >/dev/null
+  awslocal apigateway put-integration --rest-api-id "$api_id" --resource-id "$resource_id" --http-method "$method" \
+    --type HTTP_PROXY --integration-http-method "$method" --uri "$uri" \
+    --request-parameters "{${extra}${IDENTITY_HEADERS}}" >/dev/null
+}
+
+# A prefix: the path itself and everything below it go to the same upstream path.
+prefix_route() {
+  route "$1" ANY "$2/v1/$1"
+  route "$1/{proxy+}" ANY "$2/v1/$1/{proxy}" '"integration.request.path.proxy":"method.request.path.proxy"' \
+    method.request.path.proxy=true
+}
+
+route items GET "$COMMERCE/v1/items"
+route orders POST "$COMMERCE/v1/orders"
+prefix_route journals "$PLANT_CARE"
+route 'updates/{proxy+}' ANY "$PLANT_CARE/v1/updates/{proxy}" '"integration.request.path.proxy":"method.request.path.proxy"' \
+  method.request.path.proxy=true
+prefix_route expert/tickets "$EXPERT_CONSULTATION"
+# The user id comes from the token, never from the URL: entitlement serves any user id it is given.
+route me/entitlement GET "$ENTITLEMENT/v1/entitlements/{userId}" '"integration.request.path.userId":"context.authorizer.claims.sub"'
 
 awslocal apigateway create-deployment --rest-api-id "$api_id" --stage-name "$STAGE" >/dev/null
 awslocal apigateway update-stage --rest-api-id "$api_id" --stage-name "$STAGE" --patch-operations \

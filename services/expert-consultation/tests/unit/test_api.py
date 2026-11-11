@@ -102,6 +102,30 @@ def test_the_experts_group_may_be_one_of_several(client: TestClient):
     assert client.get("/v1/expert/tickets", headers=headers).status_code == 200
 
 
+@pytest.mark.parametrize(
+    ("header", "allowed"),
+    [
+        ("experts", True),
+        ("users,experts", True),
+        ("[users, experts]", True),
+        ("['users', 'experts']", True),
+        ("[experts]", True),
+        ("users", False),
+        ("[users]", False),
+        ("superexperts", False),
+        ("", False),
+    ],
+)
+def test_the_group_header_is_read_in_every_form_the_gateway_may_render(
+    client: TestClient, header: str, allowed: bool
+):
+    headers = {"X-User-Id": str(EXPERT), "X-User-Groups": header}
+
+    response = client.get("/v1/expert/tickets", headers=headers)
+
+    assert response.status_code == (200 if allowed else 403)
+
+
 def test_every_endpoint_checks_the_group_before_looking_at_the_ticket(client: TestClient):
     headers = {"X-User-Id": str(EXPERT), "X-User-Groups": "users"}
 
