@@ -14,4 +14,4 @@ RUN uv sync --frozen --no-dev --no-editable --package commerce \
 WORKDIR /srv/services/commerce
 USER app
 EXPOSE 8000
-CMD ["sh", "-c", "alembic upgrade head && exec uvicorn --factory app.main:create_app --host 0.0.0.0 --port 8000"]
+CMD ["sh", "-c", "alembic upgrade head && python -m app.seed && exec uvicorn --factory app.main:create_app --host 0.0.0.0 --port 8000"]

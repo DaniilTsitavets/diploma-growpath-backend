@@ -1,7 +1,7 @@
 import uuid
 from typing import Protocol, Self
 
-from app.service.model import Item, NewOrder, OrderData
+from app.service.model import CatalogEntry, Item, NewOrder, OrderData
 
 
 class OrderRepository(Protocol):
@@ -19,6 +19,10 @@ class OrderRepository(Protocol):
 
 class CatalogRepository(Protocol):
     def get_active(self, item_id: uuid.UUID) -> Item | None: ...
+
+    def list_active(self, label: str | None = None) -> list[CatalogEntry]:
+        """Active items ordered by name, optionally only those carrying `label`."""
+        ...
 
 
 class UnitOfWork(Protocol):

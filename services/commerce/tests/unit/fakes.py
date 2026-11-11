@@ -3,7 +3,9 @@ from datetime import UTC, datetime
 from typing import Self
 
 from app.service.errors import DiscountAlreadyUsed, PaymentFailed
-from app.service.model import Item, NewOrder, OrderData
+from app.service.model import CatalogEntry, Item, NewOrder, OrderData
+
+UNREACHABLE_DATABASE = "postgresql+psycopg://nobody@127.0.0.1:1/none"
 
 
 def make_item(**overrides) -> Item:
@@ -18,6 +20,10 @@ def make_item(**overrides) -> Item:
         "is_active": True,
     }
     return Item(**{**fields, **overrides})
+
+
+def make_entry(labels: tuple[str, ...] = (), **overrides) -> CatalogEntry:
+    return CatalogEntry(**vars(make_item(**overrides)), labels=labels)
 
 
 def make_order_data(**overrides) -> OrderData:
@@ -68,6 +74,17 @@ class FakeCatalog:
     def get_active(self, item_id: uuid.UUID) -> Item | None:
         item = self._items.get(item_id)
         return item if item is not None and item.is_active else None
+
+    def list_active(self, label: str | None = None) -> list[CatalogEntry]:
+        entries = [
+            item if isinstance(item, CatalogEntry) else CatalogEntry(**vars(item), labels=())
+            for item in self._items.values()
+            if item.is_active
+        ]
+        return sorted(
+            (entry for entry in entries if label is None or label in entry.labels),
+            key=lambda entry: entry.name,
+        )
 
 
 class FakeUnitOfWork:

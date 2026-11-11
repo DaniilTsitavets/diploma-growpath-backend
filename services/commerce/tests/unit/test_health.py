@@ -8,9 +8,9 @@ from pydantic import BaseModel, ValidationError
 
 from app.config import Settings
 from app.main import create_app
+from tests.unit.fakes import UNREACHABLE_DATABASE
 
 PROBLEM_JSON = "application/problem+json"
-UNREACHABLE_DATABASE = "postgresql+psycopg://nobody@127.0.0.1:1/none"
 
 
 @pytest.fixture

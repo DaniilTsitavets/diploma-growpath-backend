@@ -4,7 +4,7 @@ from concurrent.futures import ThreadPoolExecutor
 from functools import partial
 
 import pytest
-from sqlalchemy import Engine, select, update
+from sqlalchemy import Engine, select
 from sqlalchemy.orm import Session, sessionmaker
 
 from app.models import CatalogItem, Order
@@ -18,18 +18,6 @@ from app.service.purchase import PurchaseService
 class Declining:
     def charge(self, user_id, order_id, amount_cents) -> None:
         raise PaymentFailed
-
-
-@pytest.fixture
-def discounted_item(engine: Engine, committed_item: CatalogItem) -> CatalogItem:
-    with Session(engine) as session:
-        session.execute(
-            update(CatalogItem)
-            .where(CatalogItem.id == committed_item.id)
-            .values(first_purchase_discount_pct=20)
-        )
-        session.commit()
-    return committed_item
 
 
 def make_service(engine: Engine, payments=None) -> PurchaseService:

@@ -16,6 +16,11 @@ class Item:
 
 
 @dataclass(frozen=True)
+class CatalogEntry(Item):
+    labels: tuple[str, ...]
+
+
+@dataclass(frozen=True)
 class NewOrder:
     id: uuid.UUID
     user_id: uuid.UUID

@@ -7,7 +7,7 @@ from uuid import uuid4
 import pytest
 from alembic import command
 from alembic.config import Config
-from sqlalchemy import Connection, Engine, create_engine, delete, insert, text
+from sqlalchemy import Connection, Engine, create_engine, delete, insert, text, update
 from sqlalchemy.engine import URL, make_url
 from sqlalchemy.orm import Session
 
@@ -119,3 +119,16 @@ def committed_item(engine: Engine) -> Iterator[CatalogItem]:
     with engine.begin() as connection:
         connection.execute(delete(Order).where(Order.item_id == item.id))
         connection.execute(delete(CatalogItem).where(CatalogItem.id == item.id))
+
+
+@pytest.fixture
+def discounted_item(engine: Engine, committed_item: CatalogItem) -> CatalogItem:
+    """The committed item with the 20% first-purchase discount."""
+    with Session(engine) as session:
+        session.execute(
+            update(CatalogItem)
+            .where(CatalogItem.id == committed_item.id)
+            .values(first_purchase_discount_pct=20)
+        )
+        session.commit()
+    return committed_item
