@@ -1,6 +1,7 @@
+from pathlib import Path
 from typing import Literal, Self
 
-from pydantic import SecretStr, model_validator
+from pydantic import Field, SecretStr, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -75,6 +76,11 @@ class Settings(BaseSettings):
 
     feed_default_page_size: int = 20
     feed_max_page_size: int = 100
+
+    # Relative to the working directory; the container image runs from the service directory.
+    knowledge_dir: Path = Path("knowledge")
+    # At most 4: `chat_turn_sources.rank` is limited to 1-4 by a CHECK.
+    chat_top_k: int = Field(default=4, ge=1, le=4)
 
     @model_validator(mode="after")
     def _require_acceptance_window(self) -> Self:

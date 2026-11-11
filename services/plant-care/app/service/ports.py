@@ -2,6 +2,7 @@ import uuid
 from datetime import date, datetime, timedelta
 from typing import Protocol, Self
 
+from app.service.knowledge_model import DocumentDraft, RetrievedSection, SyncResult
 from app.service.model import (
     Diagnosis,
     DiagnosisResult,
@@ -163,6 +164,20 @@ class TicketEventRepository(Protocol):
     def mark_cancelled(self, escalation_id: uuid.UUID, ticket_id: uuid.UUID) -> bool: ...
 
 
+class KnowledgeRepository(Protocol):
+    def sync(self, document: DocumentDraft) -> SyncResult:
+        """Create the document, replace its sections when its content changed, or do nothing."""
+        ...
+
+    def search(self, question: str, species: str, limit: int) -> list[RetrievedSection]:
+        """Sections matching the question, best first, at most `limit`.
+
+        Only sections of the species (case-insensitive) and general ones are searched; when fewer
+        than `limit` match, the species' own sections fill the rest in document order.
+        """
+        ...
+
+
 class UnitOfWork(Protocol):
     """One business action in one transaction: leaving the block without commit rolls back."""
 
@@ -173,6 +188,7 @@ class UnitOfWork(Protocol):
     escalations: EscalationRepository
     escalation_delivery: EscalationDeliveryRepository
     ticket_events: TicketEventRepository
+    knowledge: KnowledgeRepository
 
     def __enter__(self) -> Self: ...
 

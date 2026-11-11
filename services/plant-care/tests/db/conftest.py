@@ -19,7 +19,10 @@ ADMIN_URL = os.environ.get(
     "PLANT_CARE_TEST_DATABASE_URL", "postgresql+psycopg://postgres@127.0.0.1:55432/postgres"
 )
 SESSION_OPTIONS = {"options": "-c timezone=UTC"}
-TABLES = "journals, updates, update_photos, diagnoses, diagnosis_candidates, escalations"
+TABLES = (
+    "journals, updates, update_photos, diagnoses, diagnosis_candidates, escalations,"
+    " chat_turn_sources, chat_turns, kb_sections, kb_documents"
+)
 
 
 @contextmanager
