@@ -274,15 +274,41 @@ def test_repeated_release_succeeds(kind_name: str):
     assert quota.release(existing.id, USER).status is RELEASED
 
 
-@pytest.mark.parametrize(("kind_name", "releases_committed"), [("ai", False), ("expert", True)])
-def test_only_the_expert_reservation_can_be_released_after_commit(
-    kind_name: str, releases_committed: bool
-):
-    quota, _, reservations = setup(kind_name)
+@both_kinds
+def test_rest_release_of_a_committed_reservation_is_a_conflict(kind_name: str):
+    quota, uow, reservations = setup(kind_name)
     existing = reservations.seed(USER, status=COMMITTED)
 
-    if releases_committed:
-        assert quota.release(existing.id, USER).status is RELEASED
+    with pytest.raises(ReservationUnusable, match="committed"):
+        quota.release(existing.id, USER)
+
+    assert uow.commits == 0
+
+
+@pytest.mark.parametrize(
+    ("kind_name", "status", "released"),
+    [
+        ("expert", RESERVED, True),
+        ("expert", COMMITTED, True),
+        ("expert", RELEASED, True),
+        ("ai", RESERVED, True),
+        ("ai", COMMITTED, False),
+    ],
+)
+def test_event_release_follows_the_quota_kind(kind_name: str, status, released: bool):
+    quota, _, reservations = setup(kind_name)
+    existing = reservations.seed(USER, status=status)
+
+    if released:
+        assert quota.release_by_event(existing.id, USER).status is RELEASED
     else:
         with pytest.raises(ReservationUnusable, match="committed"):
-            quota.release(existing.id, USER)
+            quota.release_by_event(existing.id, USER)
+
+
+def test_event_release_of_a_foreign_reservation_is_not_found():
+    quota, _, reservations = setup("expert")
+    existing = reservations.seed(OTHER_USER, status=COMMITTED)
+
+    with pytest.raises(ReservationNotFound):
+        quota.release_by_event(existing.id, USER)

@@ -140,6 +140,19 @@ def test_commit_of_an_expired_ai_reservation_is_409(client: TestClient, uow: Fak
     assert response.json()["code"] == "reservation_unusable"
 
 
+@KINDS
+def test_rest_release_of_a_committed_reservation_is_409(
+    client: TestClient, uow: FakeUnitOfWork, kind: str, id_field: str
+):
+    existing = reservations(uow, kind).seed(USER, status=COMMITTED)
+
+    response = client.post(url(kind, f"/{existing.id}/release"), json={"user_id": str(USER)})
+
+    assert response.status_code == 409
+    assert response.json()["code"] == "reservation_unusable"
+    assert reservations(uow, kind).rows[existing.id].status is COMMITTED
+
+
 @pytest.mark.parametrize(
     ("path", "body"),
     [
