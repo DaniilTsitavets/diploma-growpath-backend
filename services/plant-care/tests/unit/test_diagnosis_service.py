@@ -233,6 +233,114 @@ def test_an_attempt_that_is_already_running_is_not_started_twice(scenario: Scena
     assert scenario.quota.released == []
 
 
+def test_replay_of_a_live_reservation_means_the_attempt_is_running(scenario: Scenario):
+    scenario.seed(model_effort="high")
+
+    with pytest.raises(DiagnosisConflict, match="running"):
+        scenario.service(FakeModel(conclusion())).run(USER, scenario.update_id)
+
+    assert scenario.row.ai_reservation_id == scenario.reservation_id
+    assert scenario.quota.reserved == [scenario.reservation_id]
+
+
+def test_replay_of_a_released_or_expired_reservation_lets_the_next_attempt_take_over(
+    scenario: Scenario,
+):
+    scenario.seed(model_effort="high")
+    scenario.quota.unusable.add(scenario.reservation_id)
+
+    diagnosis = scenario.service(FakeModel(conclusion())).run(USER, scenario.update_id)
+
+    assert diagnosis.summary.status is COMPLETED
+    assert diagnosis.ai_reservation_id != scenario.reservation_id
+    assert scenario.quota.committed == [diagnosis.ai_reservation_id]
+
+
+def test_replay_of_a_never_made_reservation_creates_it_and_the_attempt_continues(
+    scenario: Scenario,
+):
+    scenario.quota.reserved.clear()
+
+    diagnosis = scenario.service(FakeModel(conclusion())).run(USER, scenario.update_id)
+
+    assert diagnosis.ai_reservation_id == scenario.reservation_id
+    assert scenario.quota.reserved == [scenario.reservation_id]
+    assert scenario.quota.committed == [scenario.reservation_id]
+
+
+def test_a_committed_reservation_of_a_re_evaluation_is_not_reserved_again(scenario: Scenario):
+    scenario.seed(
+        model_effort="high",
+        clarifying_question="Q?",
+        clarifying_answer="A",
+    )
+    scenario.quota.reserved.clear()
+    scenario.quota.unavailable = True
+    model = FakeModel(conclusion(dominant=False))
+
+    diagnosis = scenario.service(model).run(USER, scenario.update_id)
+
+    assert diagnosis.summary.status is COMPLETED
+    assert diagnosis.summary.escalation_offered is True
+    assert diagnosis.ai_reservation_id == scenario.reservation_id
+    assert scenario.quota.reserved == []
+    assert scenario.quota.committed == []
+    assert scenario.quota.released == []
+
+
+def test_a_failing_resumed_re_evaluation_degrades_without_touching_the_quota(scenario: Scenario):
+    scenario.seed(model_effort="high", clarifying_question="Q?", clarifying_answer="A")
+
+    diagnosis = scenario.service(FakeModel(ModelUnavailable("down"))).run(USER, scenario.update_id)
+
+    assert diagnosis.summary.status is DEGRADED
+    assert scenario.quota.released == []
+
+
+@pytest.mark.parametrize("state", [{}, {"model_effort": "high"}, {"status": DEGRADED}])
+def test_an_unavailable_entitlement_writes_nothing_and_never_degrades(
+    scenario: Scenario, state: dict
+):
+    if state.get("status") is DEGRADED:
+        state = {**state, "model_effort": "high", "recommendation": "fallback"}
+    scenario.seed(**state)
+    before = scenario.row
+    scenario.quota.unavailable = True
+    model = FakeModel(conclusion())
+
+    with pytest.raises(AiQuotaUnavailable):
+        scenario.service(model).run(USER, scenario.update_id)
+
+    assert scenario.row == before
+    assert model.requests == []
+    assert scenario.uow.commits == 0
+    assert scenario.quota.released == []
+
+
+def test_the_attempt_after_an_entitlement_outage_replays_the_same_reservation(scenario: Scenario):
+    service = scenario.service(FakeModel(conclusion()))
+    scenario.quota.unavailable = True
+    with pytest.raises(AiQuotaUnavailable):
+        service.run(USER, scenario.update_id)
+    scenario.quota.unavailable = False
+
+    diagnosis = service.run(USER, scenario.update_id)
+
+    assert diagnosis.ai_reservation_id == scenario.reservation_id
+    assert diagnosis.summary.status is COMPLETED
+
+
+def test_the_tier_is_not_looked_up_while_entitlement_is_unavailable(scenario: Scenario):
+    looked_up = []
+    scenario.tiers.tier_of = looked_up.append
+    scenario.quota.unavailable = True
+
+    with pytest.raises(AiQuotaUnavailable):
+        scenario.service(FakeModel(conclusion())).run(USER, scenario.update_id)
+
+    assert looked_up == []
+
+
 def test_losing_the_claim_of_a_retry_releases_the_new_reservation(scenario: Scenario):
     scenario.seed(status=DEGRADED, model_effort="high", recommendation="fallback")
     rival = uuid.uuid4()

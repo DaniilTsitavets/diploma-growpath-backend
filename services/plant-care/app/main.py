@@ -106,7 +106,7 @@ def create_app(
     app.state.consumer_interval_seconds = settings.consumer_interval_seconds
 
     app.add_middleware(CorrelationIdMiddleware)
-    register_error_handlers(app)
+    register_error_handlers(app, settings.unavailable_retry_after_seconds)
     app.include_router(health.router)
     app.include_router(journals.router)
     app.include_router(updates.router)

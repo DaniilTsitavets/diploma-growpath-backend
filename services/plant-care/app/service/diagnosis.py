@@ -116,8 +116,21 @@ class DiagnosisService:
         required = missing_required(context.photos)
         if required:
             raise PhotosMissing([kind.value for kind in required])
-        attempt = self._claim(user_id, context.diagnosis)
+        summary = context.diagnosis.summary
+        if status is DiagnosisStatus.PENDING and summary.clarifying_answer is not None:
+            attempt = self._resume_reevaluation(context.diagnosis)
+        else:
+            attempt = self._claim(user_id, context.diagnosis)
         return self._execute(user_id, context, attempt)
+
+    @staticmethod
+    def _resume_reevaluation(diagnosis: Diagnosis) -> Attempt:
+        """The reservation of a re-evaluation is already committed: there is nothing to reserve.
+
+        A repeated request may run the model twice, but only the first result is stored.
+        """
+        effort = ModelEffort(diagnosis.summary.model_effort)
+        return Attempt(diagnosis.ai_reservation_id, effort, paid=False)
 
     def answer_clarification(
         self, user_id: uuid.UUID, update_id: uuid.UUID, text: str
@@ -133,9 +146,7 @@ class DiagnosisService:
             uow.commit()
         with self._unit_of_work() as uow:
             context = self._load(uow, user_id, update_id)
-        effort = ModelEffort(context.diagnosis.summary.model_effort)
-        attempt = Attempt(context.diagnosis.ai_reservation_id, effort, paid=False)
-        return self._execute(user_id, context, attempt)
+        return self._execute(user_id, context, self._resume_reevaluation(context.diagnosis))
 
     def decline_escalation(self, user_id: uuid.UUID, update_id: uuid.UUID) -> Diagnosis:
         with self._unit_of_work() as uow:
@@ -158,18 +169,25 @@ class DiagnosisService:
         return Context(update, journal.species, uow.photos.list_for_update(update_id), diagnosis)
 
     def _claim(self, user_id: uuid.UUID, diagnosis: Diagnosis) -> Attempt:
-        """Take the diagnosis for this attempt, with the reservation it will be paid from."""
-        effort = self._effort_policy.effort_for(user_id)
+        """Take the diagnosis for this attempt, with the reservation it will be paid from.
+
+        Whether the previous attempt is still alive is decided by replaying its reservation id in
+        entitlement: live means running (409), released or expired means a new id is needed.
+        Nothing is written before entitlement has answered.
+        """
         current = diagnosis.ai_reservation_id
         summary = diagnosis.summary
         if summary.status is DiagnosisStatus.PENDING and self._reservation_usable(current, user_id):
-            first = summary.model_effort is None and self._claimed(
+            if summary.model_effort is not None:
+                raise DiagnosisConflict("another attempt is already running")
+            effort = self._effort_policy.effort_for(user_id)
+            claimed = self._claimed(
                 lambda uow: uow.diagnoses.claim_first_attempt(diagnosis.update_id, current, effort)
             )
-            if not first:
+            if not claimed:
                 raise DiagnosisConflict("another attempt is already running")
             return Attempt(current, effort, paid=True)
-        return self._claim_with_new_reservation(user_id, diagnosis, effort)
+        return self._claim_with_new_reservation(user_id, diagnosis)
 
     def _reservation_usable(self, reservation_id: uuid.UUID, user_id: uuid.UUID) -> bool:
         """Reserve is idempotent by id, so it also makes a reservation that was never made."""
@@ -179,11 +197,10 @@ class DiagnosisService:
             return False
         return True
 
-    def _claim_with_new_reservation(
-        self, user_id: uuid.UUID, diagnosis: Diagnosis, effort: ModelEffort
-    ) -> Attempt:
+    def _claim_with_new_reservation(self, user_id: uuid.UUID, diagnosis: Diagnosis) -> Attempt:
         new_id = uuid.uuid4()
         self._ai_quota.reserve(new_id, user_id)
+        effort = self._effort_policy.effort_for(user_id)
         claimed = self._claimed(
             lambda uow: uow.diagnoses.claim_retry(
                 diagnosis.update_id, diagnosis.ai_reservation_id, new_id, effort

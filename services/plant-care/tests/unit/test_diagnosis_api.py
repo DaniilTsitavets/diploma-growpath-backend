@@ -19,6 +19,7 @@ from tests.unit.settings import make_settings
 
 PROBLEM_JSON = "application/problem+json"
 AS_USER = {"X-User-Id": str(USER)}
+RETRY_AFTER_SECONDS = 7
 
 
 def client_for(scenario: Scenario, model: FakeModel) -> TestClient:
@@ -26,7 +27,7 @@ def client_for(scenario: Scenario, model: FakeModel) -> TestClient:
     app.state.diagnosis_service = scenario.service(model)
     app.state.photo_service = PhotoService(lambda: scenario.uow, FakePhotoStorage(), 600)
     app.add_middleware(CorrelationIdMiddleware)
-    register_error_handlers(app)
+    register_error_handlers(app, RETRY_AFTER_SECONDS)
     app.include_router(diagnoses.router)
     app.include_router(photos.router)
     return TestClient(app, raise_server_exceptions=False)
@@ -104,12 +105,15 @@ def test_an_exhausted_quota_is_409_with_its_code(scenario: Scenario):
     assert response.json()["code"] == "ai-quota-exhausted"
 
 
-def test_an_unavailable_quota_service_is_503_problem_json(scenario: Scenario):
+def test_an_unavailable_quota_service_is_503_problem_json_with_retry_after(scenario: Scenario):
     scenario.quota.unavailable = True
 
     response = client_for(scenario, FakeModel(conclusion())).post(url(scenario), headers=AS_USER)
 
     assert response.status_code == 503
+    assert response.headers["Retry-After"] == str(RETRY_AFTER_SECONDS)
+    assert scenario.row.summary.status.value == "diagnosis_pending"
+    assert scenario.row.summary.model_effort is None
     assert response.headers["content-type"] == PROBLEM_JSON
 
 

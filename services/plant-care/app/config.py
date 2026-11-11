@@ -21,6 +21,7 @@ class Settings(BaseSettings):
     consumer_batch_size: int = 5
     consumer_interval_seconds: float = 0.5
 
+    unavailable_retry_after_seconds: int = 5
     entitlement_url: str
     entitlement_connect_timeout_seconds: float = 1.0
     entitlement_read_timeout_seconds: float = 5.0

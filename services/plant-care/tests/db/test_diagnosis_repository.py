@@ -116,6 +116,35 @@ def test_a_retry_replaces_the_reservation_and_resets_a_degraded_diagnosis(sessio
     assert row.recommendation is None
 
 
+def test_a_crashed_attempt_is_taken_over_by_replacing_its_reservation(session: Session):
+    update_id = pending(session, model_effort="high")
+
+    claimed = SqlAlchemyDiagnosisRepository(session).claim_retry(
+        update_id, RESERVATION, OTHER, ModelEffort.MEDIUM
+    )
+
+    row = stored(session, update_id)
+    assert claimed is True
+    assert (row.ai_reservation_id, row.status, row.model_effort) == (
+        OTHER,
+        "diagnosis_pending",
+        "medium",
+    )
+
+
+def test_a_crashed_attempt_cannot_be_taken_over_twice_with_the_same_old_reservation(
+    session: Session,
+):
+    update_id = pending(session, model_effort="high")
+    repository = SqlAlchemyDiagnosisRepository(session)
+
+    first = repository.claim_retry(update_id, RESERVATION, OTHER, ModelEffort.HIGH)
+    second = repository.claim_retry(update_id, RESERVATION, uuid.uuid4(), ModelEffort.HIGH)
+
+    assert (first, second) == (True, False)
+    assert stored(session, update_id).ai_reservation_id == OTHER
+
+
 def test_a_retry_cannot_use_a_stale_reservation_or_a_finished_diagnosis(session: Session):
     degraded = pending(session, status="degraded", model_effort="high", recommendation="r")
     done = add_update(session)["id"]

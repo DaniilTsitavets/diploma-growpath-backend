@@ -64,16 +64,22 @@ async def handle_invalid_request(_: Request, exc: Exception) -> JSONResponse:
     return problem_response(422, str(exc))
 
 
-async def handle_unavailable(request: Request, exc: Exception) -> JSONResponse:
-    logger.warning("dependency unavailable", exc_info=exc, extra={"path": request.url.path})
-    return problem_response(503, "A dependency of the service is unavailable, retry shortly")
+def unavailable_handler(retry_after_seconds: int | None):
+    async def handle(request: Request, exc: Exception) -> JSONResponse:
+        logger.warning("dependency unavailable", exc_info=exc, extra={"path": request.url.path})
+        headers = None if retry_after_seconds is None else {"Retry-After": str(retry_after_seconds)}
+        return problem_response(
+            503, "A dependency of the service is unavailable, retry shortly", headers=headers
+        )
+
+    return handle
 
 
-def register_error_handlers(app: FastAPI) -> None:
+def register_error_handlers(app: FastAPI, retry_after_seconds: int | None = None) -> None:
     app.add_exception_handler(NotFound, handle_not_found)
     app.add_exception_handler(Conflict, handle_conflict)
     app.add_exception_handler(InvalidRequest, handle_invalid_request)
-    app.add_exception_handler(Unavailable, handle_unavailable)
+    app.add_exception_handler(Unavailable, unavailable_handler(retry_after_seconds))
     app.add_exception_handler(StarletteHTTPException, handle_http_exception)
     app.add_exception_handler(RequestValidationError, handle_validation_error)
     app.add_exception_handler(Exception, handle_unexpected_error)

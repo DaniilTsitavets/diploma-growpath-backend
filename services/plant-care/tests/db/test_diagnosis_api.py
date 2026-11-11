@@ -127,6 +127,51 @@ def test_a_failed_attempt_degrades_and_the_retry_pays_with_a_new_reservation(
     assert quota.committed == [new_reservation]
 
 
+def test_an_unavailable_entitlement_is_503_with_retry_after_and_changes_nothing(
+    database_url: URL, quota: FakeAiQuota, journal_id: uuid.UUID, engine: Engine
+):
+    model = FakeModel(conclusion())
+    client = client_with(database_url, quota, model)
+    update_id = update_with_photos(client, journal_id)
+    before = stored_reservation(engine, update_id)
+    quota.unavailable = True
+
+    response = client.post(f"/v1/updates/{update_id}/diagnosis", headers=AS_USER)
+
+    with Session(engine) as session:
+        row = session.scalars(select(DiagnosisModel)).one()
+    assert response.status_code == 503
+    assert response.headers["Retry-After"] == str(make_settings().unavailable_retry_after_seconds)
+    assert response.headers["content-type"] == "application/problem+json"
+    assert (row.status, row.model_effort, row.ai_reservation_id) == (
+        "diagnosis_pending",
+        None,
+        before,
+    )
+    assert model.requests == []
+
+
+def test_an_attempt_whose_reservation_was_released_is_taken_over_by_the_next_one(
+    database_url: URL, quota: FakeAiQuota, journal_id: uuid.UUID, engine: Engine
+):
+    client = client_with(database_url, quota, FakeModel(conclusion()))
+    update_id = update_with_photos(client, journal_id)
+    crashed = stored_reservation(engine, update_id)
+    with Session(engine) as session:
+        session.execute(DiagnosisModel.__table__.update().values(model_effort="high"))
+        session.commit()
+    diagnosis = f"/v1/updates/{update_id}/diagnosis"
+
+    running = client.post(diagnosis, headers=AS_USER)
+    quota.unusable.add(crashed)
+    taken_over = client.post(diagnosis, headers=AS_USER)
+
+    assert running.status_code == 409
+    assert taken_over.status_code == 200
+    assert stored_reservation(engine, update_id) != crashed
+    assert quota.committed == [stored_reservation(engine, update_id)]
+
+
 def test_a_diagnosis_cannot_start_without_the_required_photos(
     database_url: URL, quota: FakeAiQuota, journal_id: uuid.UUID
 ):
