@@ -8,6 +8,7 @@ from pydantic import BaseModel, ConfigDict, Field
 from app.service.checkpoints import Checkpoint, CheckpointState
 from app.service.journals import JournalView
 from app.service.model import (
+    Diagnosis,
     DiagnosisStatus,
     DiagnosisSummary,
     Drainage,
@@ -92,6 +93,31 @@ class DiagnosisResponse(BaseModel):
     @classmethod
     def of(cls, diagnosis: DiagnosisSummary) -> "DiagnosisResponse":
         return cls(**vars(diagnosis))
+
+
+class CandidateResponse(BaseModel):
+    rank: int
+    cause: str
+    rationale: str
+
+
+class DiagnosisDetailResponse(DiagnosisResponse):
+    update_id: uuid.UUID
+    candidates: list[CandidateResponse]
+
+    @classmethod
+    def of_diagnosis(cls, diagnosis: Diagnosis) -> "DiagnosisDetailResponse":
+        return cls(
+            update_id=diagnosis.update_id,
+            candidates=[CandidateResponse(**vars(c)) for c in diagnosis.candidates],
+            **vars(diagnosis.summary),
+        )
+
+
+class ClarificationRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    answer: str
 
 
 class EscalationResponse(BaseModel):

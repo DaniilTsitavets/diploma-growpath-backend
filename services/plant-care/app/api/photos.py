@@ -52,7 +52,11 @@ class PhotosResponse(BaseModel):
 def request_upload(
     update_id: uuid.UUID, body: UploadRequest, user_id: UserId, service: Photos
 ) -> UploadResponse:
-    """A presigned PUT URL for one photo of the update; repeating the request issues a new URL."""
+    """A presigned PUT URL for one photo of the update; repeating the request issues a new URL.
+
+    A `roots_drainage` photo is accepted only while the diagnosis awaits a clarification in which
+    the AI asked for it (409 otherwise).
+    """
     upload = service.request_upload(update_id, user_id, body.kind)
     return UploadResponse(
         kind=upload.kind, upload_url=upload.url, expires_in_seconds=upload.expires_in_seconds

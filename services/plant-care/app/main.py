@@ -7,22 +7,26 @@ from fastapi import FastAPI
 from growpath_observability import CorrelationIdMiddleware, configure_logging
 from sqlalchemy.orm import sessionmaker
 
-from app.api import health, journals, photos, updates
+from app.api import diagnoses, health, journals, photos, updates
 from app.api.errors import register_error_handlers
 from app.background import run_periodically
 from app.config import Settings
 from app.db import create_db_engine
+from app.llm.factory import create_diagnosis_model
 from app.messaging.codec import order_routes
 from app.messaging.sqs import SqsQueue, create_sqs_client
 from app.quota import create_entitlement_client
 from app.repository.unit_of_work import SqlAlchemyUnitOfWork
-from app.service.ai_quota import AiQuota
+from app.service.ai_quota import AiQuota, TierLookup
 from app.service.consumer import MessageQueue, QueueConsumer
+from app.service.diagnosis import DiagnosisService
+from app.service.diagnosis_model import DiagnosisModel
+from app.service.effort import EffortPolicy
 from app.service.event_handlers import EventHandlers
 from app.service.journals import JournalService
 from app.service.photos import PhotoService, PhotoStorage
 from app.service.updates import UpdateService
-from app.storage.s3 import S3PhotoStorage, create_s3_client
+from app.storage.s3 import S3PhotoReader, S3PhotoStorage, create_s3_client
 
 
 @asynccontextmanager
@@ -47,6 +51,8 @@ def create_app(
     order_queue: MessageQueue | None = None,
     ai_quota: AiQuota | None = None,
     photo_storage: PhotoStorage | None = None,
+    tier_lookup: TierLookup | None = None,
+    diagnosis_model: DiagnosisModel | None = None,
 ) -> FastAPI:
     settings = settings or Settings()
     configure_logging(settings.service_name, settings.log_level)
@@ -62,6 +68,15 @@ def create_app(
     entitlement = create_entitlement_client(settings)
     app.state.closeables = [entitlement]
     ai_quota = ai_quota or entitlement
+    tier_lookup = tier_lookup or entitlement
+    diagnosis_model = diagnosis_model or create_diagnosis_model(
+        settings,
+        S3PhotoReader(
+            create_s3_client(settings, presigning=False),
+            settings.photos_bucket,
+            settings.model_photo_max_bytes,
+        ),
+    )
     unit_of_work = partial(SqlAlchemyUnitOfWork, sessionmaker(app.state.engine))
     app.state.journal_service = JournalService(unit_of_work)
     app.state.update_service = UpdateService(
@@ -72,6 +87,9 @@ def create_app(
     )
     app.state.photo_service = PhotoService(
         unit_of_work, photo_storage, settings.photo_url_ttl_seconds
+    )
+    app.state.diagnosis_service = DiagnosisService(
+        unit_of_work, ai_quota, diagnosis_model, EffortPolicy(tier_lookup)
     )
 
     handlers = EventHandlers(unit_of_work)
@@ -93,4 +111,5 @@ def create_app(
     app.include_router(journals.router)
     app.include_router(updates.router)
     app.include_router(photos.router)
+    app.include_router(diagnoses.router)
     return app

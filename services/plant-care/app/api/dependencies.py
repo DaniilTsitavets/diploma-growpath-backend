@@ -3,6 +3,7 @@ from typing import Annotated
 
 from fastapi import Header, HTTPException, Request
 
+from app.service.diagnosis import DiagnosisService
 from app.service.journals import JournalService
 from app.service.updates import UpdateService
 
@@ -13,6 +14,10 @@ def get_journal_service(request: Request) -> JournalService:
 
 def get_update_service(request: Request) -> UpdateService:
     return request.app.state.update_service
+
+
+def get_diagnosis_service(request: Request) -> DiagnosisService:
+    return request.app.state.diagnosis_service
 
 
 def current_user_id(x_user_id: Annotated[str | None, Header()] = None) -> uuid.UUID:
