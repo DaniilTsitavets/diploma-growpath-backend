@@ -77,4 +77,7 @@ subscribe_queue "$ticket_topic_arn" \
   "$(create_queue_with_dlq entitlement-ticket-events entitlement-ticket-events-dlq)" \
   '{"event_type":["ticket.created","ticket.cancelled"]}'
 
+# plant-care issues presigned URLs for update photos; only object keys are stored in its database.
+awslocal s3api create-bucket --bucket growpath-photos >/dev/null
+
 echo "provisioned: api=${api_id} stage=${STAGE} pool=${pool_id} client=${client_id}"

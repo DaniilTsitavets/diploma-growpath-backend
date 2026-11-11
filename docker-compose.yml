@@ -16,7 +16,7 @@ services:
       - "127.0.0.1:4566:4566"
     environment:
       LOCALSTACK_AUTH_TOKEN: ${LOCALSTACK_AUTH_TOKEN:?export LOCALSTACK_AUTH_TOKEN before starting}
-      SERVICES: apigateway,cognito-idp,sns,sqs,sts,iam
+      SERVICES: apigateway,cognito-idp,sns,sqs,s3,sts,iam
       AWS_DEFAULT_REGION: ${AWS_DEFAULT_REGION:-us-east-1}
     volumes:
       - ./infra/localstack/init:/etc/localstack/init:ro
@@ -77,6 +77,32 @@ services:
       - "127.0.0.1:8002:8000"
     depends_on:
       entitlement-db:
+        condition: service_healthy
+      localstack:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health/live', timeout=2)"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  plant-care:
+    build:
+      context: .
+      dockerfile: services/plant-care/Dockerfile
+    environment:
+      PLANT_CARE_DATABASE_URL: postgresql+psycopg://plant_care:${PLANT_CARE_DB_PASSWORD:?set PLANT_CARE_DB_PASSWORD}@plant-care-db:5432/plant_care
+      PLANT_CARE_ORDER_PLACED_QUEUE_URL: http://localstack:4566/000000000000/plant-care-order-placed
+      # LocalStack only; see the commerce service for why the code never reads keys itself.
+      PLANT_CARE_AWS_ENDPOINT_URL: http://localstack:4566
+      # Presigned photo URLs are opened from the host, where LocalStack is on loopback.
+      PLANT_CARE_PHOTOS_PUBLIC_ENDPOINT_URL: http://127.0.0.1:4566
+      AWS_ACCESS_KEY_ID: ${AWS_ACCESS_KEY_ID:-test}
+      AWS_SECRET_ACCESS_KEY: ${AWS_SECRET_ACCESS_KEY:-test}
+    ports:
+      - "127.0.0.1:8003:8000"
+    depends_on:
+      plant-care-db:
         condition: service_healthy
       localstack:
         condition: service_healthy
