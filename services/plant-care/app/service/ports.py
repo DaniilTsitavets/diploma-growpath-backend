@@ -1,5 +1,5 @@
 import uuid
-from datetime import date
+from datetime import date, datetime, timedelta
 from typing import Protocol, Self
 
 from app.service.model import (
@@ -8,6 +8,7 @@ from app.service.model import (
     Escalation,
     FeedCursor,
     FeedItem,
+    HistoryEntry,
     Journal,
     ModelEffort,
     NewEscalation,
@@ -121,6 +122,29 @@ class EscalationRepository(Protocol):
     def latest(self, update_id: uuid.UUID) -> Escalation | None: ...
 
 
+class EscalationDeliveryRepository(Protocol):
+    """What the escalation repeater and the event builder read and change."""
+
+    def claim_due(self, grace: timedelta, ttl: timedelta, limit: int) -> list[Escalation]:
+        """Lock `requested` escalations older than `grace` and younger than `ttl`, oldest first.
+
+        Rows another worker has locked are skipped; the locks last until the unit ends.
+        """
+        ...
+
+    def claim_expired(self, ttl: timedelta, limit: int) -> list[Escalation]:
+        """Lock `requested` escalations that reached `ttl`, oldest first, skipping locked rows."""
+        ...
+
+    def cancel_requested(self, escalation_id: uuid.UUID) -> bool:
+        """`requested` to `cancelled`; False when a ticket event moved it first."""
+        ...
+
+    def history(self, journal_id: uuid.UUID, before: datetime, limit: int) -> list[HistoryEntry]:
+        """The journal's updates created before `before`, newest first."""
+        ...
+
+
 class UnitOfWork(Protocol):
     """One business action in one transaction: leaving the block without commit rolls back."""
 
@@ -129,6 +153,7 @@ class UnitOfWork(Protocol):
     diagnoses: DiagnosisRepository
     photos: PhotoRepository
     escalations: EscalationRepository
+    escalation_delivery: EscalationDeliveryRepository
 
     def __enter__(self) -> Self: ...
 

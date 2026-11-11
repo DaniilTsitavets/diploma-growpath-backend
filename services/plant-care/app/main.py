@@ -1,6 +1,7 @@
 import asyncio
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
+from datetime import timedelta
 from functools import partial
 
 from fastapi import FastAPI
@@ -14,6 +15,7 @@ from app.config import Settings
 from app.db import create_db_engine
 from app.llm.factory import create_diagnosis_model
 from app.messaging.codec import order_routes
+from app.messaging.sns import SnsEscalationEvents, create_sns_client
 from app.messaging.sqs import SqsQueue, create_sqs_client
 from app.quota import create_entitlement_client
 from app.repository.unit_of_work import SqlAlchemyUnitOfWork
@@ -22,6 +24,9 @@ from app.service.consumer import MessageQueue, QueueConsumer
 from app.service.diagnosis import DiagnosisService
 from app.service.diagnosis_model import DiagnosisModel
 from app.service.effort import EffortPolicy
+from app.service.escalation_events import EscalationEvents
+from app.service.escalation_publisher import EscalationPublisher
+from app.service.escalation_repeater import EscalationRepeater
 from app.service.escalations import EscalationService
 from app.service.event_handlers import EventHandlers
 from app.service.expert_quota import ExpertQuota
@@ -40,9 +45,16 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         )
         for consumer in app.state.consumers
     ]
+    repeating = asyncio.create_task(
+        run_periodically(
+            app.state.escalation_repeater.run_once,
+            app.state.escalation_repeater_interval_seconds,
+            stop,
+        )
+    )
     yield
     stop.set()
-    await asyncio.gather(*consuming)
+    await asyncio.gather(*consuming, repeating)
     for closeable in app.state.closeables:
         closeable.close()
     app.state.engine.dispose()
@@ -56,6 +68,7 @@ def create_app(
     tier_lookup: TierLookup | None = None,
     diagnosis_model: DiagnosisModel | None = None,
     expert_quota: ExpertQuota | None = None,
+    escalation_events: EscalationEvents | None = None,
 ) -> FastAPI:
     settings = settings or Settings()
     configure_logging(settings.service_name, settings.log_level)
@@ -95,7 +108,26 @@ def create_app(
     app.state.diagnosis_service = DiagnosisService(
         unit_of_work, ai_quota, diagnosis_model, EffortPolicy(tier_lookup)
     )
-    app.state.escalation_service = EscalationService(unit_of_work, expert_quota)
+    escalation_publisher = EscalationPublisher(
+        unit_of_work,
+        escalation_events
+        or SnsEscalationEvents(create_sns_client(settings), settings.escalation_topic_arn),
+        timedelta(seconds=settings.expert_reservation_ttl_seconds),
+        timedelta(seconds=settings.escalation_ack_margin_seconds),
+        settings.escalation_history_limit,
+    )
+    app.state.escalation_service = EscalationService(
+        unit_of_work, expert_quota, escalation_publisher
+    )
+    app.state.escalation_repeater = EscalationRepeater(
+        unit_of_work,
+        escalation_publisher,
+        expert_quota,
+        timedelta(seconds=settings.escalation_repeater_grace_seconds),
+        timedelta(seconds=settings.expert_reservation_ttl_seconds),
+        settings.escalation_repeater_batch_size,
+    )
+    app.state.escalation_repeater_interval_seconds = settings.escalation_repeater_interval_seconds
 
     handlers = EventHandlers(unit_of_work)
     app.state.queues = [order_queue]

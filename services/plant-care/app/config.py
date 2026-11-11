@@ -32,6 +32,17 @@ class Settings(BaseSettings):
     entitlement_breaker_failure_threshold: int = 5
     entitlement_breaker_reset_seconds: float = 10.0
 
+    escalation_topic_arn: str
+    # Must equal the expert reservation TTL of the entitlement service: the repeater releases the
+    # reservation when this much time has passed since the escalation.
+    expert_reservation_ttl_seconds: int = 86400
+    # Far above any clock skew between the plant-care and expert-consultation databases.
+    escalation_ack_margin_seconds: int = 900
+    escalation_history_limit: int = 10
+    escalation_repeater_interval_seconds: float = 10.0
+    escalation_repeater_grace_seconds: float = 30.0
+    escalation_repeater_batch_size: int = 50
+
     # `mock` needs no key; its behaviour is chosen with `model_mock_behavior` (see app.model.mock).
     model_provider: Literal["openrouter", "bedrock", "mock"] = "mock"
     model_mock_behavior: Literal[
@@ -63,6 +74,12 @@ class Settings(BaseSettings):
 
     feed_default_page_size: int = 20
     feed_max_page_size: int = 100
+
+    @model_validator(mode="after")
+    def _require_acceptance_window(self) -> Self:
+        if not 0 < self.escalation_ack_margin_seconds < self.expert_reservation_ttl_seconds:
+            raise ValueError("the ack margin must be positive and shorter than the reservation TTL")
+        return self
 
     @model_validator(mode="after")
     def _require_provider_settings(self) -> Self:

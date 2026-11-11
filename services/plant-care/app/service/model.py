@@ -185,6 +185,15 @@ class Escalation:
 
 
 @dataclass(frozen=True)
+class HistoryEntry:
+    """An earlier update of a journal and how its diagnosis went."""
+
+    created_at: datetime
+    diagnosis_status: DiagnosisStatus | None
+    top_cause: str | None
+
+
+@dataclass(frozen=True)
 class FeedItem:
     update: UpdateRecord
     diagnosis: DiagnosisSummary | None

@@ -3,6 +3,7 @@ from app.config import Settings
 UNREACHABLE_DATABASE = "postgresql+psycopg://nobody@127.0.0.1:1/none"
 ENTITLEMENT_URL = "http://entitlement:8000"
 ORDER_QUEUE_URL = "http://localstack:4566/000000000000/plant-care-order-placed"
+ESCALATION_TOPIC_ARN = "arn:aws:sns:us-east-1:000000000000:escalation-requested"
 
 
 def make_settings(**overrides) -> Settings:
@@ -10,5 +11,6 @@ def make_settings(**overrides) -> Settings:
         "database_url": UNREACHABLE_DATABASE,
         "order_placed_queue_url": ORDER_QUEUE_URL,
         "entitlement_url": ENTITLEMENT_URL,
+        "escalation_topic_arn": ESCALATION_TOPIC_ARN,
     }
     return Settings(**{**fields, **overrides})

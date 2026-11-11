@@ -97,6 +97,14 @@ class ReservationUnusable(Exception):
     """The reservation is released, expired or unknown to entitlement: a new id is needed."""
 
 
+class PublishFailed(Exception):
+    """The event broker did not accept the event."""
+
+
+class ContextTooLarge(Exception):
+    """The escalation context exceeds the limit even without the journal history."""
+
+
 class InvalidCursor(InvalidRequest):
     def __init__(self) -> None:
         super().__init__("the cursor is not valid")

@@ -3,6 +3,7 @@ from typing import Self
 from sqlalchemy.orm import Session, sessionmaker
 
 from app.repository.diagnoses import SqlAlchemyDiagnosisRepository
+from app.repository.escalation_delivery import SqlAlchemyEscalationDeliveryRepository
 from app.repository.escalations import SqlAlchemyEscalationRepository
 from app.repository.journals import SqlAlchemyJournalRepository
 from app.repository.photos import SqlAlchemyPhotoRepository
@@ -20,6 +21,7 @@ class SqlAlchemyUnitOfWork:
         self.diagnoses = SqlAlchemyDiagnosisRepository(self._session)
         self.photos = SqlAlchemyPhotoRepository(self._session)
         self.escalations = SqlAlchemyEscalationRepository(self._session)
+        self.escalation_delivery = SqlAlchemyEscalationDeliveryRepository(self._session)
         return self
 
     def __exit__(self, *exc_info: object) -> None:
