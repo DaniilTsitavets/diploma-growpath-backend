@@ -1,6 +1,6 @@
 COMPOSE := docker compose --env-file .env
 UV ?= uv
-SERVICES := commerce
+SERVICES := commerce entitlement
 COVERAGE_GATE := --cov-fail-under=70
 
 .PHONY: up down verify logs sync lock lint test test-unit test-db-up test-db-down

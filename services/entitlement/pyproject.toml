@@ -1,0 +1,30 @@
+[build-system]
+requires = ["setuptools>=69"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "entitlement"
+version = "0.1.0"
+description = "GrowPath entitlement service: tier and AI/expert quota reservations"
+requires-python = ">=3.12"
+dependencies = [
+    "fastapi>=0.115",
+    "uvicorn[standard]>=0.30",
+    "sqlalchemy>=2.0",
+    "psycopg[binary]>=3.2",
+    "pydantic-settings>=2.5",
+    "alembic>=1.13",
+    "boto3>=1.35",
+    "growpath-observability",
+]
+
+[tool.uv.sources]
+growpath-observability = { workspace = true }
+
+[tool.setuptools.packages.find]
+include = ["app*"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "--cov=app"
+markers = ["db: needs the PostgreSQL container from compose.test.yml"]
