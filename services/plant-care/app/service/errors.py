@@ -40,6 +40,36 @@ class AiQuotaUnavailable(Unavailable):
         super().__init__("the quota service did not answer")
 
 
+class ExpertQuotaExhausted(Conflict):
+    code = "expert-quota-exhausted"
+
+    def __init__(self) -> None:
+        super().__init__("the expert quota of the current period is used up")
+
+
+class ExpertQuotaUnavailable(Unavailable):
+    """The quota service could not give an answer about the expert quota."""
+
+    def __init__(self) -> None:
+        super().__init__("the quota service did not answer")
+
+
+class ExpertReservationCommitted(Exception):
+    """Entitlement refused to release the reservation: a ticket already paid for it."""
+
+
+class EscalationNotFound(NotFound):
+    def __init__(self) -> None:
+        super().__init__("the update has no escalation")
+
+
+class EscalationNotOffered(Conflict):
+    code = "escalation-not-offered"
+
+    def __init__(self) -> None:
+        super().__init__("no expert is on offer for this update; describe the question instead")
+
+
 class DiagnosisNotFound(NotFound):
     def __init__(self) -> None:
         super().__init__("the update has no diagnosis")

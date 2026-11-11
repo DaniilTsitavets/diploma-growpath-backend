@@ -4,6 +4,7 @@ from typing import Annotated
 from fastapi import Header, HTTPException, Request
 
 from app.service.diagnosis import DiagnosisService
+from app.service.escalations import EscalationService
 from app.service.journals import JournalService
 from app.service.updates import UpdateService
 
@@ -18,6 +19,10 @@ def get_update_service(request: Request) -> UpdateService:
 
 def get_diagnosis_service(request: Request) -> DiagnosisService:
     return request.app.state.diagnosis_service
+
+
+def get_escalation_service(request: Request) -> EscalationService:
+    return request.app.state.escalation_service
 
 
 def current_user_id(x_user_id: Annotated[str | None, Header()] = None) -> uuid.UUID:

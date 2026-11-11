@@ -8,13 +8,23 @@ from growpath_observability import CORRELATION_HEADER, get_correlation_id
 
 from app.config import Settings
 from app.resilience import CircuitBreaker, CircuitOpen, RetryPolicy, retry_with_jitter
-from app.service.errors import AiQuotaExhausted, AiQuotaUnavailable, ReservationUnusable
+from app.service.errors import (
+    AiQuotaExhausted,
+    AiQuotaUnavailable,
+    ExpertQuotaExhausted,
+    ExpertQuotaUnavailable,
+    ExpertReservationCommitted,
+    ReservationUnusable,
+    Unavailable,
+)
 from app.service.model import Tier
 
 logger = logging.getLogger(__name__)
 
 AI_RESERVATIONS = "/v1/quotas/ai/reservations"
+EXPERT_RESERVATIONS = "/v1/quotas/expert/reservations"
 QUOTA_EXHAUSTED = "quota_exhausted"
+_EXPERT = ExpertQuotaUnavailable
 
 
 class EntitlementFailure(Exception):
@@ -22,7 +32,7 @@ class EntitlementFailure(Exception):
 
 
 class EntitlementClient:
-    """REST client of the entitlement service: AI quota reservations and the tier.
+    """REST client of the entitlement service: AI and expert quota reservations and the tier.
 
     Every call is safe to repeat: reserve is idempotent by reservation id, commit and release move
     the reservation to a terminal state and answer the same way when repeated, and the tier lookup
@@ -81,7 +91,32 @@ class EntitlementClient:
             logger.error("entitlement answered with an unknown tier", extra={"call": "tier"})
             raise AiQuotaUnavailable from error
 
-    def _send(self, call: str, method: str, path: str, body: dict | None) -> httpx.Response:
+    def reserve_expert(self, escalation_id: uuid.UUID, user_id: uuid.UUID) -> None:
+        body = {"escalation_id": str(escalation_id), "user_id": str(user_id)}
+        response = self._send("reserve_expert", "POST", EXPERT_RESERVATIONS, body, _EXPERT)
+        if response.status_code in (200, 201):
+            return
+        if response.status_code == 409 and _problem_code(response) == QUOTA_EXHAUSTED:
+            raise ExpertQuotaExhausted
+        self._unexpected("reserve_expert", response, _EXPERT)
+
+    def release_expert(self, escalation_id: uuid.UUID, user_id: uuid.UUID) -> None:
+        path = f"{EXPERT_RESERVATIONS}/{escalation_id}/release"
+        response = self._send("release_expert", "POST", path, {"user_id": str(user_id)}, _EXPERT)
+        if response.status_code in (200, 404):
+            return
+        if response.status_code == 409:
+            raise ExpertReservationCommitted
+        self._unexpected("release_expert", response, _EXPERT)
+
+    def _send(
+        self,
+        call: str,
+        method: str,
+        path: str,
+        body: dict | None,
+        unavailable: type[Unavailable] = AiQuotaUnavailable,
+    ) -> httpx.Response:
         try:
             return retry_with_jitter(
                 lambda: self._breaker.call(
@@ -93,9 +128,9 @@ class EntitlementClient:
             )
         except CircuitOpen as error:
             logger.warning("entitlement call rejected by the open breaker", extra={"call": call})
-            raise AiQuotaUnavailable from error
+            raise unavailable from error
         except EntitlementFailure as error:
-            raise AiQuotaUnavailable from error
+            raise unavailable from error
 
     def _send_once(self, call: str, method: str, path: str, body: dict | None) -> httpx.Response:
         headers = {}
@@ -131,12 +166,16 @@ class EntitlementClient:
         return ReservationUnusable()
 
     @staticmethod
-    def _unexpected(call: str, response: httpx.Response) -> None:
+    def _unexpected(
+        call: str,
+        response: httpx.Response,
+        unavailable: type[Unavailable] = AiQuotaUnavailable,
+    ) -> None:
         logger.error(
             "entitlement answered unexpectedly",
             extra={"call": call, "status": response.status_code},
         )
-        raise AiQuotaUnavailable
+        raise unavailable
 
 
 def _problem_code(response: httpx.Response) -> str | None:

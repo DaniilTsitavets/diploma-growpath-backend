@@ -164,6 +164,27 @@ class EscalationSummary:
 
 
 @dataclass(frozen=True)
+class NewEscalation:
+    id: uuid.UUID
+    update_id: uuid.UUID
+    user_question: str | None
+
+
+@dataclass(frozen=True)
+class Escalation:
+    id: uuid.UUID
+    update_id: uuid.UUID
+    journal_id: uuid.UUID
+    user_id: uuid.UUID
+    status: EscalationStatus
+    ticket_id: uuid.UUID | None
+    user_question: str | None
+    answer_text: str | None
+    answered_at: datetime | None
+    created_at: datetime
+
+
+@dataclass(frozen=True)
 class FeedItem:
     update: UpdateRecord
     diagnosis: DiagnosisSummary | None

@@ -12,6 +12,7 @@ from app.service.model import (
     DiagnosisStatus,
     DiagnosisSummary,
     Drainage,
+    Escalation,
     EscalationStatus,
     EscalationSummary,
     FeedItem,
@@ -130,6 +131,29 @@ class EscalationResponse(BaseModel):
     @classmethod
     def of(cls, escalation: EscalationSummary) -> "EscalationResponse":
         return cls(**vars(escalation))
+
+
+class EscalationRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    user_question: str | None = None
+
+
+class EscalationDetailResponse(EscalationResponse):
+    update_id: uuid.UUID
+    user_question: str | None
+
+    @classmethod
+    def of_escalation(cls, escalation: Escalation) -> "EscalationDetailResponse":
+        return cls(
+            id=escalation.id,
+            status=escalation.status,
+            answer_text=escalation.answer_text,
+            answered_at=escalation.answered_at,
+            created_at=escalation.created_at,
+            update_id=escalation.update_id,
+            user_question=escalation.user_question,
+        )
 
 
 class UpdateResponse(BaseModel):

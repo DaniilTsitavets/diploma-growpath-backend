@@ -7,7 +7,7 @@ from fastapi import FastAPI
 from growpath_observability import CorrelationIdMiddleware, configure_logging
 from sqlalchemy.orm import sessionmaker
 
-from app.api import diagnoses, health, journals, photos, updates
+from app.api import diagnoses, escalations, health, journals, photos, updates
 from app.api.errors import register_error_handlers
 from app.background import run_periodically
 from app.config import Settings
@@ -22,7 +22,9 @@ from app.service.consumer import MessageQueue, QueueConsumer
 from app.service.diagnosis import DiagnosisService
 from app.service.diagnosis_model import DiagnosisModel
 from app.service.effort import EffortPolicy
+from app.service.escalations import EscalationService
 from app.service.event_handlers import EventHandlers
+from app.service.expert_quota import ExpertQuota
 from app.service.journals import JournalService
 from app.service.photos import PhotoService, PhotoStorage
 from app.service.updates import UpdateService
@@ -53,6 +55,7 @@ def create_app(
     photo_storage: PhotoStorage | None = None,
     tier_lookup: TierLookup | None = None,
     diagnosis_model: DiagnosisModel | None = None,
+    expert_quota: ExpertQuota | None = None,
 ) -> FastAPI:
     settings = settings or Settings()
     configure_logging(settings.service_name, settings.log_level)
@@ -69,6 +72,7 @@ def create_app(
     app.state.closeables = [entitlement]
     ai_quota = ai_quota or entitlement
     tier_lookup = tier_lookup or entitlement
+    expert_quota = expert_quota or entitlement
     diagnosis_model = diagnosis_model or create_diagnosis_model(
         settings,
         S3PhotoReader(
@@ -91,6 +95,7 @@ def create_app(
     app.state.diagnosis_service = DiagnosisService(
         unit_of_work, ai_quota, diagnosis_model, EffortPolicy(tier_lookup)
     )
+    app.state.escalation_service = EscalationService(unit_of_work, expert_quota)
 
     handlers = EventHandlers(unit_of_work)
     app.state.queues = [order_queue]
@@ -112,4 +117,5 @@ def create_app(
     app.include_router(updates.router)
     app.include_router(photos.router)
     app.include_router(diagnoses.router)
+    app.include_router(escalations.router)
     return app

@@ -5,10 +5,12 @@ from typing import Protocol, Self
 from app.service.model import (
     Diagnosis,
     DiagnosisResult,
+    Escalation,
     FeedCursor,
     FeedItem,
     Journal,
     ModelEffort,
+    NewEscalation,
     NewJournal,
     NewUpdate,
     Photo,
@@ -105,6 +107,20 @@ class PhotoRepository(Protocol):
     def list_for_update(self, update_id: uuid.UUID) -> list[Photo]: ...
 
 
+class EscalationRepository(Protocol):
+    def add(self, escalation: NewEscalation) -> bool:
+        """Store the escalation; False when the update already has a non-cancelled one."""
+        ...
+
+    def get(self, escalation_id: uuid.UUID) -> Escalation | None: ...
+
+    def get_active(self, update_id: uuid.UUID) -> Escalation | None:
+        """The update's escalation that is not cancelled."""
+        ...
+
+    def latest(self, update_id: uuid.UUID) -> Escalation | None: ...
+
+
 class UnitOfWork(Protocol):
     """One business action in one transaction: leaving the block without commit rolls back."""
 
@@ -112,6 +128,7 @@ class UnitOfWork(Protocol):
     updates: UpdateRepository
     diagnoses: DiagnosisRepository
     photos: PhotoRepository
+    escalations: EscalationRepository
 
     def __enter__(self) -> Self: ...
 
