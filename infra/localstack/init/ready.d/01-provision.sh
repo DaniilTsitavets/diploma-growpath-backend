@@ -81,7 +81,9 @@ subscribe_queue "$ticket_topic_arn" \
   "$(create_queue_with_dlq plant-care-ticket-events plant-care-ticket-events-dlq)"
 
 # plant-care publishes escalation.requested; expert-consultation subscribes with its own queue.
-awslocal sns create-topic --name escalation-requested >/dev/null
+escalation_topic_arn=$(awslocal sns create-topic --name escalation-requested --query TopicArn --output text)
+subscribe_queue "$escalation_topic_arn" \
+  "$(create_queue_with_dlq expert-escalation-requested expert-escalation-requested-dlq)"
 
 # plant-care issues presigned URLs for update photos; only object keys are stored in its database.
 awslocal s3api create-bucket --bucket growpath-photos >/dev/null

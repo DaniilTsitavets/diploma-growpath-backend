@@ -131,6 +131,36 @@ services:
       timeout: 3s
       retries: 10
 
+  expert-consultation:
+    build:
+      context: .
+      dockerfile: services/expert-consultation/Dockerfile
+    environment:
+      EXPERT_CONSULTATION_DATABASE_URL: postgresql+psycopg://expert:${EXPERT_DB_PASSWORD:?set EXPERT_DB_PASSWORD}@expert-db:5432/expert
+      EXPERT_CONSULTATION_ESCALATION_QUEUE_URL: http://localstack:4566/000000000000/expert-escalation-requested
+      EXPERT_CONSULTATION_TICKET_EVENTS_TOPIC_ARN: arn:aws:sns:us-east-1:000000000000:ticket-events
+      # The author's assumption: an unanswered ticket expires 72 hours after it was created.
+      EXPERT_CONSULTATION_TICKET_TTL_SECONDS: "259200"
+      EXPERT_CONSULTATION_REPUBLISH_GRACE_SECONDS: "30"
+      # LocalStack only; see the commerce service for why the code never reads keys itself.
+      EXPERT_CONSULTATION_AWS_ENDPOINT_URL: http://localstack:4566
+      # Presigned photo URLs are opened from the host, where LocalStack is on loopback.
+      EXPERT_CONSULTATION_PHOTOS_PUBLIC_ENDPOINT_URL: http://127.0.0.1:4566
+      AWS_ACCESS_KEY_ID: ${AWS_ACCESS_KEY_ID:-test}
+      AWS_SECRET_ACCESS_KEY: ${AWS_SECRET_ACCESS_KEY:-test}
+    ports:
+      - "127.0.0.1:8004:8000"
+    depends_on:
+      expert-db:
+        condition: service_healthy
+      localstack:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health/live', timeout=2)"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
   commerce-db:
     <<: *postgres
     environment:
