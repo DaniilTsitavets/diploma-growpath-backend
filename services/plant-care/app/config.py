@@ -52,6 +52,8 @@ class Settings(BaseSettings):
     ] = "complete"
     openrouter_api_key: SecretStr | None = None
     openrouter_model: str | None = None
+    # The chat needs no vision input; falls back to `openrouter_model` when unset.
+    openrouter_chat_model: str | None = None
     openrouter_url: str = "https://openrouter.ai/api/v1/chat/completions"
     bedrock_model_id: str | None = None
     # Bedrock has no effort knob; the effort becomes a thinking-token budget.
@@ -81,6 +83,11 @@ class Settings(BaseSettings):
     knowledge_dir: Path = Path("knowledge")
     # At most 4: `chat_turn_sources.rank` is limited to 1-4 by a CHECK.
     chat_top_k: int = Field(default=4, ge=1, le=4)
+    chat_history_turns: int = Field(default=3, ge=0)
+    chat_history_answer_chars: int = Field(default=1000, ge=1)
+    chat_model_timeout_seconds: float = Field(default=8.0, gt=0)
+    chat_history_default_page_size: int = 20
+    chat_history_max_page_size: int = 100
 
     @model_validator(mode="after")
     def _require_acceptance_window(self) -> Self:

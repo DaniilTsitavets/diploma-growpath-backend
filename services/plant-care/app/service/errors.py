@@ -26,6 +26,11 @@ class UpdateNotFound(NotFound):
         super().__init__("the update does not exist")
 
 
+class ChatTurnNotFound(NotFound):
+    def __init__(self) -> None:
+        super().__init__("the chat turn does not exist")
+
+
 class AiQuotaExhausted(Conflict):
     code = "ai-quota-exhausted"
 

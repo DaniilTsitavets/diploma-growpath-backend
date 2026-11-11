@@ -2,6 +2,7 @@ from typing import Self
 
 from sqlalchemy.orm import Session, sessionmaker
 
+from app.repository.chat_turns import SqlAlchemyChatTurnRepository
 from app.repository.diagnoses import SqlAlchemyDiagnosisRepository
 from app.repository.escalation_delivery import SqlAlchemyEscalationDeliveryRepository
 from app.repository.escalations import SqlAlchemyEscalationRepository
@@ -26,6 +27,7 @@ class SqlAlchemyUnitOfWork:
         self.escalation_delivery = SqlAlchemyEscalationDeliveryRepository(self._session)
         self.ticket_events = SqlAlchemyTicketEventRepository(self._session)
         self.knowledge = SqlAlchemyKnowledgeRepository(self._session)
+        self.chat_turns = SqlAlchemyChatTurnRepository(self._session)
         return self
 
     def __exit__(self, *exc_info: object) -> None:

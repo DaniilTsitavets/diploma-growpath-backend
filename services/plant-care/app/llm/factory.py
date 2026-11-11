@@ -26,15 +26,22 @@ def create_model_guard(settings: Settings) -> ModelGuard:
     return ModelGuard(breaker, retry, settings.model_bulkhead_size)
 
 
-def create_transport(settings: Settings) -> ModelTransport:
+def create_transport(
+    settings: Settings,
+    timeout_seconds: float | None = None,
+    openrouter_model: str | None = None,
+) -> ModelTransport:
+    """The transport of the configured provider, with an optional timeout and OpenRouter model."""
+    timeout = timeout_seconds or settings.model_timeout_seconds
     match settings.model_provider:
         case "openrouter":
-            assert settings.openrouter_api_key is not None and settings.openrouter_model
+            model = openrouter_model or settings.openrouter_model
+            assert settings.openrouter_api_key is not None and model
             http = httpx.Client(
                 timeout=httpx.Timeout(
                     connect=settings.model_connect_timeout_seconds,
-                    read=settings.model_timeout_seconds,
-                    write=settings.model_timeout_seconds,
+                    read=timeout,
+                    write=timeout,
                     pool=settings.model_connect_timeout_seconds,
                 )
             )
@@ -42,7 +49,7 @@ def create_transport(settings: Settings) -> ModelTransport:
                 http,
                 settings.openrouter_url,
                 settings.openrouter_api_key,
-                settings.openrouter_model,
+                model,
                 settings.model_max_output_tokens,
             )
         case "bedrock":
@@ -52,7 +59,7 @@ def create_transport(settings: Settings) -> ModelTransport:
                 region_name=settings.aws_region,
                 config=Config(
                     connect_timeout=settings.model_connect_timeout_seconds,
-                    read_timeout=settings.model_timeout_seconds,
+                    read_timeout=timeout,
                     retries={"max_attempts": 1, "mode": "standard"},
                 ),
             )
@@ -69,5 +76,9 @@ def create_transport(settings: Settings) -> ModelTransport:
             return MockTransport(settings.model_mock_behavior)
 
 
-def create_diagnosis_model(settings: Settings, photos: PhotoReader) -> DiagnosisModel:
-    return LlmDiagnosisModel(create_transport(settings), create_model_guard(settings), photos)
+def create_diagnosis_model(
+    settings: Settings, photos: PhotoReader, guard: ModelGuard | None = None
+) -> DiagnosisModel:
+    return LlmDiagnosisModel(
+        create_transport(settings), guard or create_model_guard(settings), photos
+    )

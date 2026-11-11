@@ -2,6 +2,7 @@ import uuid
 from datetime import date, datetime, timedelta
 from typing import Protocol, Self
 
+from app.service.chat_model import ChatTurn, NewChatTurn
 from app.service.knowledge_model import DocumentDraft, RetrievedSection, SyncResult
 from app.service.model import (
     Diagnosis,
@@ -178,6 +179,18 @@ class KnowledgeRepository(Protocol):
         ...
 
 
+class ChatTurnRepository(Protocol):
+    def add(self, turn: NewChatTurn) -> bool:
+        """Store the turn with its citations; False when its id exists (a retried request)."""
+        ...
+
+    def get(self, turn_id: uuid.UUID) -> ChatTurn | None: ...
+
+    def page(self, journal_id: uuid.UUID, limit: int, before: FeedCursor | None) -> list[ChatTurn]:
+        """Newest first; with `before`, only the turns strictly older than the cursor."""
+        ...
+
+
 class UnitOfWork(Protocol):
     """One business action in one transaction: leaving the block without commit rolls back."""
 
@@ -189,6 +202,7 @@ class UnitOfWork(Protocol):
     escalation_delivery: EscalationDeliveryRepository
     ticket_events: TicketEventRepository
     knowledge: KnowledgeRepository
+    chat_turns: ChatTurnRepository
 
     def __enter__(self) -> Self: ...
 
