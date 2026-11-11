@@ -1,4 +1,4 @@
-from sqlalchemy import MetaData
+from sqlalchemy import MetaData, Text
 from sqlalchemy.orm import DeclarativeBase
 
 # CheckConstraint names are short ("amounts"); the template adds the table and the prefix.
@@ -13,3 +13,5 @@ NAMING_CONVENTION = {
 
 class Base(DeclarativeBase):
     metadata = MetaData(naming_convention=NAMING_CONVENTION)
+    # The design uses `text` with a length CHECK instead of varchar(n).
+    type_annotation_map = {str: Text}

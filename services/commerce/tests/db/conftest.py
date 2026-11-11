@@ -11,6 +11,9 @@ from sqlalchemy import Connection, Engine, create_engine, text
 from sqlalchemy.engine import URL, make_url
 from sqlalchemy.orm import Session
 
+from app.models import CatalogItem
+from tests.db.factories import make_item
+
 MIGRATIONS_DIR = Path(__file__).parent.parent.parent / "migrations"
 ADMIN_URL = os.environ.get(
     "COMMERCE_TEST_DATABASE_URL", "postgresql+psycopg://postgres@127.0.0.1:55432/postgres"
@@ -87,3 +90,11 @@ def session(engine: Engine) -> Iterator[Session]:
         with Session(connection, join_transaction_mode="create_savepoint") as session:
             yield session
         outer.rollback()
+
+
+@pytest.fixture
+def item(session: Session) -> CatalogItem:
+    item = make_item()
+    session.add(item)
+    session.flush()
+    return item
