@@ -18,3 +18,10 @@ class Settings(BaseSettings):
     consumer_wait_seconds: int = 5
     consumer_batch_size: int = Field(default=5, ge=1, le=10)
     consumer_interval_seconds: float = Field(default=0.5, gt=0)
+
+    ticket_events_topic_arn: str
+    # The author's assumption (72 hours), not an SLA from the BA; counted from ticket creation.
+    ticket_ttl_seconds: int = Field(default=259200, gt=0)
+    # A terminal event whose record is still missing after this long is sent again.
+    republish_grace_seconds: float = Field(default=30.0, ge=0)
+    maintenance_batch_size: int = Field(default=50, ge=1)
