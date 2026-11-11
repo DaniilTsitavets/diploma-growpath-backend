@@ -1,38 +1,16 @@
 import time
 import uuid
-from collections.abc import Iterator
 from concurrent.futures import ThreadPoolExecutor
 from typing import Literal
 
 import pytest
-from sqlalchemy import Connection, Engine, delete, func, insert, select, text
+from sqlalchemy import Connection, Engine, func, select, text
 from sqlalchemy.exc import IntegrityError
 
 from app.models import CatalogItem, Order
 from tests.db.test_discount_uniqueness import order_insert
 
 WAIT_SECONDS = 5
-
-
-@pytest.fixture
-def committed_item(engine: Engine) -> Iterator[CatalogItem]:
-    """Races need rows other connections can see, so this item is committed and removed after."""
-    item = CatalogItem(id=uuid.uuid4(), name=f"Race {uuid.uuid4()}", price_cents=2500)
-    with engine.begin() as connection:
-        connection.execute(
-            insert(CatalogItem).values(
-                id=item.id,
-                item_type="pack",
-                name=item.name,
-                plant_species="Basil",
-                seed_count=5,
-                price_cents=2500,
-            )
-        )
-    yield item
-    with engine.begin() as connection:
-        connection.execute(delete(Order).where(Order.item_id == item.id))
-        connection.execute(delete(CatalogItem).where(CatalogItem.id == item.id))
 
 
 def wait_until_blocked(watcher: Connection, pid: int) -> None:

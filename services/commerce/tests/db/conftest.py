@@ -7,11 +7,11 @@ from uuid import uuid4
 import pytest
 from alembic import command
 from alembic.config import Config
-from sqlalchemy import Connection, Engine, create_engine, text
+from sqlalchemy import Connection, Engine, create_engine, delete, insert, text
 from sqlalchemy.engine import URL, make_url
 from sqlalchemy.orm import Session
 
-from app.models import CatalogItem
+from app.models import CatalogItem, Order
 from tests.db.factories import make_item
 
 MIGRATIONS_DIR = Path(__file__).parent.parent.parent / "migrations"
@@ -98,3 +98,24 @@ def item(session: Session) -> CatalogItem:
     session.add(item)
     session.flush()
     return item
+
+
+@pytest.fixture
+def committed_item(engine: Engine) -> Iterator[CatalogItem]:
+    """Races need rows other connections can see, so this item is committed and removed after."""
+    item = CatalogItem(id=uuid4(), name=f"Race {uuid4()}", price_cents=2500)
+    with engine.begin() as connection:
+        connection.execute(
+            insert(CatalogItem).values(
+                id=item.id,
+                item_type="pack",
+                name=item.name,
+                plant_species="Basil",
+                seed_count=5,
+                price_cents=2500,
+            )
+        )
+    yield item
+    with engine.begin() as connection:
+        connection.execute(delete(Order).where(Order.item_id == item.id))
+        connection.execute(delete(CatalogItem).where(CatalogItem.id == item.id))
