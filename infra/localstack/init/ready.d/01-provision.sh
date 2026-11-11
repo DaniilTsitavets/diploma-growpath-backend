@@ -39,14 +39,40 @@ awslocal apigateway update-stage --rest-api-id "$api_id" --stage-name "$STAGE" -
   "op=replace,path=/*/*/throttling/rateLimit,value=${RATE_LIMIT}" \
   "op=replace,path=/*/*/throttling/burstLimit,value=${BURST_LIMIT}" >/dev/null
 
-dlq_url=$(awslocal sqs create-queue --queue-name order-placed-dlq --query QueueUrl --output text)
-dlq_arn=$(awslocal sqs get-queue-attributes --queue-url "$dlq_url" --attribute-names QueueArn --query Attributes.QueueArn --output text)
-queue_url=$(awslocal sqs create-queue --queue-name entitlement-order-placed --attributes \
-  "{\"VisibilityTimeout\":\"1\",\"RedrivePolicy\":\"{\\\"deadLetterTargetArn\\\":\\\"${dlq_arn}\\\",\\\"maxReceiveCount\\\":\\\"2\\\"}\"}" \
-  --query QueueUrl --output text)
-queue_arn=$(awslocal sqs get-queue-attributes --queue-url "$queue_url" --attribute-names QueueArn --query Attributes.QueueArn --output text)
-topic_arn=$(awslocal sns create-topic --name order-placed --query TopicArn --output text)
-awslocal sns subscribe --topic-arn "$topic_arn" --protocol sqs --notification-endpoint "$queue_arn" \
-  --attributes RawMessageDelivery=true >/dev/null
+# A subscriber queue with its dead-letter queue; prints the queue ARN. Short visibility timeout and
+# two receives keep the DLQ demo quick.
+create_queue_with_dlq() {
+  local queue_name=$1 dlq_name=$2 dlq_url dlq_arn queue_url
+  dlq_url=$(awslocal sqs create-queue --queue-name "$dlq_name" --query QueueUrl --output text)
+  dlq_arn=$(awslocal sqs get-queue-attributes --queue-url "$dlq_url" --attribute-names QueueArn --query Attributes.QueueArn --output text)
+  queue_url=$(awslocal sqs create-queue --queue-name "$queue_name" --attributes \
+    "{\"VisibilityTimeout\":\"1\",\"RedrivePolicy\":\"{\\\"deadLetterTargetArn\\\":\\\"${dlq_arn}\\\",\\\"maxReceiveCount\\\":\\\"2\\\"}\"}" \
+    --query QueueUrl --output text)
+  awslocal sqs get-queue-attributes --queue-url "$queue_url" --attribute-names QueueArn --query Attributes.QueueArn --output text
+}
+
+# Subscribe a queue to a topic with raw delivery; the optional third argument is a filter policy
+# on the event_type message attribute.
+subscribe_queue() {
+  local topic_arn=$1 queue_arn=$2 filter_policy=${3:-} subscription_arn
+  subscription_arn=$(awslocal sns subscribe --topic-arn "$topic_arn" --protocol sqs \
+    --notification-endpoint "$queue_arn" --attributes RawMessageDelivery=true \
+    --query SubscriptionArn --output text)
+  if [ -n "$filter_policy" ]; then
+    awslocal sns set-subscription-attributes --subscription-arn "$subscription_arn" \
+      --attribute-name FilterPolicy --attribute-value "$filter_policy"
+  fi
+}
+
+# commerce publishes order.placed; entitlement consumes it.
+order_topic_arn=$(awslocal sns create-topic --name order-placed --query TopicArn --output text)
+subscribe_queue "$order_topic_arn" "$(create_queue_with_dlq entitlement-order-placed order-placed-dlq)"
+
+# expert-consultation publishes ticket.created|answered|cancelled; entitlement needs only the
+# two that change its quota.
+ticket_topic_arn=$(awslocal sns create-topic --name ticket-events --query TopicArn --output text)
+subscribe_queue "$ticket_topic_arn" \
+  "$(create_queue_with_dlq entitlement-ticket-events entitlement-ticket-events-dlq)" \
+  '{"event_type":["ticket.created","ticket.cancelled"]}'
 
 echo "provisioned: api=${api_id} stage=${STAGE} pool=${pool_id} client=${client_id}"
