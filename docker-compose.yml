@@ -105,6 +105,11 @@ services:
       PLANT_CARE_MODEL_MOCK_BEHAVIOR: ${PLANT_CARE_MODEL_MOCK_BEHAVIOR:-complete}
       PLANT_CARE_OPENROUTER_API_KEY: ${PLANT_CARE_OPENROUTER_API_KEY:-}
       PLANT_CARE_OPENROUTER_MODEL: ${PLANT_CARE_OPENROUTER_MODEL:-}
+      # Care chat: an empty chat model falls back to PLANT_CARE_OPENROUTER_MODEL.
+      PLANT_CARE_OPENROUTER_CHAT_MODEL: ${PLANT_CARE_OPENROUTER_CHAT_MODEL:-}
+      PLANT_CARE_CHAT_TOP_K: "4"
+      PLANT_CARE_CHAT_HISTORY_TURNS: "3"
+      PLANT_CARE_CHAT_MODEL_TIMEOUT_SECONDS: "8"
       # LocalStack only; see the commerce service for why the code never reads keys itself.
       PLANT_CARE_AWS_ENDPOINT_URL: http://localstack:4566
       # Presigned photo URLs are opened from the host, where LocalStack is on loopback.

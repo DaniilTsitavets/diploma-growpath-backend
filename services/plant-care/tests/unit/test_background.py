@@ -60,6 +60,7 @@ def test_application_runs_the_order_consumer_while_it_is_up():
         orders,
         photo_storage=FakePhotoStorage(),
         ticket_queue=FakeQueue(),
+        seed_knowledge=lambda: None,
     )
     app.state.consumers = [
         QueueConsumer(orders, {"order.placed": lambda body: handled.set()}, frozenset(), 5, 0)
