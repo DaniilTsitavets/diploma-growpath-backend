@@ -64,9 +64,11 @@ subscribe_queue() {
   fi
 }
 
-# commerce publishes order.placed; entitlement consumes it.
+# commerce publishes order.placed; entitlement and plant-care consume it.
 order_topic_arn=$(awslocal sns create-topic --name order-placed --query TopicArn --output text)
 subscribe_queue "$order_topic_arn" "$(create_queue_with_dlq entitlement-order-placed order-placed-dlq)"
+subscribe_queue "$order_topic_arn" \
+  "$(create_queue_with_dlq plant-care-order-placed plant-care-order-placed-dlq)"
 
 # expert-consultation publishes ticket.created|answered|cancelled; entitlement needs only the
 # two that change its quota.
