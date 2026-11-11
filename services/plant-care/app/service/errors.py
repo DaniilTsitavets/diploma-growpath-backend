@@ -33,8 +33,38 @@ class AiQuotaExhausted(Conflict):
         super().__init__("the AI quota of the current period is used up")
 
 
-class AiQuotaUnavailable(Exception):
+class AiQuotaUnavailable(Unavailable):
     """The quota service could not give an answer; callers decide whether to degrade."""
+
+    def __init__(self) -> None:
+        super().__init__("the quota service did not answer")
+
+
+class DiagnosisNotFound(NotFound):
+    def __init__(self) -> None:
+        super().__init__("the update has no diagnosis")
+
+
+class PhotosMissing(InvalidRequest):
+    def __init__(self, kinds: list[str]) -> None:
+        super().__init__(f"photos required for a diagnosis are missing: {', '.join(kinds)}")
+
+
+class DiagnosisConflict(Conflict):
+    """The diagnosis is in a state that does not allow the request."""
+
+    code = "diagnosis-conflict"
+
+
+class RootsPhotoNotRequested(Conflict):
+    code = "roots-photo-not-requested"
+
+    def __init__(self) -> None:
+        super().__init__("a roots photo is accepted only after the AI asked for one")
+
+
+class ReservationUnusable(Exception):
+    """The reservation is released, expired or unknown to entitlement: a new id is needed."""
 
 
 class InvalidCursor(InvalidRequest):

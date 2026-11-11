@@ -14,7 +14,7 @@ from app.config import Settings
 from app.db import create_db_engine
 from app.messaging.codec import order_routes
 from app.messaging.sqs import SqsQueue, create_sqs_client
-from app.quota import UnconfiguredAiQuota
+from app.quota import create_entitlement_client
 from app.repository.unit_of_work import SqlAlchemyUnitOfWork
 from app.service.ai_quota import AiQuota
 from app.service.consumer import MessageQueue, QueueConsumer
@@ -37,6 +37,8 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     yield
     stop.set()
     await asyncio.gather(*consuming)
+    for closeable in app.state.closeables:
+        closeable.close()
     app.state.engine.dispose()
 
 
@@ -57,11 +59,14 @@ def create_app(
 
     app = FastAPI(title="GrowPath plant-care", version="0.1.0", lifespan=lifespan)
     app.state.engine = create_db_engine(settings)
+    entitlement = create_entitlement_client(settings)
+    app.state.closeables = [entitlement]
+    ai_quota = ai_quota or entitlement
     unit_of_work = partial(SqlAlchemyUnitOfWork, sessionmaker(app.state.engine))
     app.state.journal_service = JournalService(unit_of_work)
     app.state.update_service = UpdateService(
         unit_of_work,
-        ai_quota or UnconfiguredAiQuota(),
+        ai_quota,
         settings.feed_default_page_size,
         settings.feed_max_page_size,
     )

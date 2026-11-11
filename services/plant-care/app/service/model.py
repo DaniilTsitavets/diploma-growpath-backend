@@ -44,6 +44,17 @@ class DiagnosisStatus(StrEnum):
     DEGRADED = "degraded"
 
 
+class Tier(StrEnum):
+    STARTER = "starter"
+    HOBBYIST = "hobbyist"
+    PREMIUM = "premium"
+
+
+class ModelEffort(StrEnum):
+    MEDIUM = "medium"
+    HIGH = "high"
+
+
 class EscalationStatus(StrEnum):
     REQUESTED = "requested"
     TICKET_OPEN = "ticket_open"
@@ -107,6 +118,40 @@ class DiagnosisSummary:
     recommendation: str | None
     escalation_offered: bool
     escalation_declined: bool
+
+
+@dataclass(frozen=True)
+class Candidate:
+    cause: str
+    rationale: str
+
+
+@dataclass(frozen=True)
+class CandidateRecord:
+    rank: int
+    cause: str
+    rationale: str
+
+
+@dataclass(frozen=True)
+class Diagnosis:
+    update_id: uuid.UUID
+    ai_reservation_id: uuid.UUID
+    summary: DiagnosisSummary
+    candidates: list[CandidateRecord]
+
+
+@dataclass(frozen=True)
+class DiagnosisResult:
+    """What an attempt stores when the model answered: a question to the user or a conclusion."""
+
+    status: DiagnosisStatus
+    has_dominant_candidate: bool
+    candidates: list[Candidate]
+    recommendation: str | None
+    clarifying_question: str | None
+    roots_photo_requested: bool
+    escalation_offered: bool
 
 
 @dataclass(frozen=True)

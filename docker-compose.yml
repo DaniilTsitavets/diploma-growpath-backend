@@ -93,6 +93,12 @@ services:
     environment:
       PLANT_CARE_DATABASE_URL: postgresql+psycopg://plant_care:${PLANT_CARE_DB_PASSWORD:?set PLANT_CARE_DB_PASSWORD}@plant-care-db:5432/plant_care
       PLANT_CARE_ORDER_PLACED_QUEUE_URL: http://localstack:4566/000000000000/plant-care-order-placed
+      PLANT_CARE_ENTITLEMENT_URL: http://entitlement:8000
+      # mock | openrouter | bedrock; the key is needed (and validated by the service) only for openrouter.
+      PLANT_CARE_MODEL_PROVIDER: ${PLANT_CARE_MODEL_PROVIDER:-mock}
+      PLANT_CARE_MODEL_MOCK_BEHAVIOR: ${PLANT_CARE_MODEL_MOCK_BEHAVIOR:-complete}
+      PLANT_CARE_OPENROUTER_API_KEY: ${PLANT_CARE_OPENROUTER_API_KEY:-}
+      PLANT_CARE_OPENROUTER_MODEL: ${PLANT_CARE_OPENROUTER_MODEL:-}
       # LocalStack only; see the commerce service for why the code never reads keys itself.
       PLANT_CARE_AWS_ENDPOINT_URL: http://localstack:4566
       # Presigned photo URLs are opened from the host, where LocalStack is on loopback.
@@ -105,6 +111,8 @@ services:
       plant-care-db:
         condition: service_healthy
       localstack:
+        condition: service_healthy
+      entitlement:
         condition: service_healthy
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health/live', timeout=2)"]

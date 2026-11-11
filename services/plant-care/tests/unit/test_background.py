@@ -1,7 +1,6 @@
 import asyncio
 import logging
 import threading
-import uuid
 from collections.abc import Callable
 
 import pytest
@@ -9,9 +8,7 @@ from fastapi.testclient import TestClient
 
 from app.background import run_periodically
 from app.main import create_app
-from app.quota import UnconfiguredAiQuota
 from app.service.consumer import QueueConsumer
-from app.service.errors import AiQuotaUnavailable
 from tests.unit.fake_queue import FakeQueue
 from tests.unit.fake_storage import FakePhotoStorage
 from tests.unit.settings import make_settings
@@ -69,9 +66,3 @@ def test_application_runs_the_order_consumer_while_it_is_up():
         assert handled.wait(timeout=5)
 
     assert len(orders.deleted) == 1
-
-
-@pytest.mark.parametrize("operation", ["reserve", "commit", "release"])
-def test_the_placeholder_quota_always_reports_unavailable(operation: str):
-    with pytest.raises(AiQuotaUnavailable):
-        getattr(UnconfiguredAiQuota(), operation)(uuid.uuid4(), uuid.uuid4())

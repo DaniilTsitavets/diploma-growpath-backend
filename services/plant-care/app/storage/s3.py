@@ -3,12 +3,15 @@ from botocore.config import Config
 from botocore.exceptions import BotoCoreError, ClientError
 
 from app.config import Settings
+from app.service.diagnosis_model import Image, PhotoUnreadable
 from app.service.photos import PhotoStorageUnavailable
 
 
-def create_s3_client(settings: Settings):
-    # The URLs are opened by the client of the API, so they are signed for the public endpoint.
-    endpoint = settings.photos_public_endpoint_url or settings.aws_endpoint_url
+def create_s3_client(settings: Settings, presigning: bool = True):
+    # Presigned URLs are opened by the client of the API, so they are signed for the public
+    # endpoint; the service itself reads objects through the internal one.
+    public = settings.photos_public_endpoint_url if presigning else None
+    endpoint = public or settings.aws_endpoint_url
     return boto3.client(
         "s3",
         region_name=settings.aws_region,
@@ -21,6 +24,43 @@ def create_s3_client(settings: Settings):
             retries={"max_attempts": settings.aws_max_attempts, "mode": "standard"},
         ),
     )
+
+
+def sniff_media_type(data: bytes) -> str | None:
+    """The type by magic bytes: a presigned PUT does not force the Content-Type of the object."""
+    if data.startswith(b"\xff\xd8\xff"):
+        return "image/jpeg"
+    if data.startswith(b"\x89PNG\r\n\x1a\n"):
+        return "image/png"
+    if data[:4] == b"RIFF" and data[8:12] == b"WEBP":
+        return "image/webp"
+    if data[:4] == b"GIF8":
+        return "image/gif"
+    return None
+
+
+class S3PhotoReader:
+    """Reads photo bytes for the vision model, within a size limit."""
+
+    def __init__(self, client, bucket: str, max_bytes: int) -> None:
+        self._client = client
+        self._bucket = bucket
+        self._max_bytes = max_bytes
+
+    def read(self, storage_key: str) -> Image:
+        try:
+            response = self._client.get_object(Bucket=self._bucket, Key=storage_key)
+            if response.get("ContentLength", 0) > self._max_bytes:
+                raise PhotoUnreadable("the photo is too large")
+            data = response["Body"].read(self._max_bytes + 1)
+        except (BotoCoreError, ClientError) as error:
+            raise PhotoUnreadable("the photo could not be read") from error
+        if len(data) > self._max_bytes:
+            raise PhotoUnreadable("the photo is too large")
+        media_type = sniff_media_type(data)
+        if media_type is None:
+            raise PhotoUnreadable("the object is not a supported image")
+        return Image(media_type, data)
 
 
 class S3PhotoStorage:
