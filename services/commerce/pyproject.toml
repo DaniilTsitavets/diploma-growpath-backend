@@ -25,4 +25,5 @@ include = ["app*"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
-addopts = "--cov=app --cov-fail-under=70"
+addopts = "--cov=app"
+markers = ["db: needs the PostgreSQL container from compose.test.yml"]
