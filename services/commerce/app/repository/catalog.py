@@ -23,10 +23,14 @@ class SqlAlchemyCatalogRepository:
     def __init__(self, session: Session) -> None:
         self._session = session
 
+    def get(self, item_id: uuid.UUID) -> Item | None:
+        return self._find(CatalogItem.id == item_id)
+
     def get_active(self, item_id: uuid.UUID) -> Item | None:
-        row = self._session.execute(
-            select(*ITEM_COLUMNS).where(CatalogItem.id == item_id, CatalogItem.is_active)
-        ).one_or_none()
+        return self._find(CatalogItem.id == item_id, CatalogItem.is_active)
+
+    def _find(self, *conditions) -> Item | None:
+        row = self._session.execute(select(*ITEM_COLUMNS).where(*conditions)).one_or_none()
         return None if row is None else Item(**row._mapping)
 
     def list_active(self, label: str | None = None) -> list[CatalogEntry]:

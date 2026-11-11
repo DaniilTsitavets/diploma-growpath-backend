@@ -28,11 +28,15 @@ def test_active_item_is_returned_with_its_catalog_fields(session: Session):
     )
 
 
-def test_inactive_item_is_not_returned(session: Session, item: CatalogItem):
+def test_inactive_item_is_not_returned_as_active_but_can_still_be_read(
+    session: Session, item: CatalogItem
+):
     item.is_active = False
     session.flush()
+    catalog = SqlAlchemyCatalogRepository(session)
 
-    assert SqlAlchemyCatalogRepository(session).get_active(item.id) is None
+    assert catalog.get_active(item.id) is None
+    assert catalog.get(item.id).id == item.id
 
 
 def test_unknown_item_is_not_returned(session: Session):

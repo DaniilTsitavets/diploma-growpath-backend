@@ -8,14 +8,14 @@ from pydantic import BaseModel, ValidationError
 
 from app.config import Settings
 from app.main import create_app
-from tests.unit.fakes import UNREACHABLE_DATABASE
+from tests.unit.fakes import make_settings
 
 PROBLEM_JSON = "application/problem+json"
 
 
 @pytest.fixture
 def app() -> FastAPI:
-    return create_app(Settings(database_url=UNREACHABLE_DATABASE))
+    return create_app(make_settings())
 
 
 @pytest.fixture
@@ -85,13 +85,13 @@ def test_settings_require_database_url(monkeypatch):
 
 
 def test_settings_do_not_reveal_database_url():
-    settings = Settings(database_url="postgresql://user:hunter2@db/commerce")
+    settings = make_settings(database_url="postgresql://user:hunter2@db/commerce")
 
     assert "hunter2" not in repr(settings)
 
 
 def test_error_log_is_json_with_correlation_id(capsys):
-    app = create_app(Settings(database_url=UNREACHABLE_DATABASE))
+    app = create_app(make_settings())
 
     @app.get("/boom")
     def boom() -> None:

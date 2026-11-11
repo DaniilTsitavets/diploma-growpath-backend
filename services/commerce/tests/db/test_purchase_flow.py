@@ -13,6 +13,7 @@ from app.repository.unit_of_work import SqlAlchemyUnitOfWork
 from app.service.errors import IdempotencyKeyReused, PaymentFailed
 from app.service.model import PlaceOrder
 from app.service.purchase import PurchaseService
+from tests.unit.fakes import RecordingEvents
 
 
 class Declining:
@@ -20,9 +21,11 @@ class Declining:
         raise PaymentFailed
 
 
-def make_service(engine: Engine, payments=None) -> PurchaseService:
+def make_service(engine: Engine, payments=None, events=None) -> PurchaseService:
     unit_of_work = partial(SqlAlchemyUnitOfWork, sessionmaker(engine))
-    return PurchaseService(unit_of_work, payments or MockPaymentGateway())
+    return PurchaseService(
+        unit_of_work, payments or MockPaymentGateway(), events or RecordingEvents()
+    )
 
 
 def stored_orders(engine: Engine, user_id: uuid.UUID) -> list[Order]:
@@ -42,6 +45,25 @@ def test_first_purchase_is_discounted_and_a_repeat_of_the_request_is_not_charged
     assert (first.created, first.order.total_paid_cents) == (True, 2000)
     assert (repeated.created, repeated.order.id) == (False, first.order.id)
     assert len(stored_orders(engine, command.user_id)) == 1
+
+
+def test_published_flag_is_stored_only_when_the_broker_accepted_the_event(
+    engine: Engine, discounted_item: CatalogItem
+):
+    events = RecordingEvents(fails=True)
+    service = make_service(engine, events=events)
+    user_id = uuid.uuid4()
+
+    service.place_order(PlaceOrder(user_id, discounted_item.id, "key-1"))
+    (unpublished,) = stored_orders(engine, user_id)
+    events.fails = False
+    service.place_order(PlaceOrder(user_id, discounted_item.id, "key-1"))
+    (published,) = stored_orders(engine, user_id)
+
+    assert unpublished.placed_event_published_at is None
+    assert published.placed_event_published_at is not None
+    assert [e.order_id for e in events.published] == [published.id]
+    assert events.published[0].occurred_at == published.placed_at
 
 
 def test_second_purchase_of_the_same_user_is_not_discounted(

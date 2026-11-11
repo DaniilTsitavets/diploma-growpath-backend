@@ -1,11 +1,20 @@
 import uuid
+from dataclasses import replace
 from datetime import UTC, datetime
 from typing import Self
 
-from app.service.errors import DiscountAlreadyUsed, PaymentFailed
+from app.config import Settings
+from app.service.errors import DiscountAlreadyUsed, PaymentFailed, PublishFailed
+from app.service.events import OrderPlaced
 from app.service.model import CatalogEntry, Item, NewOrder, OrderData
 
 UNREACHABLE_DATABASE = "postgresql+psycopg://nobody@127.0.0.1:1/none"
+TOPIC_ARN = "arn:aws:sns:us-east-1:000000000000:order-placed"
+
+
+def make_settings(**overrides) -> Settings:
+    fields = {"database_url": UNREACHABLE_DATABASE, "order_placed_topic_arn": TOPIC_ARN}
+    return Settings(**{**fields, **overrides})
 
 
 def make_item(**overrides) -> Item:
@@ -46,6 +55,16 @@ class FakeOrders:
         self.stored: list[OrderData] = []
         self.rejects_discount = False
         self.concurrent_winner: OrderData | None = None
+        self.mark_fails = False
+
+    def mark_published(self, order_id: uuid.UUID) -> bool:
+        if self.mark_fails:
+            raise RuntimeError("database is gone")
+        for position, order in enumerate(self.stored):
+            if order.id == order_id and order.placed_event_published_at is None:
+                self.stored[position] = replace(order, placed_event_published_at=datetime.now(UTC))
+                return True
+        return False
 
     def find(self, user_id: uuid.UUID, idempotency_key: str) -> OrderData | None:
         for order in self.stored:
@@ -71,8 +90,14 @@ class FakeCatalog:
     def __init__(self, *items: Item) -> None:
         self._items = {item.id: item for item in items}
 
+    def deactivate(self, item_id: uuid.UUID) -> None:
+        self._items[item_id] = replace(self._items[item_id], is_active=False)
+
+    def get(self, item_id: uuid.UUID) -> Item | None:
+        return self._items.get(item_id)
+
     def get_active(self, item_id: uuid.UUID) -> Item | None:
-        item = self._items.get(item_id)
+        item = self.get(item_id)
         return item if item is not None and item.is_active else None
 
     def list_active(self, label: str | None = None) -> list[CatalogEntry]:
@@ -101,6 +126,17 @@ class FakeUnitOfWork:
 
     def commit(self) -> None:
         self.committed = True
+
+
+class RecordingEvents:
+    def __init__(self, fails: bool = False) -> None:
+        self.published: list[OrderPlaced] = []
+        self.fails = fails
+
+    def publish_order_placed(self, event: OrderPlaced) -> None:
+        if self.fails:
+            raise PublishFailed
+        self.published.append(event)
 
 
 class RecordingPayments:

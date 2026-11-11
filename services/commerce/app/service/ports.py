@@ -1,6 +1,7 @@
 import uuid
 from typing import Protocol, Self
 
+from app.service.events import OrderPlaced
 from app.service.model import CatalogEntry, Item, NewOrder, OrderData
 
 
@@ -8,6 +9,10 @@ class OrderRepository(Protocol):
     def find(self, user_id: uuid.UUID, idempotency_key: str) -> OrderData | None: ...
 
     def has_discounted_order(self, user_id: uuid.UUID) -> bool: ...
+
+    def mark_published(self, order_id: uuid.UUID) -> bool:
+        """Record that `order.placed` went out; True only the first time."""
+        ...
 
     def place(self, order: NewOrder) -> OrderData | None:
         """Store the order. None means the user already has an order with this key.
@@ -18,6 +23,10 @@ class OrderRepository(Protocol):
 
 
 class CatalogRepository(Protocol):
+    def get(self, item_id: uuid.UUID) -> Item | None:
+        """The item whether or not it is still active."""
+        ...
+
     def get_active(self, item_id: uuid.UUID) -> Item | None: ...
 
     def list_active(self, label: str | None = None) -> list[CatalogEntry]:
@@ -36,6 +45,12 @@ class UnitOfWork(Protocol):
     def __exit__(self, *exc_info: object) -> None: ...
 
     def commit(self) -> None: ...
+
+
+class OrderEvents(Protocol):
+    def publish_order_placed(self, event: OrderPlaced) -> None:
+        """Raises PublishFailed when the broker does not accept the event."""
+        ...
 
 
 class PaymentGateway(Protocol):

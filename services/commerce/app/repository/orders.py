@@ -1,6 +1,6 @@
 import uuid
 
-from sqlalchemy import exists, select
+from sqlalchemy import exists, func, select, update
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
@@ -33,6 +33,15 @@ class SqlAlchemyOrderRepository:
         return self._session.scalar(
             select(exists().where(Order.user_id == user_id, Order.discount_cents > 0))
         )
+
+    def mark_published(self, order_id: uuid.UUID) -> bool:
+        result = self._session.execute(
+            update(Order)
+            .where(Order.id == order_id, Order.placed_event_published_at.is_(None))
+            .values(placed_event_published_at=func.now())
+            .execution_options(synchronize_session=False)
+        )
+        return result.rowcount == 1
 
     def place(self, order: NewOrder) -> OrderData | None:
         statement = (

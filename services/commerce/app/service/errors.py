@@ -15,5 +15,9 @@ class PaymentFailed(Exception):
     pass
 
 
+class PublishFailed(Exception):
+    """The broker did not accept an event."""
+
+
 class DiscountAlreadyUsed(Exception):
     """The user already has an order with a discount; raised by the order repository."""

@@ -88,6 +88,20 @@ def test_has_discounted_order_ignores_zero_discounts_and_other_users(
     assert orders.has_discounted_order(user_id) is True
 
 
+def test_mark_published_succeeds_only_once(orders: SqlAlchemyOrderRepository, item: CatalogItem):
+    user_id = uuid.uuid4()
+    placed = orders.place(new_order(item, user_id))
+
+    first, repeated = orders.mark_published(placed.id), orders.mark_published(placed.id)
+
+    assert (first, repeated) == (True, False)
+    assert orders.find(user_id, "key-1").placed_event_published_at is not None
+
+
+def test_mark_published_of_an_unknown_order_changes_nothing(orders: SqlAlchemyOrderRepository):
+    assert orders.mark_published(uuid.uuid4()) is False
+
+
 def test_other_integrity_errors_are_not_mistaken_for_a_used_discount(
     orders: SqlAlchemyOrderRepository, item: CatalogItem
 ):

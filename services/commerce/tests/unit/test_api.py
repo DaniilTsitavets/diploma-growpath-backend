@@ -4,18 +4,18 @@ from collections.abc import Callable
 import pytest
 from fastapi.testclient import TestClient
 
-from app.config import Settings
 from app.main import create_app
 from app.service.catalog import CatalogService
 from app.service.purchase import PurchaseService
 from tests.unit.fakes import (
-    UNREACHABLE_DATABASE,
     FakeCatalog,
     FakeOrders,
     FakeUnitOfWork,
+    RecordingEvents,
     RecordingPayments,
     make_entry,
     make_item,
+    make_settings,
 )
 
 PROBLEM_JSON = "application/problem+json"
@@ -25,9 +25,11 @@ USER = str(uuid.uuid4())
 @pytest.fixture
 def make_client() -> Callable[..., TestClient]:
     def build(*items, declines: bool = False) -> TestClient:
-        app = create_app(Settings(database_url=UNREACHABLE_DATABASE))
+        app = create_app(make_settings())
         uow = FakeUnitOfWork(FakeOrders(), FakeCatalog(*items))
-        app.state.purchase_service = PurchaseService(lambda: uow, RecordingPayments(declines))
+        app.state.purchase_service = PurchaseService(
+            lambda: uow, RecordingPayments(declines), RecordingEvents()
+        )
         app.state.catalog_service = CatalogService(lambda: uow)
         return TestClient(app, raise_server_exceptions=False)
 
