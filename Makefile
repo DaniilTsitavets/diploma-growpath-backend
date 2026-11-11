@@ -10,7 +10,7 @@ COVERAGE_GATE := --cov-fail-under=70
 	@echo "Created .env from .env.example; set LOCALSTACK_AUTH_TOKEN in it."
 
 up: .env
-	$(COMPOSE) up -d --wait
+	$(COMPOSE) up -d --build --wait
 
 down:
 	$(COMPOSE) down
