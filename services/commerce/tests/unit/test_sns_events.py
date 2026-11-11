@@ -1,5 +1,5 @@
 import json
-from contextvars import copy_context
+from contextvars import Context, copy_context
 
 import boto3
 import pytest
@@ -79,7 +79,7 @@ def test_attributes_carry_the_event_type_and_the_correlation_id():
 def test_attributes_omit_the_correlation_id_outside_a_request():
     sns = FakeSns()
 
-    copy_context().run(SnsOrderEvents(sns, TOPIC_ARN).publish_order_placed, a_placed_event())
+    Context().run(SnsOrderEvents(sns, TOPIC_ARN).publish_order_placed, a_placed_event())
 
     assert set(sns.calls[0]["MessageAttributes"]) == {"event_type"}
 

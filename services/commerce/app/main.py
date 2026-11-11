@@ -1,5 +1,7 @@
+import asyncio
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
+from datetime import timedelta
 from functools import partial
 
 from fastapi import FastAPI
@@ -8,6 +10,7 @@ from sqlalchemy.orm import sessionmaker
 
 from app.api import health, items, orders
 from app.api.errors import register_error_handlers
+from app.background import run_periodically
 from app.config import Settings
 from app.db import create_db_engine
 from app.messaging.sns import SnsOrderEvents, create_sns_client
@@ -16,11 +19,18 @@ from app.repository.unit_of_work import SqlAlchemyUnitOfWork
 from app.service.catalog import CatalogService
 from app.service.ports import OrderEvents
 from app.service.purchase import PurchaseService
+from app.service.republisher import OrderRepublisher
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncIterator[None]:
+    stop = asyncio.Event()
+    republishing = asyncio.create_task(
+        run_periodically(app.state.republisher.run_once, app.state.republish_interval_seconds, stop)
+    )
     yield
+    stop.set()
+    await republishing
     app.state.engine.dispose()
 
 
@@ -38,6 +48,13 @@ def create_app(
     unit_of_work = partial(SqlAlchemyUnitOfWork, sessionmaker(app.state.engine))
     app.state.purchase_service = PurchaseService(unit_of_work, MockPaymentGateway(), order_events)
     app.state.catalog_service = CatalogService(unit_of_work)
+    app.state.republisher = OrderRepublisher(
+        unit_of_work,
+        order_events,
+        grace=timedelta(seconds=settings.republish_grace_seconds),
+        batch_size=settings.republish_batch_size,
+    )
+    app.state.republish_interval_seconds = settings.republish_interval_seconds
     app.add_middleware(CorrelationIdMiddleware)
     register_error_handlers(app)
     app.include_router(health.router)

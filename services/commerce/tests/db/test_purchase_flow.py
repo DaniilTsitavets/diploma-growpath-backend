@@ -1,10 +1,12 @@
 import uuid
 from collections import Counter
 from concurrent.futures import ThreadPoolExecutor
+from contextvars import copy_context
+from datetime import timedelta
 from functools import partial
 
 import pytest
-from sqlalchemy import Engine, select
+from sqlalchemy import Engine, func, select, update
 from sqlalchemy.orm import Session, sessionmaker
 
 from app.models import CatalogItem, Order
@@ -13,6 +15,7 @@ from app.repository.unit_of_work import SqlAlchemyUnitOfWork
 from app.service.errors import IdempotencyKeyReused, PaymentFailed
 from app.service.model import PlaceOrder
 from app.service.purchase import PurchaseService
+from app.service.republisher import OrderRepublisher
 from tests.unit.fakes import RecordingEvents
 
 
@@ -64,6 +67,37 @@ def test_published_flag_is_stored_only_when_the_broker_accepted_the_event(
     assert published.placed_event_published_at is not None
     assert [e.order_id for e in events.published] == [published.id]
     assert events.published[0].occurred_at == published.placed_at
+
+
+def test_republisher_sends_the_missed_event_once_the_grace_period_has_passed(
+    engine: Engine, discounted_item: CatalogItem
+):
+    events = RecordingEvents(fails=True)
+    service = make_service(engine, events=events)
+    user_id = uuid.uuid4()
+    placed = service.place_order(PlaceOrder(user_id, discounted_item.id, "key-1"))
+    events.fails = False
+    unit_of_work = partial(SqlAlchemyUnitOfWork, sessionmaker(engine))
+    republisher = OrderRepublisher(unit_of_work, events, grace=timedelta(seconds=30), batch_size=10)
+
+    # The loop runs in its own thread context; a copy keeps its correlation id out of this test.
+    run_once = partial(copy_context().run, republisher.run_once)
+    within_grace = run_once()
+    with Session(engine) as session, session.begin():
+        session.execute(
+            update(Order)
+            .where(Order.id == placed.order.id)
+            .values(placed_at=func.now() - timedelta(minutes=5))
+        )
+    after_grace = run_once()
+    again = run_once()
+
+    (event,) = events.published
+    (stored,) = stored_orders(engine, user_id)
+    assert (within_grace, after_grace, again) == (0, 1, 0)
+    assert event.order_id == placed.order.id
+    assert event.occurred_at == stored.placed_at
+    assert stored.placed_event_published_at is not None
 
 
 def test_second_purchase_of_the_same_user_is_not_discounted(

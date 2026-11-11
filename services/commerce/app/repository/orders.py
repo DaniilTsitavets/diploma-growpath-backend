@@ -1,4 +1,5 @@
 import uuid
+from datetime import timedelta
 
 from sqlalchemy import exists, func, select, update
 from sqlalchemy.dialects.postgresql import insert
@@ -33,6 +34,19 @@ class SqlAlchemyOrderRepository:
         return self._session.scalar(
             select(exists().where(Order.user_id == user_id, Order.discount_cents > 0))
         )
+
+    def claim_unpublished(self, grace: timedelta, limit: int) -> list[OrderData]:
+        rows = self._session.execute(
+            select(*ORDER_COLUMNS)
+            .where(
+                Order.placed_event_published_at.is_(None),
+                Order.placed_at < func.now() - grace,
+            )
+            .order_by(Order.placed_at)
+            .limit(limit)
+            .with_for_update(skip_locked=True)
+        )
+        return [to_order_data(row) for row in rows]
 
     def mark_published(self, order_id: uuid.UUID) -> bool:
         result = self._session.execute(

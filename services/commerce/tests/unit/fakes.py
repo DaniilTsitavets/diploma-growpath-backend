@@ -1,7 +1,9 @@
 import uuid
 from dataclasses import replace
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from typing import Self
+
+from growpath_observability import get_correlation_id
 
 from app.config import Settings
 from app.service.errors import DiscountAlreadyUsed, PaymentFailed, PublishFailed
@@ -56,6 +58,11 @@ class FakeOrders:
         self.rejects_discount = False
         self.concurrent_winner: OrderData | None = None
         self.mark_fails = False
+        self.last_claim: tuple[timedelta, int] | None = None
+
+    def claim_unpublished(self, grace: timedelta, limit: int) -> list[OrderData]:
+        self.last_claim = (grace, limit)
+        return [o for o in self.stored if o.placed_event_published_at is None][:limit]
 
     def mark_published(self, order_id: uuid.UUID) -> bool:
         if self.mark_fails:
@@ -131,12 +138,15 @@ class FakeUnitOfWork:
 class RecordingEvents:
     def __init__(self, fails: bool = False) -> None:
         self.published: list[OrderPlaced] = []
+        self.correlation_ids: list[str | None] = []
         self.fails = fails
+        self.failing_orders: set[uuid.UUID] = set()
 
     def publish_order_placed(self, event: OrderPlaced) -> None:
-        if self.fails:
+        if self.fails or event.order_id in self.failing_orders:
             raise PublishFailed
         self.published.append(event)
+        self.correlation_ids.append(get_correlation_id())
 
 
 class RecordingPayments:

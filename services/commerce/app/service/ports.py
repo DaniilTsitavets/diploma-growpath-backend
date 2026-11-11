@@ -1,4 +1,5 @@
 import uuid
+from datetime import timedelta
 from typing import Protocol, Self
 
 from app.service.events import OrderPlaced
@@ -9,6 +10,13 @@ class OrderRepository(Protocol):
     def find(self, user_id: uuid.UUID, idempotency_key: str) -> OrderData | None: ...
 
     def has_discounted_order(self, user_id: uuid.UUID) -> bool: ...
+
+    def claim_unpublished(self, grace: timedelta, limit: int) -> list[OrderData]:
+        """Oldest orders without a published event that are older than `grace`.
+
+        The rows stay locked until the transaction ends, and rows another worker holds are skipped.
+        """
+        ...
 
     def mark_published(self, order_id: uuid.UUID) -> bool:
         """Record that `order.placed` went out; True only the first time."""
