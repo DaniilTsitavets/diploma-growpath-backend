@@ -1,3 +1,4 @@
+import re
 import uuid
 from typing import Annotated
 
@@ -17,6 +18,11 @@ def get_expert_ticket_service(request: Request) -> ExpertTicketService:
     return request.app.state.expert_ticket_service
 
 
+def parse_groups(header: str | None) -> set[str]:
+    """The gateway renders the `cognito:groups` array as `a,b` or `[a, b]`."""
+    return {group for group in re.split(r"[\s,\[\]'\"]+", header or "") if group}
+
+
 def current_expert_id(
     x_user_id: Annotated[str | None, Header()] = None,
     x_user_groups: Annotated[str | None, Header()] = None,
@@ -32,7 +38,6 @@ def current_expert_id(
         expert_id = uuid.UUID(x_user_id)
     except ValueError:
         raise HTTPException(status_code=401, detail="X-User-Id is not a valid user id") from None
-    groups = {group.strip() for group in (x_user_groups or "").split(",")}
-    if EXPERT_GROUP not in groups:
+    if EXPERT_GROUP not in parse_groups(x_user_groups):
         raise HTTPException(status_code=403, detail="the experts group is required")
     return expert_id
