@@ -2,8 +2,8 @@ import uuid
 
 import pytest
 
-from app.service.errors import UpdateNotFound
-from app.service.model import PhotoKind
+from app.service.errors import RootsPhotoNotRequested, UpdateNotFound
+from app.service.model import DiagnosisStatus, PhotoKind
 from app.service.photos import PhotoService, PhotoStorageUnavailable, storage_key_for
 from tests.unit.fake_storage import FakePhotoStorage
 from tests.unit.fakes import FakeUnitOfWork
@@ -111,3 +111,70 @@ def test_listing_photos_of_another_users_update_is_not_found(
 
     with pytest.raises(UpdateNotFound):
         service.list_photos(update.id, USER)
+
+
+@pytest.mark.parametrize(
+    "diagnosis",
+    [
+        None,
+        {"status": DiagnosisStatus.PENDING},
+        {"status": DiagnosisStatus.AWAITING_CLARIFICATION, "clarifying_question": "Q?"},
+        {
+            "status": DiagnosisStatus.COMPLETED,
+            "model_effort": "high",
+            "roots_photo_requested": True,
+        },
+        {
+            "status": DiagnosisStatus.DEGRADED,
+            "model_effort": "high",
+            "clarifying_question": "Q?",
+            "roots_photo_requested": True,
+        },
+    ],
+)
+def test_a_roots_photo_is_refused_unless_the_ai_is_awaiting_one(
+    service: PhotoService, uow: FakeUnitOfWork, diagnosis: dict | None
+):
+    update = seeded_update(uow)
+    if diagnosis is not None:
+        uow.diagnoses.seed(update.id, **diagnosis)
+
+    with pytest.raises(RootsPhotoNotRequested):
+        service.request_upload(update.id, USER, PhotoKind.ROOTS_DRAINAGE)
+
+    assert uow.photos.rows == []
+    assert uow.commits == 0
+
+
+def test_a_roots_photo_is_accepted_while_the_ai_awaits_it(
+    service: PhotoService, uow: FakeUnitOfWork
+):
+    update = seeded_update(uow)
+    uow.diagnoses.seed(
+        update.id,
+        status=DiagnosisStatus.AWAITING_CLARIFICATION,
+        model_effort="high",
+        clarifying_question="Q?",
+        roots_photo_requested=True,
+    )
+
+    upload = service.request_upload(update.id, USER, PhotoKind.ROOTS_DRAINAGE)
+
+    assert upload.kind is PhotoKind.ROOTS_DRAINAGE
+    assert [p.kind for p in uow.photos.rows] == [PhotoKind.ROOTS_DRAINAGE]
+
+
+@pytest.mark.parametrize("kind", [PhotoKind.OVERVIEW, PhotoKind.SOIL, PhotoKind.SYMPTOM_CLOSEUP])
+def test_the_other_kinds_need_no_request_from_the_ai(
+    service: PhotoService, uow: FakeUnitOfWork, kind: PhotoKind
+):
+    update = seeded_update(uow)
+    uow.diagnoses.seed(
+        update.id,
+        status=DiagnosisStatus.COMPLETED,
+        model_effort="high",
+        has_dominant_candidate=True,
+        recommendation="r",
+    )
+
+    assert service.request_upload(update.id, USER, kind).kind is kind

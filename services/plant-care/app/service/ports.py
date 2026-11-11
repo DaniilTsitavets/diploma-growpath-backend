@@ -3,9 +3,12 @@ from datetime import date
 from typing import Protocol, Self
 
 from app.service.model import (
+    Diagnosis,
+    DiagnosisResult,
     FeedCursor,
     FeedItem,
     Journal,
+    ModelEffort,
     NewJournal,
     NewUpdate,
     Photo,
@@ -53,6 +56,44 @@ class UpdateRepository(Protocol):
 class DiagnosisRepository(Protocol):
     def add_pending(self, update_id: uuid.UUID, ai_reservation_id: uuid.UUID) -> bool:
         """Create the diagnosis in `diagnosis_pending`; False when the update already has one."""
+        ...
+
+    def get(self, update_id: uuid.UUID) -> Diagnosis | None: ...
+
+    def claim_first_attempt(
+        self, update_id: uuid.UUID, reservation_id: uuid.UUID, effort: ModelEffort
+    ) -> bool:
+        """Set the effort of a pending diagnosis nobody has started; False when it was taken."""
+        ...
+
+    def claim_retry(
+        self,
+        update_id: uuid.UUID,
+        old_reservation_id: uuid.UUID,
+        new_reservation_id: uuid.UUID,
+        effort: ModelEffort,
+    ) -> bool:
+        """Start a new attempt on a pending or degraded diagnosis that still holds the old id."""
+        ...
+
+    def answer_clarification(self, update_id: uuid.UUID, answer: str) -> bool:
+        """`awaiting_clarification` to `diagnosis_pending`; False when no answer is awaited."""
+        ...
+
+    def record_result(
+        self, update_id: uuid.UUID, reservation_id: uuid.UUID, result: DiagnosisResult
+    ) -> bool:
+        """Store the result and its candidates; False when another attempt owns the diagnosis."""
+        ...
+
+    def mark_degraded(
+        self, update_id: uuid.UUID, reservation_id: uuid.UUID, recommendation: str
+    ) -> bool:
+        """Finish the attempt with a fallback recommendation; False when it lost the diagnosis."""
+        ...
+
+    def decline_escalation(self, update_id: uuid.UUID) -> bool:
+        """Record that the user declined the offered expert; False when none is on offer."""
         ...
 
 

@@ -1,9 +1,13 @@
 import uuid
+from dataclasses import replace
 from datetime import UTC, date, datetime, timedelta
 from typing import Self
 
-from app.service.errors import AiQuotaExhausted, AiQuotaUnavailable
+from app.service.errors import AiQuotaExhausted, AiQuotaUnavailable, ReservationUnusable
 from app.service.model import (
+    CandidateRecord,
+    Diagnosis,
+    DiagnosisResult,
     DiagnosisStatus,
     DiagnosisSummary,
     Drainage,
@@ -12,6 +16,7 @@ from app.service.model import (
     FingerTest,
     Journal,
     Lighting,
+    ModelEffort,
     NewJournal,
     NewUpdate,
     Photo,
@@ -69,14 +74,158 @@ class FakeJournals:
 
 
 class FakeDiagnoses:
+    """Mirrors the guarded UPDATE statements of the SQL repository."""
+
     def __init__(self) -> None:
-        self.rows: dict[uuid.UUID, uuid.UUID] = {}
+        self.states: dict[uuid.UUID, Diagnosis] = {}
+
+    @property
+    def rows(self) -> dict[uuid.UUID, uuid.UUID]:
+        return {update_id: row.ai_reservation_id for update_id, row in self.states.items()}
+
+    def seed(
+        self,
+        update_id: uuid.UUID,
+        reservation_id: uuid.UUID | None = None,
+        candidates: list[CandidateRecord] | None = None,
+        **summary: object,
+    ) -> Diagnosis:
+        fields = {
+            "status": DiagnosisStatus.PENDING,
+            "model_effort": None,
+            "has_dominant_candidate": None,
+            "clarifying_question": None,
+            "clarifying_answer": None,
+            "roots_photo_requested": False,
+            "recommendation": None,
+            "escalation_offered": False,
+            "escalation_declined": False,
+        }
+        row = Diagnosis(
+            update_id,
+            reservation_id or uuid.uuid4(),
+            DiagnosisSummary(**{**fields, **summary}),
+            candidates or [],
+        )
+        self.states[update_id] = row
+        return row
 
     def add_pending(self, update_id: uuid.UUID, ai_reservation_id: uuid.UUID) -> bool:
-        if update_id in self.rows:
+        if update_id in self.states:
             return False
-        self.rows[update_id] = ai_reservation_id
+        self.seed(update_id, ai_reservation_id)
         return True
+
+    def get(self, update_id: uuid.UUID) -> Diagnosis | None:
+        return self.states.get(update_id)
+
+    def claim_first_attempt(
+        self, update_id: uuid.UUID, reservation_id: uuid.UUID, effort: ModelEffort
+    ) -> bool:
+        row = self.states.get(update_id)
+        if (
+            row is None
+            or row.ai_reservation_id != reservation_id
+            or row.summary.status is not DiagnosisStatus.PENDING
+            or row.summary.model_effort is not None
+        ):
+            return False
+        self._change(row, model_effort=effort.value)
+        return True
+
+    def claim_retry(
+        self,
+        update_id: uuid.UUID,
+        old_reservation_id: uuid.UUID,
+        new_reservation_id: uuid.UUID,
+        effort: ModelEffort,
+    ) -> bool:
+        row = self.states.get(update_id)
+        active = (DiagnosisStatus.PENDING, DiagnosisStatus.DEGRADED)
+        if row is None or row.ai_reservation_id != old_reservation_id:
+            return False
+        if row.summary.status not in active:
+            return False
+        self._change(
+            row,
+            reservation_id=new_reservation_id,
+            status=DiagnosisStatus.PENDING,
+            model_effort=effort.value,
+            has_dominant_candidate=None,
+            recommendation=None,
+        )
+        return True
+
+    def answer_clarification(self, update_id: uuid.UUID, answer: str) -> bool:
+        row = self.states.get(update_id)
+        if (
+            row is None
+            or row.summary.status is not DiagnosisStatus.AWAITING_CLARIFICATION
+            or row.summary.clarifying_answer is not None
+        ):
+            return False
+        self._change(row, status=DiagnosisStatus.PENDING, clarifying_answer=answer)
+        return True
+
+    def record_result(
+        self, update_id: uuid.UUID, reservation_id: uuid.UUID, result: DiagnosisResult
+    ) -> bool:
+        row = self.states.get(update_id)
+        if (
+            row is None
+            or row.ai_reservation_id != reservation_id
+            or row.summary.status is not DiagnosisStatus.PENDING
+        ):
+            return False
+        fields = {
+            "status": result.status,
+            "has_dominant_candidate": result.has_dominant_candidate,
+            "recommendation": result.recommendation,
+            "escalation_offered": result.escalation_offered,
+        }
+        if result.clarifying_question is not None:
+            fields["clarifying_question"] = result.clarifying_question
+            fields["roots_photo_requested"] = result.roots_photo_requested
+        records = [
+            CandidateRecord(rank, candidate.cause, candidate.rationale)
+            for rank, candidate in enumerate(result.candidates, start=1)
+        ]
+        self._change(row, candidates=records, **fields)
+        return True
+
+    def mark_degraded(
+        self, update_id: uuid.UUID, reservation_id: uuid.UUID, recommendation: str
+    ) -> bool:
+        row = self.states.get(update_id)
+        if (
+            row is None
+            or row.ai_reservation_id != reservation_id
+            or row.summary.status is not DiagnosisStatus.PENDING
+        ):
+            return False
+        self._change(row, status=DiagnosisStatus.DEGRADED, recommendation=recommendation)
+        return True
+
+    def decline_escalation(self, update_id: uuid.UUID) -> bool:
+        row = self.states.get(update_id)
+        if row is None or not row.summary.escalation_offered or row.summary.escalation_declined:
+            return False
+        self._change(row, escalation_declined=True)
+        return True
+
+    def _change(
+        self,
+        row: Diagnosis,
+        reservation_id: uuid.UUID | None = None,
+        candidates: list[CandidateRecord] | None = None,
+        **summary: object,
+    ) -> None:
+        self.states[row.update_id] = Diagnosis(
+            row.update_id,
+            reservation_id or row.ai_reservation_id,
+            replace(row.summary, **summary),
+            row.candidates if candidates is None else candidates,
+        )
 
 
 class FakeUpdates:
@@ -187,18 +336,26 @@ class FakeAiQuota:
         self.exhausted = False
         self.unavailable = False
         self.release_unavailable = False
+        self.unusable: set[uuid.UUID] = set()
+        self.commit_fails_with: Exception | None = None
 
     def reserve(self, reservation_id: uuid.UUID, user_id: uuid.UUID) -> None:
         if self.unavailable:
             raise AiQuotaUnavailable
-        if self.exhausted:
-            raise AiQuotaExhausted
-        self.reserved.append(reservation_id)
+        if reservation_id in self.unusable:
+            raise ReservationUnusable
+        if reservation_id not in self.reserved:
+            if self.exhausted:
+                raise AiQuotaExhausted
+            self.reserved.append(reservation_id)
 
     def commit(self, reservation_id: uuid.UUID, user_id: uuid.UUID) -> None:
+        if self.commit_fails_with is not None:
+            raise self.commit_fails_with
         self.committed.append(reservation_id)
 
     def release(self, reservation_id: uuid.UUID, user_id: uuid.UUID) -> None:
         if self.release_unavailable:
             raise AiQuotaUnavailable
         self.released.append(reservation_id)
+        self.unusable.add(reservation_id)

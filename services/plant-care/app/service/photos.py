@@ -3,8 +3,8 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Protocol
 
-from app.service.errors import Unavailable, UpdateNotFound
-from app.service.model import Photo, PhotoKind
+from app.service.errors import RootsPhotoNotRequested, Unavailable, UpdateNotFound
+from app.service.model import DiagnosisStatus, Photo, PhotoKind
 from app.service.ports import UnitOfWork
 
 # US-3.2: two photos are required; the close-up is optional and the roots photo is asked for later.
@@ -73,11 +73,22 @@ class PhotoService:
             update = uow.updates.get_owned(update_id, user_id)
             if update is None:
                 raise UpdateNotFound
+            if kind is PhotoKind.ROOTS_DRAINAGE and not self._roots_photo_requested(uow, update_id):
+                raise RootsPhotoNotRequested
             key = storage_key_for(update.journal_id, update_id, kind)
             url = self._storage.upload_url(key)
             uow.photos.add(update_id, kind, key)
             uow.commit()
         return PhotoUpload(kind, url, self._url_ttl_seconds)
+
+    @staticmethod
+    def _roots_photo_requested(uow: UnitOfWork, update_id: uuid.UUID) -> bool:
+        diagnosis = uow.diagnoses.get(update_id)
+        return (
+            diagnosis is not None
+            and diagnosis.summary.status is DiagnosisStatus.AWAITING_CLARIFICATION
+            and diagnosis.summary.roots_photo_requested
+        )
 
     def list_photos(self, update_id: uuid.UUID, user_id: uuid.UUID) -> UpdatePhotos:
         with self._unit_of_work() as uow:
