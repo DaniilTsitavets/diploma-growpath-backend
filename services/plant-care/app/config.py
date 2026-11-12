@@ -1,8 +1,10 @@
 from pathlib import Path
-from typing import Literal, Self
+from typing import Annotated, Literal, Self
 
-from pydantic import Field, SecretStr, model_validator
-from pydantic_settings import BaseSettings, SettingsConfigDict
+from pydantic import Field, SecretStr, field_validator, model_validator
+from pydantic_settings import BaseSettings, NoDecode, SettingsConfigDict
+
+from app.service.dominance import Support
 
 
 class Settings(BaseSettings):
@@ -50,6 +52,13 @@ class Settings(BaseSettings):
     model_mock_behavior: Literal[
         "complete", "clarify", "clarify_no_dominant", "unavailable", "malformed"
     ] = "complete"
+    # The application decides dominance from the `support` labels of the model: the first candidate
+    # must have `diagnosis_dominant_support` and no other may have one of `diagnosis_rival_supports`
+    # (comma-separated in the environment).
+    diagnosis_dominant_support: Support = Support.HIGH
+    diagnosis_rival_supports: Annotated[frozenset[Support], NoDecode] = frozenset(
+        {Support.MEDIUM, Support.HIGH}
+    )
     openrouter_api_key: SecretStr | None = None
     openrouter_model: str | None = None
     # The chat needs no vision input; falls back to `openrouter_model` when unset.
@@ -88,6 +97,13 @@ class Settings(BaseSettings):
     chat_model_timeout_seconds: float = Field(default=8.0, gt=0)
     chat_history_default_page_size: int = 20
     chat_history_max_page_size: int = 100
+
+    @field_validator("diagnosis_rival_supports", mode="before")
+    @classmethod
+    def _split_rival_supports(cls, value: object) -> object:
+        if isinstance(value, str):
+            return [label.strip() for label in value.split(",")]
+        return value
 
     @model_validator(mode="after")
     def _require_acceptance_window(self) -> Self:

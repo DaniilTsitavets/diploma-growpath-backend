@@ -5,14 +5,10 @@ from collections.abc import Callable
 from dataclasses import dataclass
 
 from app.service.ai_quota import AiQuota
-from app.service.diagnosis_model import (
-    DiagnosisModel,
-    DiagnosisRequest,
-    InvalidModelAnswer,
-    ModelAnswer,
-    ModelFailure,
-)
+from app.service.consensus import decide
+from app.service.diagnosis_model import DiagnosisModel, DiagnosisRequest, ModelFailure
 from app.service.diagnosis_prompt import ANSWER_LIMIT, FALLBACK_RECOMMENDATION
+from app.service.dominance import DominanceRule
 from app.service.effort import EffortPolicy
 from app.service.errors import (
     AiQuotaUnavailable,
@@ -64,31 +60,6 @@ def validate_clarification_answer(text: str) -> str:
     return answer
 
 
-def result_from_answer(answer: ModelAnswer, clarified: bool) -> DiagnosisResult:
-    """A question is possible only in the first round; after the user's answer a verdict is due."""
-    if answer.clarifying_question is not None and not clarified:
-        return DiagnosisResult(
-            status=DiagnosisStatus.AWAITING_CLARIFICATION,
-            has_dominant_candidate=answer.has_dominant_candidate,
-            candidates=answer.candidates,
-            recommendation=None,
-            clarifying_question=answer.clarifying_question,
-            roots_photo_requested=answer.request_roots_photo,
-            escalation_offered=False,
-        )
-    if answer.recommendation is None:
-        raise InvalidModelAnswer("the model did not conclude after the clarification")
-    return DiagnosisResult(
-        status=DiagnosisStatus.COMPLETED,
-        has_dominant_candidate=answer.has_dominant_candidate,
-        candidates=answer.candidates,
-        recommendation=answer.recommendation,
-        clarifying_question=None,
-        roots_photo_requested=False,
-        escalation_offered=clarified and not answer.has_dominant_candidate,
-    )
-
-
 class DiagnosisService:
     def __init__(
         self,
@@ -96,11 +67,13 @@ class DiagnosisService:
         ai_quota: AiQuota,
         model: DiagnosisModel,
         effort_policy: EffortPolicy,
+        dominance_rule: DominanceRule,
     ) -> None:
         self._unit_of_work = unit_of_work
         self._ai_quota = ai_quota
         self._model = model
         self._effort_policy = effort_policy
+        self._dominance_rule = dominance_rule
 
     def get(self, user_id: uuid.UUID, update_id: uuid.UUID) -> Diagnosis:
         with self._unit_of_work() as uow:
@@ -230,8 +203,11 @@ class DiagnosisService:
         )
         update_id = context.diagnosis.update_id
         try:
-            result = result_from_answer(
-                self._model.diagnose(request), clarified=summary.clarifying_answer is not None
+            result = decide(
+                [self._model.diagnose(request)],
+                samples=1,
+                rule=self._dominance_rule,
+                clarified=summary.clarifying_answer is not None,
             )
         except ModelFailure as failure:
             logger.warning(

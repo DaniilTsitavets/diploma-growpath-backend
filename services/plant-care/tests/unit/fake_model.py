@@ -1,17 +1,27 @@
 from collections.abc import Callable
 
-from app.service.diagnosis_model import DiagnosisRequest, ModelAnswer
-from app.service.model import Candidate
+from app.service.diagnosis_model import DiagnosisRequest, ModelAnswer, RankedCandidate
+from app.service.dominance import DominanceRule, Support
 
-CAUSES = [Candidate("Overwatering", "Wet soil"), Candidate("Poor drainage", "Heavy pot")]
-
-
-def conclusion(dominant: bool = True) -> ModelAnswer:
-    return ModelAnswer(dominant, CAUSES, "Water less.", None, False)
+RULE = DominanceRule(Support.HIGH, frozenset({Support.MEDIUM, Support.HIGH}))
 
 
-def question(roots_photo: bool = False) -> ModelAnswer:
-    return ModelAnswer(False, CAUSES[:1], None, "Are the leaves soft?", roots_photo)
+def ranked(*causes: tuple[str, Support]) -> list[RankedCandidate]:
+    return [RankedCandidate(cause, f"Why {cause}", support) for cause, support in causes]
+
+
+def conclusion(
+    dominant: bool = True, causes: list[RankedCandidate] | None = None, text: str = "Water less."
+) -> ModelAnswer:
+    """A recommendation; its supports make the first candidate dominant or not."""
+    supports = (Support.HIGH, Support.LOW) if dominant else (Support.MEDIUM, Support.MEDIUM)
+    default = ranked(("Overwatering", supports[0]), ("Poor drainage", supports[1]))
+    return ModelAnswer(causes or default, text, None, False)
+
+
+def question(roots_photo: bool = False, text: str = "Are the leaves soft?") -> ModelAnswer:
+    candidates = ranked(("Overwatering", Support.MEDIUM), ("Root rot", Support.MEDIUM))
+    return ModelAnswer(candidates, None, text, roots_photo)
 
 
 class FakeModel:

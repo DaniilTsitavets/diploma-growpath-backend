@@ -50,8 +50,7 @@ def guard() -> ModelGuard:
 
 GOOD_REPLY = json.dumps(
     {
-        "has_dominant_candidate": True,
-        "candidates": [{"cause": "Overwatering", "rationale": "Wet"}],
+        "candidates": [{"cause": "Overwatering", "rationale": "Wet", "support": "high"}],
         "recommendation": "Water less.",
     }
 )

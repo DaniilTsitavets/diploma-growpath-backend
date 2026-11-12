@@ -4,7 +4,7 @@ from app.service.diagnosis import DiagnosisService
 from app.service.effort import EffortPolicy
 from app.service.errors import AiQuotaUnavailable
 from app.service.model import Diagnosis, PhotoKind, Tier
-from tests.unit.fake_model import FakeModel
+from tests.unit.fake_model import RULE, FakeModel
 from tests.unit.fakes import FakeAiQuota, FakeUnitOfWork
 
 USER = uuid.uuid4()
@@ -36,7 +36,7 @@ class Scenario:
         self.uow.diagnoses.seed(self.update_id, self.reservation_id)
 
     def service(self, model: FakeModel) -> DiagnosisService:
-        return DiagnosisService(lambda: self.uow, self.quota, model, EffortPolicy(self.tiers))
+        return DiagnosisService(lambda: self.uow, self.quota, model, EffortPolicy(self.tiers), RULE)
 
     @property
     def row(self) -> Diagnosis:

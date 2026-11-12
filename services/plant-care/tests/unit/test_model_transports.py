@@ -10,9 +10,11 @@ from app.llm.bedrock import BedrockTransport
 from app.llm.mock import MockTransport
 from app.llm.openrouter import OpenRouterTransport
 from app.llm.transport import ModelPrompt, PermanentModelError, TransientModelError
+from app.service.consensus import decide
 from app.service.diagnosis_answer import parse_answer
 from app.service.diagnosis_model import Image
 from app.service.model import ModelEffort
+from tests.unit.fake_model import RULE
 
 PROMPT = ModelPrompt("system text", "user text", [Image("image/png", b"\x89PNG-bytes")])
 SECRET = "sk-secret-value"
@@ -184,28 +186,31 @@ FIRST_ROUND = ModelPrompt("s", "<plant>Basil</plant>", [])
 SECOND_ROUND = ModelPrompt("s", "<plant>Basil</plant>\n<clarification>", [])
 
 
-def mock_answer(behavior: str, prompt: ModelPrompt):
-    return parse_answer(MockTransport(behavior).complete(prompt, ModelEffort.MEDIUM))
+def mock_result(behavior: str, prompt: ModelPrompt):
+    answer = parse_answer(MockTransport(behavior).complete(prompt, ModelEffort.MEDIUM))
+    return decide([answer], 1, RULE, clarified=prompt is SECOND_ROUND)
 
 
 def test_the_mock_completes_at_once_by_default():
-    answer = mock_answer("complete", FIRST_ROUND)
+    result = mock_result("complete", FIRST_ROUND)
 
-    assert answer.has_dominant_candidate and answer.recommendation
+    assert result.has_dominant_candidate and result.recommendation
 
 
 def test_the_mock_asks_first_and_completes_after_the_answer():
-    first = mock_answer("clarify", FIRST_ROUND)
-    second = mock_answer("clarify", SECOND_ROUND)
+    first = mock_result("clarify", FIRST_ROUND)
+    second = mock_result("clarify", SECOND_ROUND)
 
-    assert first.clarifying_question and first.request_roots_photo
+    assert first.clarifying_question and first.roots_photo_requested
+    assert not first.has_dominant_candidate
     assert second.has_dominant_candidate and second.recommendation
 
 
 def test_the_mock_can_finish_without_a_dominant_candidate():
-    second = mock_answer("clarify_no_dominant", SECOND_ROUND)
+    second = mock_result("clarify_no_dominant", SECOND_ROUND)
 
     assert not second.has_dominant_candidate and second.recommendation
+    assert second.escalation_offered
 
 
 def test_the_mock_can_fail_like_a_timeout():

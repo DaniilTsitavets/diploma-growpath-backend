@@ -1,10 +1,12 @@
 import uuid
+from dataclasses import fields
 
 import pytest
 
-from app.service.diagnosis import result_from_answer, validate_clarification_answer
+from app.service.diagnosis import validate_clarification_answer
 from app.service.diagnosis_model import InvalidModelAnswer, ModelUnavailable, PhotoUnreadable
 from app.service.diagnosis_prompt import FALLBACK_RECOMMENDATION
+from app.service.dominance import Support
 from app.service.errors import (
     AiQuotaExhausted,
     AiQuotaUnavailable,
@@ -14,8 +16,8 @@ from app.service.errors import (
     ReservationUnusable,
     UpdateNotFound,
 )
-from app.service.model import DiagnosisStatus, ModelEffort, PhotoKind, Tier
-from tests.unit.fake_model import FakeModel, conclusion, question
+from app.service.model import CandidateRecord, DiagnosisStatus, ModelEffort, PhotoKind, Tier
+from tests.unit.fake_model import FakeModel, conclusion, question, ranked
 from tests.unit.fakes import FakeAiQuota
 from tests.unit.scenario import USER, Scenario
 
@@ -85,7 +87,23 @@ def test_a_clarifying_question_is_stored_and_the_quota_is_committed(scenario: Sc
     assert summary.clarifying_question == "Are the leaves soft?"
     assert summary.roots_photo_requested is True
     assert summary.recommendation is None
+    assert summary.has_dominant_candidate is False
     assert scenario.quota.committed == [scenario.reservation_id]
+
+
+def test_the_application_not_the_model_decides_that_a_candidate_dominates(scenario: Scenario):
+    strong = conclusion(causes=ranked(("Overwatering", Support.HIGH), ("Drought", Support.MEDIUM)))
+
+    diagnosis = scenario.service(FakeModel(strong)).run(USER, scenario.update_id)
+
+    assert diagnosis.summary.has_dominant_candidate is False
+
+
+def test_the_support_labels_are_not_stored(scenario: Scenario):
+    diagnosis = scenario.service(FakeModel(conclusion())).run(USER, scenario.update_id)
+
+    assert {field.name for field in fields(CandidateRecord)} == {"rank", "cause", "rationale"}
+    assert all(not hasattr(candidate, "support") for candidate in diagnosis.candidates)
 
 
 def test_the_answer_re_evaluates_on_the_same_reservation_without_spending_quota(
@@ -516,8 +534,3 @@ def test_invalid_answers_are_rejected(text: str):
 def test_a_valid_answer_is_normalised_and_keeps_line_breaks():
     assert validate_clarification_answer("  é\nok  ") == "é\nok"
     assert len(validate_clarification_answer("x" * 1000)) == 1000
-
-
-def test_result_from_answer_needs_a_verdict_after_the_clarification():
-    with pytest.raises(InvalidModelAnswer):
-        result_from_answer(question(), clarified=True)
