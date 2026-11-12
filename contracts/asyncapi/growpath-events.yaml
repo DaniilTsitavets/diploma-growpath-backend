@@ -1,0 +1,787 @@
+asyncapi: 3.0.0
+info:
+  title: GrowPath events
+  version: 0.1.0
+  description: |
+    Domain events between the GrowPath services. This file is the source of truth for them: it is
+    written by hand, and the publisher and consumer tests of every service validate against it.
+
+    Transport: every publisher owns one SNS topic; every subscriber owns one SQS queue with a
+    dead-letter queue (DLQ) and receives raw messages, so the SQS message body is exactly the JSON
+    payload below. `event_type` and `correlation_id` travel as message attributes (see each
+    message's `headers`). Delivery is at-least-once: consumers are idempotent by business key.
+
+    Payload schemas describe what the publishers send. Consumers read only the fields they need and
+    ignore unknown ones, so a field can be added here first and consumers adopt it later. Schemas
+    use only keywords that are valid in JSON Schema draft 2020-12.
+  tags:
+    - name: commerce
+    - name: entitlement
+    - name: plant-care
+    - name: expert-consultation
+defaultContentType: application/json
+
+channels:
+  orderPlacedTopic:
+    address: order-placed
+    description: SNS topic owned by commerce.
+    messages:
+      orderPlaced:
+        $ref: '#/components/messages/OrderPlaced'
+    bindings:
+      sns:
+        name: order-placed
+        ordering:
+          type: standard
+  entitlementOrderPlacedQueue:
+    address: entitlement-order-placed
+    description: SQS queue of entitlement, subscribed to `order-placed` without a filter.
+    messages:
+      orderPlaced:
+        $ref: '#/components/messages/OrderPlaced'
+    bindings:
+      sqs:
+        queue:
+          name: entitlement-order-placed
+          fifoQueue: false
+          visibilityTimeout: 1
+          redrivePolicy:
+            deadLetterQueue:
+              name: order-placed-dlq
+            maxReceiveCount: 2
+        deadLetterQueue:
+          name: order-placed-dlq
+          fifoQueue: false
+    x-sns-subscription:
+      topic: order-placed
+      rawMessageDelivery: true
+  plantCareOrderPlacedQueue:
+    address: plant-care-order-placed
+    description: SQS queue of plant-care, subscribed to `order-placed` without a filter.
+    messages:
+      orderPlaced:
+        $ref: '#/components/messages/OrderPlaced'
+    bindings:
+      sqs:
+        queue:
+          name: plant-care-order-placed
+          fifoQueue: false
+          visibilityTimeout: 1
+          redrivePolicy:
+            deadLetterQueue:
+              name: plant-care-order-placed-dlq
+            maxReceiveCount: 2
+        deadLetterQueue:
+          name: plant-care-order-placed-dlq
+          fifoQueue: false
+    x-sns-subscription:
+      topic: order-placed
+      rawMessageDelivery: true
+
+  escalationRequestedTopic:
+    address: escalation-requested
+    description: SNS topic owned by plant-care.
+    messages:
+      escalationRequested:
+        $ref: '#/components/messages/EscalationRequested'
+    bindings:
+      sns:
+        name: escalation-requested
+        ordering:
+          type: standard
+  expertEscalationRequestedQueue:
+    address: expert-escalation-requested
+    description: SQS queue of expert-consultation, subscribed to `escalation-requested` without a filter.
+    messages:
+      escalationRequested:
+        $ref: '#/components/messages/EscalationRequested'
+    bindings:
+      sqs:
+        queue:
+          name: expert-escalation-requested
+          fifoQueue: false
+          visibilityTimeout: 1
+          redrivePolicy:
+            deadLetterQueue:
+              name: expert-escalation-requested-dlq
+            maxReceiveCount: 2
+        deadLetterQueue:
+          name: expert-escalation-requested-dlq
+          fifoQueue: false
+    x-sns-subscription:
+      topic: escalation-requested
+      rawMessageDelivery: true
+
+  ticketEventsTopic:
+    address: ticket-events
+    description: SNS topic owned by expert-consultation; `event_type` selects the message.
+    messages:
+      ticketCreated:
+        $ref: '#/components/messages/TicketCreated'
+      ticketAnswered:
+        $ref: '#/components/messages/TicketAnswered'
+      ticketCancelled:
+        $ref: '#/components/messages/TicketCancelled'
+    bindings:
+      sns:
+        name: ticket-events
+        ordering:
+          type: standard
+  entitlementTicketEventsQueue:
+    address: entitlement-ticket-events
+    description: >-
+      SQS queue of entitlement. Its subscription filters on `event_type`, so `ticket.answered`
+      never reaches it.
+    messages:
+      ticketCreated:
+        $ref: '#/components/messages/TicketCreated'
+      ticketCancelled:
+        $ref: '#/components/messages/TicketCancelled'
+    bindings:
+      sqs:
+        queue:
+          name: entitlement-ticket-events
+          fifoQueue: false
+          visibilityTimeout: 1
+          redrivePolicy:
+            deadLetterQueue:
+              name: entitlement-ticket-events-dlq
+            maxReceiveCount: 2
+        deadLetterQueue:
+          name: entitlement-ticket-events-dlq
+          fifoQueue: false
+    x-sns-subscription:
+      topic: ticket-events
+      rawMessageDelivery: true
+      filterPolicy:
+        event_type:
+          - ticket.created
+          - ticket.cancelled
+  plantCareTicketEventsQueue:
+    address: plant-care-ticket-events
+    description: SQS queue of plant-care, subscribed to `ticket-events` without a filter.
+    messages:
+      ticketCreated:
+        $ref: '#/components/messages/TicketCreated'
+      ticketAnswered:
+        $ref: '#/components/messages/TicketAnswered'
+      ticketCancelled:
+        $ref: '#/components/messages/TicketCancelled'
+    bindings:
+      sqs:
+        queue:
+          name: plant-care-ticket-events
+          fifoQueue: false
+          visibilityTimeout: 1
+          redrivePolicy:
+            deadLetterQueue:
+              name: plant-care-ticket-events-dlq
+            maxReceiveCount: 2
+        deadLetterQueue:
+          name: plant-care-ticket-events-dlq
+          fifoQueue: false
+    x-sns-subscription:
+      topic: ticket-events
+      rawMessageDelivery: true
+
+operations:
+  commercePublishOrderPlaced:
+    action: send
+    summary: commerce publishes `order.placed` after a purchase is stored.
+    tags:
+      - name: commerce
+    channel:
+      $ref: '#/channels/orderPlacedTopic'
+    messages:
+      - $ref: '#/channels/orderPlacedTopic/messages/orderPlaced'
+  entitlementReceiveOrderPlaced:
+    action: receive
+    summary: entitlement adds the order to its projection, from which the tier is computed.
+    tags:
+      - name: entitlement
+    channel:
+      $ref: '#/channels/entitlementOrderPlacedQueue'
+    messages:
+      - $ref: '#/channels/entitlementOrderPlacedQueue/messages/orderPlaced'
+  plantCareReceiveOrderPlaced:
+    action: receive
+    summary: plant-care creates the draft journal of a pack, nothing for a sensor.
+    tags:
+      - name: plant-care
+    channel:
+      $ref: '#/channels/plantCareOrderPlacedQueue'
+    messages:
+      - $ref: '#/channels/plantCareOrderPlacedQueue/messages/orderPlaced'
+
+  plantCarePublishEscalationRequested:
+    action: send
+    summary: plant-care publishes `escalation.requested` with the context snapshot for the expert.
+    tags:
+      - name: plant-care
+    channel:
+      $ref: '#/channels/escalationRequestedTopic'
+    messages:
+      - $ref: '#/channels/escalationRequestedTopic/messages/escalationRequested'
+  expertReceiveEscalationRequested:
+    action: receive
+    summary: >-
+      expert-consultation opens a ticket while `accept_until` is in the future; otherwise it
+      acknowledges and logs the message.
+    tags:
+      - name: expert-consultation
+    channel:
+      $ref: '#/channels/expertEscalationRequestedQueue'
+    messages:
+      - $ref: '#/channels/expertEscalationRequestedQueue/messages/escalationRequested'
+
+  expertPublishTicketEvents:
+    action: send
+    summary: expert-consultation publishes the ticket lifecycle events.
+    tags:
+      - name: expert-consultation
+    channel:
+      $ref: '#/channels/ticketEventsTopic'
+    messages:
+      - $ref: '#/channels/ticketEventsTopic/messages/ticketCreated'
+      - $ref: '#/channels/ticketEventsTopic/messages/ticketAnswered'
+      - $ref: '#/channels/ticketEventsTopic/messages/ticketCancelled'
+  entitlementReceiveTicketEvents:
+    action: receive
+    summary: >-
+      entitlement commits the expert quota at `ticket.created` and releases it at
+      `ticket.cancelled`.
+    tags:
+      - name: entitlement
+    channel:
+      $ref: '#/channels/entitlementTicketEventsQueue'
+    messages:
+      - $ref: '#/channels/entitlementTicketEventsQueue/messages/ticketCreated'
+      - $ref: '#/channels/entitlementTicketEventsQueue/messages/ticketCancelled'
+  plantCareReceiveTicketEvents:
+    action: receive
+    summary: plant-care shows the ticket state and the expert answer on the escalation.
+    tags:
+      - name: plant-care
+    channel:
+      $ref: '#/channels/plantCareTicketEventsQueue'
+    messages:
+      - $ref: '#/channels/plantCareTicketEventsQueue/messages/ticketCreated'
+      - $ref: '#/channels/plantCareTicketEventsQueue/messages/ticketAnswered'
+      - $ref: '#/channels/plantCareTicketEventsQueue/messages/ticketCancelled'
+
+components:
+  messages:
+    OrderPlaced:
+      name: order.placed
+      title: Order placed
+      summary: A purchase was stored. The event id is the order id.
+      contentType: application/json
+      headers:
+        $ref: '#/components/schemas/OrderPlacedAttributes'
+      payload:
+        $ref: '#/components/schemas/OrderPlacedPayload'
+      examples:
+        - name: pack
+          payload:
+            event_id: 3f6c1d2e-5a7b-4c8d-9e0f-1a2b3c4d5e6f
+            occurred_at: '2026-11-11T12:00:00+00:00'
+            order_id: 3f6c1d2e-5a7b-4c8d-9e0f-1a2b3c4d5e6f
+            user_id: 0b8d4a7e-2c61-4f3a-8d95-7e1f6a2b9c34
+            item_id: a1c2e3f4-5b6d-4e7f-8091-a2b3c4d5e6f7
+            item_type: pack
+            plant_species: Basil
+            seed_count: 12
+            total_paid_cents: 2000
+            discount_applied: true
+            placed_at: '2026-11-11T12:00:00+00:00'
+        - name: sensor
+          payload:
+            event_id: 7a9b8c7d-6e5f-4a3b-9c2d-1e0f9a8b7c6d
+            occurred_at: '2026-11-11T12:05:00+00:00'
+            order_id: 7a9b8c7d-6e5f-4a3b-9c2d-1e0f9a8b7c6d
+            user_id: 0b8d4a7e-2c61-4f3a-8d95-7e1f6a2b9c34
+            item_id: b2d3f4a5-6c7e-4f80-91a2-b3c4d5e6f708
+            item_type: sensor
+            plant_species: null
+            seed_count: null
+            total_paid_cents: 1500
+            discount_applied: false
+            placed_at: '2026-11-11T12:05:00+00:00'
+    EscalationRequested:
+      name: escalation.requested
+      title: Escalation requested
+      summary: >-
+        The user asked for an expert. The event id is the escalation id; the context is a snapshot
+        of what the expert is shown.
+      contentType: application/json
+      headers:
+        $ref: '#/components/schemas/EscalationRequestedAttributes'
+      payload:
+        $ref: '#/components/schemas/EscalationRequestedPayload'
+      examples:
+        - name: after a diagnosis
+          payload:
+            event_id: 5d4c3b2a-1f0e-4d9c-8b7a-6f5e4d3c2b1a
+            occurred_at: '2026-11-11T12:00:00+00:00'
+            escalation_id: 5d4c3b2a-1f0e-4d9c-8b7a-6f5e4d3c2b1a
+            user_id: 0b8d4a7e-2c61-4f3a-8d95-7e1f6a2b9c34
+            journal_id: c3d4e5f6-7a8b-4c9d-8e0f-1a2b3c4d5e6f
+            update_id: d4e5f6a7-8b9c-4d0e-9f1a-2b3c4d5e6f70
+            accept_until: '2026-11-14T11:55:00+00:00'
+            context:
+              schema_version: 1
+              species: Basil
+              update:
+                id: d4e5f6a7-8b9c-4d0e-9f1a-2b3c4d5e6f70
+                created_at: '2026-11-11T11:50:00+00:00'
+                last_watered_on: '2026-11-09'
+                watering_interval_days: 3
+                drainage: good
+                lighting: bright_indirect
+                finger_test: dry
+                pot_weight: lighter
+                sensor_reading: '35.5'
+              photos:
+                - kind: overview
+                  storage_key: journals/overview
+                - kind: soil
+                  storage_key: journals/soil
+              user_question: Why are the leaves spotted?
+              diagnosis:
+                status: completed
+                has_dominant_candidate: false
+                candidates:
+                  - rank: 1
+                    cause: Overwatering
+                    rationale: The soil stays wet.
+                recommendation: Water less.
+              clarifying_question: Is the soil soggy?
+              clarifying_answer: 'Yes'
+              history:
+                - date: '2026-11-05'
+                  diagnosis_status: completed
+                  top_cause: Overwatering
+        - name: without a diagnosis
+          payload:
+            event_id: 6e5d4c3b-2a1f-4e0d-9c8b-7a6f5e4d3c2b
+            occurred_at: '2026-11-11T12:10:00+00:00'
+            escalation_id: 6e5d4c3b-2a1f-4e0d-9c8b-7a6f5e4d3c2b
+            user_id: 0b8d4a7e-2c61-4f3a-8d95-7e1f6a2b9c34
+            journal_id: c3d4e5f6-7a8b-4c9d-8e0f-1a2b3c4d5e6f
+            update_id: e5f6a7b8-9c0d-4e1f-8a2b-3c4d5e6f7081
+            accept_until: '2026-11-14T12:05:00+00:00'
+            context:
+              schema_version: 1
+              species: Mint
+              update:
+                id: e5f6a7b8-9c0d-4e1f-8a2b-3c4d5e6f7081
+                created_at: '2026-11-11T12:00:00+00:00'
+                last_watered_on: null
+                watering_interval_days: null
+                drainage: poor
+                lighting: low
+                finger_test: wet
+                pot_weight: heavier
+                sensor_reading: null
+              photos: []
+              history: []
+    TicketCreated:
+      name: ticket.created
+      title: Ticket created
+      summary: >-
+        An expert ticket exists for the escalation. The event id is
+        UUIDv5(6f1b2c4e-8a3d-4e5f-9b7a-1c2d3e4f5a6b, "{ticket_id}:ticket.created").
+      contentType: application/json
+      headers:
+        $ref: '#/components/schemas/TicketCreatedAttributes'
+      payload:
+        $ref: '#/components/schemas/TicketCreatedPayload'
+      examples:
+        - name: created
+          payload:
+            event_id: 1a2b3c4d-5e6f-5a7b-8c9d-0e1f2a3b4c5d
+            occurred_at: '2026-11-11T12:00:03+00:00'
+            ticket_id: 9a8b7c6d-5e4f-4a3b-8c2d-1e0f9a8b7c6d
+            escalation_id: 5d4c3b2a-1f0e-4d9c-8b7a-6f5e4d3c2b1a
+            user_id: 0b8d4a7e-2c61-4f3a-8d95-7e1f6a2b9c34
+    TicketAnswered:
+      name: ticket.answered
+      title: Ticket answered
+      summary: >-
+        An expert answered. The event id is
+        UUIDv5(6f1b2c4e-8a3d-4e5f-9b7a-1c2d3e4f5a6b, "{ticket_id}:ticket.answered").
+      contentType: application/json
+      headers:
+        $ref: '#/components/schemas/TicketAnsweredAttributes'
+      payload:
+        $ref: '#/components/schemas/TicketAnsweredPayload'
+      examples:
+        - name: answered
+          payload:
+            event_id: 2b3c4d5e-6f7a-5b8c-9d0e-1f2a3b4c5d6e
+            occurred_at: '2026-11-11T14:00:00+00:00'
+            ticket_id: 9a8b7c6d-5e4f-4a3b-8c2d-1e0f9a8b7c6d
+            escalation_id: 5d4c3b2a-1f0e-4d9c-8b7a-6f5e4d3c2b1a
+            user_id: 0b8d4a7e-2c61-4f3a-8d95-7e1f6a2b9c34
+            journal_id: c3d4e5f6-7a8b-4c9d-8e0f-1a2b3c4d5e6f
+            answer_text: Water less often and let the pot drain.
+            answered_at: '2026-11-11T14:00:00+00:00'
+    TicketCancelled:
+      name: ticket.cancelled
+      title: Ticket cancelled
+      summary: >-
+        The ticket expired without an answer; there is no cancellation by the user. The event id is
+        UUIDv5(6f1b2c4e-8a3d-4e5f-9b7a-1c2d3e4f5a6b, "{ticket_id}:ticket.cancelled").
+      contentType: application/json
+      headers:
+        $ref: '#/components/schemas/TicketCancelledAttributes'
+      payload:
+        $ref: '#/components/schemas/TicketCancelledPayload'
+      examples:
+        - name: expired
+          payload:
+            event_id: 3c4d5e6f-7a8b-5c9d-8e1f-2a3b4c5d6e7f
+            occurred_at: '2026-11-14T12:00:03+00:00'
+            ticket_id: 9a8b7c6d-5e4f-4a3b-8c2d-1e0f9a8b7c6d
+            escalation_id: 5d4c3b2a-1f0e-4d9c-8b7a-6f5e4d3c2b1a
+            user_id: 0b8d4a7e-2c61-4f3a-8d95-7e1f6a2b9c34
+
+  schemas:
+    Uuid:
+      type: string
+      format: uuid
+    Timestamp:
+      type: string
+      format: date-time
+      description: RFC 3339 with an explicit offset.
+    OrderPlacedAttributes:
+      type: object
+      description: SQS message attributes of an `order.placed` message.
+      required: [event_type]
+      properties:
+        event_type:
+          const: order.placed
+        correlation_id:
+          type: string
+          description: Present when the publisher ran inside a request or a handler with one.
+    EscalationRequestedAttributes:
+      type: object
+      description: SQS message attributes of an `escalation.requested` message.
+      required: [event_type]
+      properties:
+        event_type:
+          const: escalation.requested
+        correlation_id:
+          type: string
+          description: Present when the publisher ran inside a request or a handler with one.
+    TicketCreatedAttributes:
+      type: object
+      description: SQS message attributes of a `ticket.created` message.
+      required: [event_type]
+      properties:
+        event_type:
+          const: ticket.created
+        correlation_id:
+          type: string
+          description: Present when the publisher ran inside a request or a handler with one.
+    TicketAnsweredAttributes:
+      type: object
+      description: SQS message attributes of a `ticket.answered` message.
+      required: [event_type]
+      properties:
+        event_type:
+          const: ticket.answered
+        correlation_id:
+          type: string
+          description: Present when the publisher ran inside a request or a handler with one.
+    TicketCancelledAttributes:
+      type: object
+      description: SQS message attributes of a `ticket.cancelled` message.
+      required: [event_type]
+      properties:
+        event_type:
+          const: ticket.cancelled
+        correlation_id:
+          type: string
+          description: Present when the publisher ran inside a request or a handler with one.
+
+    OrderPlacedPayload:
+      type: object
+      additionalProperties: false
+      allOf:
+        - if:
+            required: [item_type]
+            properties:
+              item_type:
+                const: pack
+          then:
+            properties:
+              plant_species:
+                type: string
+              seed_count:
+                type: integer
+        - if:
+            required: [item_type]
+            properties:
+              item_type:
+                const: sensor
+          then:
+            properties:
+              plant_species:
+                type: 'null'
+              seed_count:
+                type: 'null'
+      required:
+        - event_id
+        - occurred_at
+        - order_id
+        - user_id
+        - item_id
+        - item_type
+        - plant_species
+        - seed_count
+        - total_paid_cents
+        - discount_applied
+        - placed_at
+      properties:
+        event_id:
+          $ref: '#/components/schemas/Uuid'
+          description: Equals `order_id`; consumers deduplicate on it.
+        occurred_at:
+          $ref: '#/components/schemas/Timestamp'
+        order_id:
+          $ref: '#/components/schemas/Uuid'
+        user_id:
+          $ref: '#/components/schemas/Uuid'
+        item_id:
+          $ref: '#/components/schemas/Uuid'
+        item_type:
+          type: string
+          enum: [pack, sensor]
+        plant_species:
+          type: [string, 'null']
+          description: Null for a sensor.
+        seed_count:
+          type: [integer, 'null']
+          description: Null for a sensor.
+        total_paid_cents:
+          type: integer
+          minimum: 0
+        discount_applied:
+          type: boolean
+          description: True when the first-purchase discount was applied.
+        placed_at:
+          $ref: '#/components/schemas/Timestamp'
+
+    EscalationRequestedPayload:
+      type: object
+      additionalProperties: false
+      required:
+        - event_id
+        - occurred_at
+        - escalation_id
+        - user_id
+        - journal_id
+        - update_id
+        - accept_until
+        - context
+      properties:
+        event_id:
+          $ref: '#/components/schemas/Uuid'
+          description: Equals `escalation_id`; consumers deduplicate on it.
+        occurred_at:
+          $ref: '#/components/schemas/Timestamp'
+        escalation_id:
+          $ref: '#/components/schemas/Uuid'
+        user_id:
+          $ref: '#/components/schemas/Uuid'
+        journal_id:
+          $ref: '#/components/schemas/Uuid'
+        update_id:
+          $ref: '#/components/schemas/Uuid'
+        accept_until:
+          $ref: '#/components/schemas/Timestamp'
+          description: >-
+            The escalation creation time plus the expert reservation TTL minus the acknowledgement
+            margin. expert-consultation opens a ticket only before this moment.
+        context:
+          $ref: '#/components/schemas/EscalationContext'
+
+    EscalationContext:
+      type: object
+      additionalProperties: false
+      description: >-
+        The snapshot of what the expert is shown, with object keys only and no presigned URLs. Its
+        compact JSON serialization (`separators=(",", ":")`, no ASCII escaping) is at most 65536
+        UTF-8 bytes; JSON Schema cannot express that, so plant-care checks it before publishing
+        (oldest `history` entries are dropped first) and expert-consultation rejects a larger
+        context. Only `schema_version` 1 is accepted.
+      required: [schema_version, species, update, photos, history]
+      properties:
+        schema_version:
+          const: 1
+        species:
+          type: string
+        update:
+          type: object
+          additionalProperties: false
+          required:
+            - id
+            - created_at
+            - last_watered_on
+            - watering_interval_days
+            - drainage
+            - lighting
+            - finger_test
+            - pot_weight
+            - sensor_reading
+          properties:
+            id:
+              $ref: '#/components/schemas/Uuid'
+            created_at:
+              $ref: '#/components/schemas/Timestamp'
+            last_watered_on:
+              type: [string, 'null']
+              format: date
+            watering_interval_days:
+              type: [integer, 'null']
+            drainage:
+              type: string
+              enum: [good, poor, none]
+            lighting:
+              type: string
+              enum: [low, medium, bright_indirect, direct_sun]
+            finger_test:
+              type: string
+              enum: [dry, slightly_moist, wet]
+            pot_weight:
+              type: string
+              enum: [lighter, as_expected, heavier]
+            sensor_reading:
+              type: [string, 'null']
+              description: A decimal number as text.
+        photos:
+          type: array
+          items:
+            type: object
+            additionalProperties: false
+            required: [kind, storage_key]
+            properties:
+              kind:
+                type: string
+                enum: [overview, soil, symptom_closeup, roots_drainage]
+              storage_key:
+                type: string
+                description: The S3 object key; the expert service presigns it.
+        user_question:
+          type: string
+          description: Present for a manual escalation with a question.
+        diagnosis:
+          type: object
+          additionalProperties: false
+          description: Absent when the update has no diagnosis.
+          required: [status, has_dominant_candidate, candidates, recommendation]
+          properties:
+            status:
+              type: string
+              enum: [diagnosis_pending, awaiting_clarification, completed, degraded]
+            has_dominant_candidate:
+              type: [boolean, 'null']
+            candidates:
+              type: array
+              items:
+                type: object
+                additionalProperties: false
+                required: [rank, cause, rationale]
+                properties:
+                  rank:
+                    type: integer
+                    minimum: 1
+                  cause:
+                    type: string
+                  rationale:
+                    type: string
+            recommendation:
+              type: [string, 'null']
+        clarifying_question:
+          type: string
+        clarifying_answer:
+          type: string
+        history:
+          type: array
+          description: Earlier updates of the journal, oldest first, without photos.
+          items:
+            type: object
+            additionalProperties: false
+            required: [date, diagnosis_status, top_cause]
+            properties:
+              date:
+                type: string
+                format: date
+              diagnosis_status:
+                type: [string, 'null']
+                enum: [diagnosis_pending, awaiting_clarification, completed, degraded, null]
+              top_cause:
+                type: [string, 'null']
+
+    TicketCreatedPayload:
+      type: object
+      additionalProperties: false
+      required: [event_id, occurred_at, ticket_id, escalation_id, user_id]
+      properties:
+        event_id:
+          $ref: '#/components/schemas/Uuid'
+        occurred_at:
+          $ref: '#/components/schemas/Timestamp'
+        ticket_id:
+          $ref: '#/components/schemas/Uuid'
+        escalation_id:
+          $ref: '#/components/schemas/Uuid'
+        user_id:
+          $ref: '#/components/schemas/Uuid'
+    TicketAnsweredPayload:
+      type: object
+      additionalProperties: false
+      required:
+        - event_id
+        - occurred_at
+        - ticket_id
+        - escalation_id
+        - user_id
+        - journal_id
+        - answer_text
+        - answered_at
+      properties:
+        event_id:
+          $ref: '#/components/schemas/Uuid'
+        occurred_at:
+          $ref: '#/components/schemas/Timestamp'
+        ticket_id:
+          $ref: '#/components/schemas/Uuid'
+        escalation_id:
+          $ref: '#/components/schemas/Uuid'
+        user_id:
+          $ref: '#/components/schemas/Uuid'
+        journal_id:
+          $ref: '#/components/schemas/Uuid'
+        answer_text:
+          type: string
+          minLength: 1
+          maxLength: 5000
+        answered_at:
+          $ref: '#/components/schemas/Timestamp'
+    TicketCancelledPayload:
+      type: object
+      additionalProperties: false
+      required: [event_id, occurred_at, ticket_id, escalation_id, user_id]
+      properties:
+        event_id:
+          $ref: '#/components/schemas/Uuid'
+        occurred_at:
+          $ref: '#/components/schemas/Timestamp'
+        ticket_id:
+          $ref: '#/components/schemas/Uuid'
+        escalation_id:
+          $ref: '#/components/schemas/Uuid'
+        user_id:
+          $ref: '#/components/schemas/Uuid'

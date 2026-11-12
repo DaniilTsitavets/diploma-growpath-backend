@@ -1,0 +1,501 @@
+openapi: 3.1.0
+info:
+  title: GrowPath entitlement
+  version: 0.1.0
+  description: Tier and quotas. The tier is computed from the paid orders of the last 30 days and is not
+    stored; AI and expert quotas are reserved, committed or released through the internal `/v1/quotas/**`
+    operations that plant-care calls. The gateway route `GET /v1/me/entitlement` maps to `GET /v1/entitlements/{user_id}`,
+    with the user id taken from the token and never from the URL. Identity arrives in the `X-User-Id`
+    and `X-User-Groups` headers, which the API gateway sets from the verified JWT; the internal operations
+    take the user id in the body. The `internal` tag marks operations the gateway does not expose.
+paths:
+  /health/live:
+    get:
+      tags:
+      - health
+      - internal
+      summary: Live
+      operationId: live_health_live_get
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HealthStatus'
+        default:
+          description: Problem details
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+      x-gateway: internal
+  /health/ready:
+    get:
+      tags:
+      - health
+      - internal
+      summary: Ready
+      operationId: ready_health_ready_get
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HealthStatus'
+        default:
+          description: Problem details
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+      x-gateway: internal
+  /v1/entitlements/{user_id}:
+    get:
+      tags:
+      - entitlements
+      summary: Get Entitlement
+      description: The tier and the quotas of the user, computed from paid orders and reservations.
+      operationId: get_entitlement_v1_entitlements__user_id__get
+      parameters:
+      - name: user_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+          title: User Id
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EntitlementResponse'
+        '422':
+          description: Problem details
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+        default:
+          description: Problem details
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+      x-gateway: public
+  /v1/quotas/ai/reservations:
+    post:
+      tags:
+      - ai quota
+      - internal
+      summary: Reserve
+      description: Reserve one diagnosis; repeating the request with the same id returns it (200).
+      operationId: reserve_v1_quotas_ai_reservations_post
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AiReservationRequest'
+        required: true
+      responses:
+        '201':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AiReservationResponse'
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AiReservationResponse'
+        '422':
+          description: Problem details
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+        default:
+          description: Problem details
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+      x-gateway: internal
+  /v1/quotas/ai/reservations/{reservation_id}/commit:
+    post:
+      tags:
+      - ai quota
+      - internal
+      summary: Commit
+      operationId: commit_v1_quotas_ai_reservations__reservation_id__commit_post
+      parameters:
+      - name: reservation_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+          title: Reservation Id
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/OwnerRequest'
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AiReservationResponse'
+        '422':
+          description: Problem details
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+        default:
+          description: Problem details
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+      x-gateway: internal
+  /v1/quotas/ai/reservations/{reservation_id}/release:
+    post:
+      tags:
+      - ai quota
+      - internal
+      summary: Release
+      operationId: release_v1_quotas_ai_reservations__reservation_id__release_post
+      parameters:
+      - name: reservation_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+          title: Reservation Id
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/OwnerRequest'
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AiReservationResponse'
+        '422':
+          description: Problem details
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+        default:
+          description: Problem details
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+      x-gateway: internal
+  /v1/quotas/expert/reservations:
+    post:
+      tags:
+      - expert quota
+      - internal
+      summary: Reserve
+      description: Reserve one expert escalation; repeating the request with the same id returns it (200).
+      operationId: reserve_v1_quotas_expert_reservations_post
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ExpertReservationRequest'
+        required: true
+      responses:
+        '201':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ExpertReservationResponse'
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ExpertReservationResponse'
+        '422':
+          description: Problem details
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+        default:
+          description: Problem details
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+      x-gateway: internal
+  /v1/quotas/expert/reservations/{escalation_id}/commit:
+    post:
+      tags:
+      - expert quota
+      - internal
+      summary: Commit
+      operationId: commit_v1_quotas_expert_reservations__escalation_id__commit_post
+      parameters:
+      - name: escalation_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+          title: Escalation Id
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/OwnerRequest'
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ExpertReservationResponse'
+        '422':
+          description: Problem details
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+        default:
+          description: Problem details
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+      x-gateway: internal
+  /v1/quotas/expert/reservations/{escalation_id}/release:
+    post:
+      tags:
+      - expert quota
+      - internal
+      summary: Release
+      operationId: release_v1_quotas_expert_reservations__escalation_id__release_post
+      parameters:
+      - name: escalation_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+          title: Escalation Id
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/OwnerRequest'
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ExpertReservationResponse'
+        '422':
+          description: Problem details
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+        default:
+          description: Problem details
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+      x-gateway: internal
+components:
+  schemas:
+    AiReservationRequest:
+      properties:
+        user_id:
+          type: string
+          format: uuid
+          title: User Id
+        reservation_id:
+          type: string
+          format: uuid
+          title: Reservation Id
+      type: object
+      required:
+      - user_id
+      - reservation_id
+      title: AiReservationRequest
+    AiReservationResponse:
+      properties:
+        reservation_id:
+          type: string
+          format: uuid
+          title: Reservation Id
+        status:
+          $ref: '#/components/schemas/ReservationStatus'
+        expires_at:
+          type: string
+          format: date-time
+          title: Expires At
+      type: object
+      required:
+      - reservation_id
+      - status
+      - expires_at
+      title: AiReservationResponse
+    EntitlementResponse:
+      properties:
+        user_id:
+          type: string
+          format: uuid
+          title: User Id
+        tier:
+          $ref: '#/components/schemas/Tier'
+        tier_expires_at:
+          anyOf:
+          - type: string
+            format: date-time
+          - type: 'null'
+          title: Tier Expires At
+        ai_quota_today:
+          $ref: '#/components/schemas/QuotaUsageResponse'
+        expert_quota_30_days:
+          $ref: '#/components/schemas/QuotaUsageResponse'
+      type: object
+      required:
+      - user_id
+      - tier
+      - tier_expires_at
+      - ai_quota_today
+      - expert_quota_30_days
+      title: EntitlementResponse
+    ExpertReservationRequest:
+      properties:
+        user_id:
+          type: string
+          format: uuid
+          title: User Id
+        escalation_id:
+          type: string
+          format: uuid
+          title: Escalation Id
+      type: object
+      required:
+      - user_id
+      - escalation_id
+      title: ExpertReservationRequest
+    ExpertReservationResponse:
+      properties:
+        escalation_id:
+          type: string
+          format: uuid
+          title: Escalation Id
+        status:
+          $ref: '#/components/schemas/ReservationStatus'
+        expires_at:
+          type: string
+          format: date-time
+          title: Expires At
+      type: object
+      required:
+      - escalation_id
+      - status
+      - expires_at
+      title: ExpertReservationResponse
+    HealthStatus:
+      properties:
+        status:
+          type: string
+          const: ok
+          title: Status
+          default: ok
+      type: object
+      title: HealthStatus
+    OwnerRequest:
+      properties:
+        user_id:
+          type: string
+          format: uuid
+          title: User Id
+      type: object
+      required:
+      - user_id
+      title: OwnerRequest
+    QuotaUsageResponse:
+      properties:
+        used:
+          type: integer
+          title: Used
+        limit:
+          type: integer
+          title: Limit
+      type: object
+      required:
+      - used
+      - limit
+      title: QuotaUsageResponse
+    ReservationStatus:
+      type: string
+      enum:
+      - reserved
+      - committed
+      - released
+      title: ReservationStatus
+    Tier:
+      type: string
+      enum:
+      - starter
+      - hobbyist
+      - premium
+      title: Tier
+    Problem:
+      type: object
+      title: Problem
+      description: Problem details (RFC 7807); members such as `code` or `errors` may follow.
+      required:
+      - type
+      - title
+      - status
+      properties:
+        type:
+          type: string
+        title:
+          type: string
+        status:
+          type: integer
+        detail:
+          anyOf:
+          - type: string
+          - type: 'null'
+        correlation_id:
+          anyOf:
+          - type: string
+          - type: 'null'
+        code:
+          type: string
+        errors:
+          type: array
+          items:
+            type: object

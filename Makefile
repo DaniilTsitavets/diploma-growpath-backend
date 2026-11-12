@@ -3,7 +3,7 @@ UV ?= uv
 SERVICES := commerce entitlement plant-care expert-consultation
 COVERAGE_GATE := --cov-fail-under=70
 
-.PHONY: up down verify logs sync lock lint test test-unit test-db-up test-db-down
+.PHONY: up down verify logs sync lock lint contracts test test-unit test-db-up test-db-down
 
 .env:
 	cp .env.example .env
@@ -30,6 +30,11 @@ lock:
 lint:
 	$(UV) run ruff check libs services
 	$(UV) run ruff format --check libs services
+
+contracts:
+	for service in $(SERVICES); do \
+		(cd services/$$service && UPDATE_CONTRACTS=1 $(UV) run --all-packages pytest tests/unit/test_contracts.py --no-cov) || exit 1; \
+	done
 
 test-db-up:
 	docker compose -f compose.test.yml up -d --wait

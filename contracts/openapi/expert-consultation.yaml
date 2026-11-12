@@ -1,0 +1,430 @@
+openapi: 3.1.0
+info:
+  title: GrowPath expert-consultation
+  version: 0.1.0
+  description: 'Expert tickets: a state machine open, then answered or cancelled (cancelled only by expiry),
+    the context snapshot and the expert answer. Consumes `escalation.requested`, publishes `ticket.created`,
+    `ticket.answered` and `ticket.cancelled`. Identity arrives in the `X-User-Id` and `X-User-Groups`
+    headers, which the API gateway sets from the verified JWT; every `/v1/expert/**` operation requires
+    the `experts` group. The `internal` tag marks operations the gateway does not expose.'
+paths:
+  /health/live:
+    get:
+      tags:
+      - health
+      - internal
+      summary: Live
+      operationId: live_health_live_get
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HealthStatus'
+        default:
+          description: Problem details
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+      x-gateway: internal
+  /health/ready:
+    get:
+      tags:
+      - health
+      - internal
+      summary: Ready
+      operationId: ready_health_ready_get
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HealthStatus'
+        default:
+          description: Problem details
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+      x-gateway: internal
+  /v1/expert/tickets:
+    get:
+      tags:
+      - expert
+      summary: Open Tickets
+      description: 'Open tickets that have not expired, soonest deadline first.
+
+
+        Pass `next_cursor` of a page as `after` for the next one.'
+      operationId: open_tickets_v1_expert_tickets_get
+      parameters:
+      - name: limit
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - type: integer
+            minimum: 1
+          - type: 'null'
+          title: Limit
+      - name: after
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - type: string
+            minLength: 1
+          - type: 'null'
+          title: After
+      - name: x-user-id
+        in: header
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: X-User-Id
+      - name: x-user-groups
+        in: header
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: X-User-Groups
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/QueueResponse'
+        '422':
+          description: Problem details
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+        default:
+          description: Problem details
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+      x-gateway: public
+  /v1/expert/tickets/{ticket_id}:
+    get:
+      tags:
+      - expert
+      summary: Get Ticket
+      description: The ticket with its context and presigned URLs for its photos, issued at this read.
+      operationId: get_ticket_v1_expert_tickets__ticket_id__get
+      parameters:
+      - name: ticket_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+          title: Ticket Id
+      - name: x-user-id
+        in: header
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: X-User-Id
+      - name: x-user-groups
+        in: header
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: X-User-Groups
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TicketResponse'
+        '422':
+          description: Problem details
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+        default:
+          description: Problem details
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+      x-gateway: public
+  /v1/expert/tickets/{ticket_id}/answer:
+    post:
+      tags:
+      - expert
+      summary: Answer Ticket
+      description: 'Answer an open ticket.
+
+
+        Repeating the request as the same expert returns the stored answer (200). 409 when another
+
+        expert answered or the ticket expired.'
+      operationId: answer_ticket_v1_expert_tickets__ticket_id__answer_post
+      parameters:
+      - name: ticket_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+          title: Ticket Id
+      - name: x-user-id
+        in: header
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: X-User-Id
+      - name: x-user-groups
+        in: header
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: X-User-Groups
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AnswerRequest'
+      responses:
+        '201':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AnswerResponse'
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AnswerResponse'
+          description: OK
+        '422':
+          description: Problem details
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+        default:
+          description: Problem details
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+      x-gateway: public
+components:
+  schemas:
+    AnswerRequest:
+      properties:
+        body:
+          type: string
+          maxLength: 5000
+          title: Body
+      additionalProperties: false
+      type: object
+      required:
+      - body
+      title: AnswerRequest
+    AnswerResponse:
+      properties:
+        ticket_id:
+          type: string
+          format: uuid
+          title: Ticket Id
+        status:
+          $ref: '#/components/schemas/TicketStatus'
+        answered_at:
+          anyOf:
+          - type: string
+            format: date-time
+          - type: 'null'
+          title: Answered At
+        answer_text:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Answer Text
+      type: object
+      required:
+      - ticket_id
+      - status
+      - answered_at
+      - answer_text
+      title: AnswerResponse
+    HealthStatus:
+      properties:
+        status:
+          type: string
+          const: ok
+          title: Status
+          default: ok
+      type: object
+      title: HealthStatus
+    PhotoResponse:
+      properties:
+        kind:
+          type: string
+          title: Kind
+        url:
+          type: string
+          title: Url
+      type: object
+      required:
+      - kind
+      - url
+      title: PhotoResponse
+    QueueResponse:
+      properties:
+        items:
+          items:
+            $ref: '#/components/schemas/TicketSummaryResponse'
+          type: array
+          title: Items
+        next_cursor:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Next Cursor
+      type: object
+      required:
+      - items
+      - next_cursor
+      title: QueueResponse
+    TicketResponse:
+      properties:
+        id:
+          type: string
+          format: uuid
+          title: Id
+        status:
+          $ref: '#/components/schemas/TicketStatus'
+        created_at:
+          type: string
+          format: date-time
+          title: Created At
+        expires_at:
+          type: string
+          format: date-time
+          title: Expires At
+        answered_at:
+          anyOf:
+          - type: string
+            format: date-time
+          - type: 'null'
+          title: Answered At
+        cancelled_at:
+          anyOf:
+          - type: string
+            format: date-time
+          - type: 'null'
+          title: Cancelled At
+        context:
+          additionalProperties: true
+          type: object
+          title: Context
+        photos:
+          items:
+            $ref: '#/components/schemas/PhotoResponse'
+          type: array
+          title: Photos
+        answer_text:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Answer Text
+      type: object
+      required:
+      - id
+      - status
+      - created_at
+      - expires_at
+      - answered_at
+      - cancelled_at
+      - context
+      - photos
+      - answer_text
+      title: TicketResponse
+    TicketStatus:
+      type: string
+      enum:
+      - open
+      - answered
+      - cancelled
+      title: TicketStatus
+    TicketSummaryResponse:
+      properties:
+        id:
+          type: string
+          format: uuid
+          title: Id
+        species:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Species
+        created_at:
+          type: string
+          format: date-time
+          title: Created At
+        expires_at:
+          type: string
+          format: date-time
+          title: Expires At
+      type: object
+      required:
+      - id
+      - species
+      - created_at
+      - expires_at
+      title: TicketSummaryResponse
+    Problem:
+      type: object
+      title: Problem
+      description: Problem details (RFC 7807); members such as `code` or `errors` may follow.
+      required:
+      - type
+      - title
+      - status
+      properties:
+        type:
+          type: string
+        title:
+          type: string
+        status:
+          type: integer
+        detail:
+          anyOf:
+          - type: string
+          - type: 'null'
+        correlation_id:
+          anyOf:
+          - type: string
+          - type: 'null'
+        code:
+          type: string
+        errors:
+          type: array
+          items:
+            type: object
