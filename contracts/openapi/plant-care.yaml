@@ -1,0 +1,1505 @@
+openapi: 3.1.0
+info:
+  title: GrowPath plant-care
+  version: 0.1.0
+  description: Plant journals and their updates, AI diagnosis, escalation to an expert and the care chat.
+    Consumes `order.placed` and `ticket.*`, publishes `escalation.requested`. Identity arrives in the
+    `X-User-Id` header, which the API gateway sets from the verified JWT. The gateway exposes `/v1/journals/**`
+    and `/v1/updates/**`; the `internal` tag marks operations it does not expose.
+paths:
+  /health/live:
+    get:
+      tags:
+      - health
+      - internal
+      summary: Live
+      operationId: live_health_live_get
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HealthStatus'
+        default:
+          description: Problem details
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+      x-gateway: internal
+  /health/ready:
+    get:
+      tags:
+      - health
+      - internal
+      summary: Ready
+      operationId: ready_health_ready_get
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HealthStatus'
+        default:
+          description: Problem details
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+      x-gateway: internal
+  /v1/journals:
+    get:
+      tags:
+      - journals
+      summary: List Journals
+      description: The journals of the user, newest first.
+      operationId: list_journals_v1_journals_get
+      parameters:
+      - name: x-user-id
+        in: header
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: X-User-Id
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/JournalResponse'
+                title: Response List Journals V1 Journals Get
+        '422':
+          description: Problem details
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+        default:
+          description: Problem details
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+      x-gateway: public
+  /v1/journals/{journal_id}:
+    get:
+      tags:
+      - journals
+      summary: Get Journal
+      operationId: get_journal_v1_journals__journal_id__get
+      parameters:
+      - name: journal_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+          title: Journal Id
+      - name: x-user-id
+        in: header
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: X-User-Id
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/JournalResponse'
+        '422':
+          description: Problem details
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+        default:
+          description: Problem details
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+      x-gateway: public
+  /v1/journals/{journal_id}/planting:
+    put:
+      tags:
+      - journals
+      summary: Record Planting
+      description: Record the planting date; the checkpoint windows are computed from it.
+      operationId: record_planting_v1_journals__journal_id__planting_put
+      parameters:
+      - name: journal_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+          title: Journal Id
+      - name: x-user-id
+        in: header
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: X-User-Id
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PlantingRequest'
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/JournalResponse'
+        '422':
+          description: Problem details
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+        default:
+          description: Problem details
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+      x-gateway: public
+  /v1/journals/{journal_id}/updates:
+    post:
+      tags:
+      - updates
+      summary: Submit Update
+      description: Submit an update; repeating the request with the same id returns the stored one (200).
+      operationId: submit_update_v1_journals__journal_id__updates_post
+      parameters:
+      - name: journal_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+          title: Journal Id
+      - name: x-user-id
+        in: header
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: X-User-Id
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SubmitUpdateRequest'
+      responses:
+        '201':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UpdateResponse'
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UpdateResponse'
+          description: OK
+        '422':
+          description: Problem details
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+        default:
+          description: Problem details
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+      x-gateway: public
+    get:
+      tags:
+      - updates
+      summary: List Updates
+      description: The update feed, newest first; pass `next_cursor` of a page as `before` for the next
+        one.
+      operationId: list_updates_v1_journals__journal_id__updates_get
+      parameters:
+      - name: journal_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+          title: Journal Id
+      - name: limit
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - type: integer
+            minimum: 1
+          - type: 'null'
+          title: Limit
+      - name: before
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - type: string
+            minLength: 1
+          - type: 'null'
+          title: Before
+      - name: x-user-id
+        in: header
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: X-User-Id
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/FeedResponse'
+        '422':
+          description: Problem details
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+        default:
+          description: Problem details
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+      x-gateway: public
+  /v1/updates/{update_id}/photos:
+    post:
+      tags:
+      - photos
+      summary: Request Upload
+      description: 'A presigned PUT URL for one photo of the update; repeating the request issues a new
+        URL.
+
+
+        A `roots_drainage` photo is accepted only while the diagnosis awaits a clarification in which
+
+        the AI asked for it (409 otherwise).'
+      operationId: request_upload_v1_updates__update_id__photos_post
+      parameters:
+      - name: update_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+          title: Update Id
+      - name: x-user-id
+        in: header
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: X-User-Id
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UploadRequest'
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UploadResponse'
+        '422':
+          description: Problem details
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+        default:
+          description: Problem details
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+      x-gateway: public
+    get:
+      tags:
+      - photos
+      summary: List Photos
+      description: The photos of the update with presigned GET URLs and the required kinds still missing.
+      operationId: list_photos_v1_updates__update_id__photos_get
+      parameters:
+      - name: update_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+          title: Update Id
+      - name: x-user-id
+        in: header
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: X-User-Id
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PhotosResponse'
+        '422':
+          description: Problem details
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+        default:
+          description: Problem details
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+      x-gateway: public
+  /v1/updates/{update_id}/diagnosis:
+    get:
+      tags:
+      - diagnosis
+      summary: Get Diagnosis
+      description: The diagnosis of the update with its candidate causes.
+      operationId: get_diagnosis_v1_updates__update_id__diagnosis_get
+      parameters:
+      - name: update_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+          title: Update Id
+      - name: x-user-id
+        in: header
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: X-User-Id
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DiagnosisDetailResponse'
+        '422':
+          description: Problem details
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+        default:
+          description: Problem details
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+      x-gateway: public
+    post:
+      tags:
+      - diagnosis
+      summary: Run Diagnosis
+      description: Run the diagnosis or retry it after a failure; the request waits for the model.
+      operationId: run_diagnosis_v1_updates__update_id__diagnosis_post
+      parameters:
+      - name: update_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+          title: Update Id
+      - name: x-user-id
+        in: header
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: X-User-Id
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DiagnosisDetailResponse'
+        '422':
+          description: Problem details
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+        default:
+          description: Problem details
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+      x-gateway: public
+  /v1/updates/{update_id}/diagnosis/clarification:
+    post:
+      tags:
+      - diagnosis
+      summary: Answer Clarification
+      description: Answer the clarifying question; the re-evaluation is free and returns the new diagnosis.
+      operationId: answer_clarification_v1_updates__update_id__diagnosis_clarification_post
+      parameters:
+      - name: update_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+          title: Update Id
+      - name: x-user-id
+        in: header
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: X-User-Id
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ClarificationRequest'
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DiagnosisDetailResponse'
+        '422':
+          description: Problem details
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+        default:
+          description: Problem details
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+      x-gateway: public
+  /v1/updates/{update_id}/diagnosis/escalation-decline:
+    post:
+      tags:
+      - diagnosis
+      summary: Decline Escalation
+      description: Decline the expert the AI offered after the clarification.
+      operationId: decline_escalation_v1_updates__update_id__diagnosis_escalation_decline_post
+      parameters:
+      - name: update_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+          title: Update Id
+      - name: x-user-id
+        in: header
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: X-User-Id
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DiagnosisDetailResponse'
+        '422':
+          description: Problem details
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+        default:
+          description: Problem details
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+      x-gateway: public
+  /v1/updates/{update_id}/escalation:
+    post:
+      tags:
+      - escalation
+      summary: Request Escalation
+      description: 'Ask an expert, after the offer of a diagnosis or with a `user_question` of your own.
+
+
+        Repeating the request returns the active escalation (200).'
+      operationId: request_escalation_v1_updates__update_id__escalation_post
+      parameters:
+      - name: update_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+          title: Update Id
+      - name: x-user-id
+        in: header
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: X-User-Id
+      requestBody:
+        content:
+          application/json:
+            schema:
+              anyOf:
+              - $ref: '#/components/schemas/EscalationRequest'
+              - type: 'null'
+              title: Body
+      responses:
+        '201':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EscalationDetailResponse'
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EscalationDetailResponse'
+          description: OK
+        '422':
+          description: Problem details
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+        default:
+          description: Problem details
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+      x-gateway: public
+    get:
+      tags:
+      - escalation
+      summary: Get Escalation
+      description: The latest escalation of the update with the expert's answer, once there is one.
+      operationId: get_escalation_v1_updates__update_id__escalation_get
+      parameters:
+      - name: update_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+          title: Update Id
+      - name: x-user-id
+        in: header
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: X-User-Id
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EscalationDetailResponse'
+        '422':
+          description: Problem details
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+        default:
+          description: Problem details
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+      x-gateway: public
+  /v1/journals/{journal_id}/chat/turns:
+    post:
+      tags:
+      - chat
+      summary: Ask
+      description: 'Ask a care question; the answer cites knowledge-base sections.
+
+
+        A repeated id returns the stored turn (200). When the quota service or the model is
+
+        unavailable the outcome is `sources_only` (200): the sections found, nothing stored, no quota
+
+        spent, and the same id may be sent again.'
+      operationId: ask_v1_journals__journal_id__chat_turns_post
+      parameters:
+      - name: journal_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+          title: Journal Id
+      - name: x-user-id
+        in: header
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: X-User-Id
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ChatTurnRequest'
+      responses:
+        '201':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ChatTurnResponse'
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ChatTurnResponse'
+          description: OK
+        '422':
+          description: Problem details
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+        default:
+          description: Problem details
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+      x-gateway: public
+    get:
+      tags:
+      - chat
+      summary: List Turns
+      description: The chat history of the journal, newest first; pass `next_cursor` as `before` for more.
+      operationId: list_turns_v1_journals__journal_id__chat_turns_get
+      parameters:
+      - name: journal_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+          title: Journal Id
+      - name: limit
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - type: integer
+            minimum: 1
+          - type: 'null'
+          title: Limit
+      - name: before
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - type: string
+            minLength: 1
+          - type: 'null'
+          title: Before
+      - name: x-user-id
+        in: header
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: X-User-Id
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ChatHistoryResponse'
+        '422':
+          description: Problem details
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+        default:
+          description: Problem details
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+      x-gateway: public
+components:
+  schemas:
+    CandidateResponse:
+      properties:
+        rank:
+          type: integer
+          title: Rank
+        cause:
+          type: string
+          title: Cause
+        rationale:
+          type: string
+          title: Rationale
+      type: object
+      required:
+      - rank
+      - cause
+      - rationale
+      title: CandidateResponse
+    ChatHistoryResponse:
+      properties:
+        items:
+          items:
+            $ref: '#/components/schemas/ChatTurnResponse'
+          type: array
+          title: Items
+        next_cursor:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Next Cursor
+      type: object
+      required:
+      - items
+      - next_cursor
+      title: ChatHistoryResponse
+    ChatTurnRequest:
+      properties:
+        id:
+          type: string
+          format: uuid
+          title: Id
+        question:
+          type: string
+          title: Question
+      additionalProperties: false
+      type: object
+      required:
+      - id
+      - question
+      title: ChatTurnRequest
+    ChatTurnResponse:
+      properties:
+        id:
+          type: string
+          format: uuid
+          title: Id
+        journal_id:
+          type: string
+          format: uuid
+          title: Journal Id
+        question:
+          type: string
+          title: Question
+        outcome:
+          type: string
+          enum:
+          - answered
+          - not_in_kb
+          - out_of_scope
+          - sources_only
+          title: Outcome
+        answer:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Answer
+        model_effort:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Model Effort
+        created_at:
+          anyOf:
+          - type: string
+            format: date-time
+          - type: 'null'
+          title: Created At
+        sources:
+          items:
+            $ref: '#/components/schemas/SourceResponse'
+          type: array
+          title: Sources
+        related:
+          items:
+            $ref: '#/components/schemas/RelatedSectionResponse'
+          type: array
+          title: Related
+      type: object
+      required:
+      - id
+      - journal_id
+      - question
+      - outcome
+      - answer
+      - model_effort
+      - created_at
+      - sources
+      - related
+      title: ChatTurnResponse
+      description: 'A stored turn, or `sources_only`: the sections found, with no answer and nothing stored.'
+    CheckpointResponse:
+      properties:
+        number:
+          type: integer
+          title: Number
+        opens_on:
+          type: string
+          format: date
+          title: Opens On
+        closes_on:
+          type: string
+          format: date
+          title: Closes On
+        state:
+          $ref: '#/components/schemas/CheckpointState'
+      type: object
+      required:
+      - number
+      - opens_on
+      - closes_on
+      - state
+      title: CheckpointResponse
+    CheckpointState:
+      type: string
+      enum:
+      - upcoming
+      - open
+      - passed
+      title: CheckpointState
+    ClarificationRequest:
+      properties:
+        answer:
+          type: string
+          title: Answer
+      additionalProperties: false
+      type: object
+      required:
+      - answer
+      title: ClarificationRequest
+    DiagnosisDetailResponse:
+      properties:
+        status:
+          $ref: '#/components/schemas/DiagnosisStatus'
+        model_effort:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Model Effort
+        has_dominant_candidate:
+          anyOf:
+          - type: boolean
+          - type: 'null'
+          title: Has Dominant Candidate
+        clarifying_question:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Clarifying Question
+        clarifying_answer:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Clarifying Answer
+        roots_photo_requested:
+          type: boolean
+          title: Roots Photo Requested
+        recommendation:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Recommendation
+        escalation_offered:
+          type: boolean
+          title: Escalation Offered
+        escalation_declined:
+          type: boolean
+          title: Escalation Declined
+        update_id:
+          type: string
+          format: uuid
+          title: Update Id
+        candidates:
+          items:
+            $ref: '#/components/schemas/CandidateResponse'
+          type: array
+          title: Candidates
+      type: object
+      required:
+      - status
+      - model_effort
+      - has_dominant_candidate
+      - clarifying_question
+      - clarifying_answer
+      - roots_photo_requested
+      - recommendation
+      - escalation_offered
+      - escalation_declined
+      - update_id
+      - candidates
+      title: DiagnosisDetailResponse
+    DiagnosisResponse:
+      properties:
+        status:
+          $ref: '#/components/schemas/DiagnosisStatus'
+        model_effort:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Model Effort
+        has_dominant_candidate:
+          anyOf:
+          - type: boolean
+          - type: 'null'
+          title: Has Dominant Candidate
+        clarifying_question:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Clarifying Question
+        clarifying_answer:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Clarifying Answer
+        roots_photo_requested:
+          type: boolean
+          title: Roots Photo Requested
+        recommendation:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Recommendation
+        escalation_offered:
+          type: boolean
+          title: Escalation Offered
+        escalation_declined:
+          type: boolean
+          title: Escalation Declined
+      type: object
+      required:
+      - status
+      - model_effort
+      - has_dominant_candidate
+      - clarifying_question
+      - clarifying_answer
+      - roots_photo_requested
+      - recommendation
+      - escalation_offered
+      - escalation_declined
+      title: DiagnosisResponse
+    DiagnosisStatus:
+      type: string
+      enum:
+      - diagnosis_pending
+      - awaiting_clarification
+      - completed
+      - degraded
+      title: DiagnosisStatus
+    Drainage:
+      type: string
+      enum:
+      - good
+      - poor
+      - none
+      title: Drainage
+    EscalationDetailResponse:
+      properties:
+        id:
+          type: string
+          format: uuid
+          title: Id
+        status:
+          $ref: '#/components/schemas/EscalationStatus'
+        answer_text:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Answer Text
+        answered_at:
+          anyOf:
+          - type: string
+            format: date-time
+          - type: 'null'
+          title: Answered At
+        created_at:
+          type: string
+          format: date-time
+          title: Created At
+        update_id:
+          type: string
+          format: uuid
+          title: Update Id
+        user_question:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: User Question
+      type: object
+      required:
+      - id
+      - status
+      - answer_text
+      - answered_at
+      - created_at
+      - update_id
+      - user_question
+      title: EscalationDetailResponse
+    EscalationRequest:
+      properties:
+        user_question:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: User Question
+      additionalProperties: false
+      type: object
+      title: EscalationRequest
+    EscalationResponse:
+      properties:
+        id:
+          type: string
+          format: uuid
+          title: Id
+        status:
+          $ref: '#/components/schemas/EscalationStatus'
+        answer_text:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Answer Text
+        answered_at:
+          anyOf:
+          - type: string
+            format: date-time
+          - type: 'null'
+          title: Answered At
+        created_at:
+          type: string
+          format: date-time
+          title: Created At
+      type: object
+      required:
+      - id
+      - status
+      - answer_text
+      - answered_at
+      - created_at
+      title: EscalationResponse
+    EscalationStatus:
+      type: string
+      enum:
+      - requested
+      - ticket_open
+      - answered
+      - cancelled
+      title: EscalationStatus
+    FeedResponse:
+      properties:
+        items:
+          items:
+            $ref: '#/components/schemas/UpdateResponse'
+          type: array
+          title: Items
+        next_cursor:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Next Cursor
+      type: object
+      required:
+      - items
+      - next_cursor
+      title: FeedResponse
+    FingerTest:
+      type: string
+      enum:
+      - dry
+      - slightly_moist
+      - wet
+      title: FingerTest
+    HealthStatus:
+      properties:
+        status:
+          type: string
+          const: ok
+          title: Status
+          default: ok
+      type: object
+      title: HealthStatus
+    JournalResponse:
+      properties:
+        id:
+          type: string
+          format: uuid
+          title: Id
+        order_id:
+          type: string
+          format: uuid
+          title: Order Id
+        species:
+          type: string
+          title: Species
+        planted_on:
+          anyOf:
+          - type: string
+            format: date
+          - type: 'null'
+          title: Planted On
+        created_at:
+          type: string
+          format: date-time
+          title: Created At
+        checkpoints:
+          items:
+            $ref: '#/components/schemas/CheckpointResponse'
+          type: array
+          title: Checkpoints
+      type: object
+      required:
+      - id
+      - order_id
+      - species
+      - planted_on
+      - created_at
+      - checkpoints
+      title: JournalResponse
+    Lighting:
+      type: string
+      enum:
+      - low
+      - medium
+      - bright_indirect
+      - direct_sun
+      title: Lighting
+    PhotoKind:
+      type: string
+      enum:
+      - overview
+      - soil
+      - symptom_closeup
+      - roots_drainage
+      title: PhotoKind
+    PhotoResponse:
+      properties:
+        kind:
+          $ref: '#/components/schemas/PhotoKind'
+        url:
+          type: string
+          title: Url
+      type: object
+      required:
+      - kind
+      - url
+      title: PhotoResponse
+    PhotosResponse:
+      properties:
+        photos:
+          items:
+            $ref: '#/components/schemas/PhotoResponse'
+          type: array
+          title: Photos
+        missing_required:
+          items:
+            $ref: '#/components/schemas/PhotoKind'
+          type: array
+          title: Missing Required
+      type: object
+      required:
+      - photos
+      - missing_required
+      title: PhotosResponse
+    PlantingRequest:
+      properties:
+        planted_on:
+          type: string
+          format: date
+          title: Planted On
+      additionalProperties: false
+      type: object
+      required:
+      - planted_on
+      title: PlantingRequest
+    PotWeight:
+      type: string
+      enum:
+      - lighter
+      - as_expected
+      - heavier
+      title: PotWeight
+    RelatedSectionResponse:
+      properties:
+        section_id:
+          type: string
+          format: uuid
+          title: Section Id
+        document_title:
+          type: string
+          title: Document Title
+        section_heading:
+          type: string
+          title: Section Heading
+        source_url:
+          type: string
+          title: Source Url
+        body:
+          type: string
+          title: Body
+      type: object
+      required:
+      - section_id
+      - document_title
+      - section_heading
+      - source_url
+      - body
+      title: RelatedSectionResponse
+    SourceResponse:
+      properties:
+        rank:
+          type: integer
+          title: Rank
+        section_id:
+          type: string
+          format: uuid
+          title: Section Id
+        document_title:
+          type: string
+          title: Document Title
+        section_heading:
+          type: string
+          title: Section Heading
+        source_url:
+          type: string
+          title: Source Url
+      type: object
+      required:
+      - rank
+      - section_id
+      - document_title
+      - section_heading
+      - source_url
+      title: SourceResponse
+    SubmitUpdateRequest:
+      properties:
+        id:
+          type: string
+          format: uuid
+          title: Id
+        last_watered_on:
+          anyOf:
+          - type: string
+            format: date
+          - type: 'null'
+          title: Last Watered On
+        watering_interval_days:
+          anyOf:
+          - type: integer
+            maximum: 365.0
+            minimum: 1.0
+          - type: 'null'
+          title: Watering Interval Days
+        drainage:
+          $ref: '#/components/schemas/Drainage'
+        lighting:
+          $ref: '#/components/schemas/Lighting'
+        finger_test:
+          $ref: '#/components/schemas/FingerTest'
+        pot_weight:
+          $ref: '#/components/schemas/PotWeight'
+        sensor_reading:
+          anyOf:
+          - type: number
+            minimum: 0.0
+          - type: string
+          - type: 'null'
+          title: Sensor Reading
+      additionalProperties: false
+      type: object
+      required:
+      - id
+      - drainage
+      - lighting
+      - finger_test
+      - pot_weight
+      title: SubmitUpdateRequest
+    UpdateResponse:
+      properties:
+        id:
+          type: string
+          format: uuid
+          title: Id
+        journal_id:
+          type: string
+          format: uuid
+          title: Journal Id
+        created_at:
+          type: string
+          format: date-time
+          title: Created At
+        last_watered_on:
+          anyOf:
+          - type: string
+            format: date
+          - type: 'null'
+          title: Last Watered On
+        watering_interval_days:
+          anyOf:
+          - type: integer
+          - type: 'null'
+          title: Watering Interval Days
+        drainage:
+          $ref: '#/components/schemas/Drainage'
+        lighting:
+          $ref: '#/components/schemas/Lighting'
+        finger_test:
+          $ref: '#/components/schemas/FingerTest'
+        pot_weight:
+          $ref: '#/components/schemas/PotWeight'
+        sensor_reading:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Sensor Reading
+        diagnosis:
+          anyOf:
+          - $ref: '#/components/schemas/DiagnosisResponse'
+          - type: 'null'
+        escalation:
+          anyOf:
+          - $ref: '#/components/schemas/EscalationResponse'
+          - type: 'null'
+      type: object
+      required:
+      - id
+      - journal_id
+      - created_at
+      - last_watered_on
+      - watering_interval_days
+      - drainage
+      - lighting
+      - finger_test
+      - pot_weight
+      - sensor_reading
+      - diagnosis
+      - escalation
+      title: UpdateResponse
+    UploadRequest:
+      properties:
+        kind:
+          $ref: '#/components/schemas/PhotoKind'
+      additionalProperties: false
+      type: object
+      required:
+      - kind
+      title: UploadRequest
+    UploadResponse:
+      properties:
+        kind:
+          $ref: '#/components/schemas/PhotoKind'
+        upload_url:
+          type: string
+          title: Upload Url
+        expires_in_seconds:
+          type: integer
+          title: Expires In Seconds
+      type: object
+      required:
+      - kind
+      - upload_url
+      - expires_in_seconds
+      title: UploadResponse
+    Problem:
+      type: object
+      title: Problem
+      description: Problem details (RFC 7807); members such as `code` or `errors` may follow.
+      required:
+      - type
+      - title
+      - status
+      properties:
+        type:
+          type: string
+        title:
+          type: string
+        status:
+          type: integer
+        detail:
+          anyOf:
+          - type: string
+          - type: 'null'
+        correlation_id:
+          anyOf:
+          - type: string
+          - type: 'null'
+        code:
+          type: string
+        errors:
+          type: array
+          items:
+            type: object
