@@ -3,7 +3,7 @@ UV ?= uv
 SERVICES := commerce entitlement plant-care expert-consultation
 COVERAGE_GATE := --cov-fail-under=70
 
-.PHONY: up down verify logs sync lock lint contracts test test-unit test-db-up test-db-down
+.PHONY: up down verify demo logs sync lock lint contracts test test-unit test-db-up test-db-down
 
 .env:
 	cp .env.example .env
@@ -17,6 +17,9 @@ down:
 
 verify:
 	./scripts/verify-localstack.sh
+
+demo:
+	./scripts/demo.sh $(ACT)
 
 logs:
 	$(COMPOSE) logs -f
