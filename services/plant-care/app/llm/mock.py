@@ -1,3 +1,4 @@
+import itertools
 import json
 
 from app.llm.transport import ModelPrompt, TransientModelError
@@ -27,6 +28,14 @@ NOT_DOMINANT = {
         },
     ],
 }
+ROOT_ROT_FIRST = {
+    **DOMINANT,
+    "candidates": [
+        {"cause": "Root rot", "rationale": "The roots may be damaged.", "support": "high"},
+        {"cause": "Overwatering", "rationale": "The soil is wet.", "support": "low"},
+    ],
+}
+SPLIT_BY_PARITY = (DOMINANT, ROOT_ROT_FIRST)
 QUESTION = {
     "candidates": [
         {
@@ -52,18 +61,24 @@ class MockTransport:
     `behavior` selects the reply: `complete` (a dominant diagnosis at once), `clarify` (a question
     first, a dominant diagnosis after the user's answer), `clarify_no_dominant` (a question first,
     then a diagnosis whose top candidates are equally supported, which offers the expert),
-    `unavailable` (every call fails like a timeout) and `malformed` (the reply is not JSON). The
-    second round is recognised by the <clarification> block of the prompt.
+    `split` (dominant replies whose first cause alternates with the call, so parallel samples
+    disagree), `unavailable` (every call fails like a timeout) and `malformed` (the reply is not
+    JSON). The second round is recognised by the <clarification> block of the prompt.
     """
 
     def __init__(self, behavior: str) -> None:
         self._behavior = behavior
+        self._calls = itertools.count()
 
-    def complete(self, prompt: ModelPrompt, effort: ModelEffort) -> str:
+    def complete(
+        self, prompt: ModelPrompt, effort: ModelEffort, temperature: float | None = None
+    ) -> str:
         if self._behavior == "unavailable":
             raise TransientModelError("mock model is unavailable")
         if self._behavior == "malformed":
             return "this is not json"
+        if self._behavior == "split":
+            return json.dumps(SPLIT_BY_PARITY[next(self._calls) % 2])
         asks_first = self._behavior in ("clarify", "clarify_no_dominant")
         if asks_first and "<clarification>" not in prompt.user:
             return json.dumps(QUESTION)

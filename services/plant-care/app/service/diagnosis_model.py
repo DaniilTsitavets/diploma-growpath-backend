@@ -54,6 +54,8 @@ class DiagnosisRequest:
     effort: ModelEffort
     clarifying_question: str | None
     clarifying_answer: str | None
+    temperature: float | None = None
+    """None leaves the temperature to the provider; parallel samples set one so they can differ."""
 
 
 class DiagnosisModel(Protocol):

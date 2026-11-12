@@ -34,11 +34,13 @@ class OpenRouterTransport:
         self._model = model
         self._max_output_tokens = max_output_tokens
 
-    def complete(self, prompt: ModelPrompt, effort: ModelEffort) -> str:
+    def complete(
+        self, prompt: ModelPrompt, effort: ModelEffort, temperature: float | None = None
+    ) -> str:
         started = time.monotonic()
         try:
             response = self._http.post(
-                self._url, json=self._payload(prompt, effort), headers=self._headers()
+                self._url, json=self._payload(prompt, effort, temperature), headers=self._headers()
             )
         except httpx.HTTPError as error:
             self._log(started, outcome=type(error).__name__)
@@ -53,7 +55,7 @@ class OpenRouterTransport:
     def _headers(self) -> dict[str, str]:
         return {"Authorization": f"Bearer {self._api_key.get_secret_value()}"}
 
-    def _payload(self, prompt: ModelPrompt, effort: ModelEffort) -> dict:
+    def _payload(self, prompt: ModelPrompt, effort: ModelEffort, temperature: float | None) -> dict:
         images = [
             {
                 "type": "image_url",
@@ -63,7 +65,7 @@ class OpenRouterTransport:
             }
             for image in prompt.images
         ]
-        return {
+        payload = {
             "model": self._model,
             "max_tokens": self._max_output_tokens,
             "response_format": {"type": "json_object"},
@@ -73,6 +75,9 @@ class OpenRouterTransport:
                 {"role": "user", "content": [{"type": "text", "text": prompt.user}, *images]},
             ],
         }
+        if temperature is not None:
+            payload["temperature"] = temperature
+        return payload
 
     @staticmethod
     def _text_of(response: httpx.Response) -> str:

@@ -38,9 +38,13 @@ class RecordingTransport:
     def __init__(self, reply: str) -> None:
         self.reply = reply
         self.prompts: list[tuple[ModelPrompt, ModelEffort]] = []
+        self.temperatures: list[float | None] = []
 
-    def complete(self, prompt: ModelPrompt, effort: ModelEffort) -> str:
+    def complete(
+        self, prompt: ModelPrompt, effort: ModelEffort, temperature: float | None = None
+    ) -> str:
         self.prompts.append((prompt, effort))
+        self.temperatures.append(temperature)
         return self.reply
 
 
@@ -69,6 +73,16 @@ def test_the_photos_are_read_in_kind_order_and_sent_with_the_prompt_and_effort()
     assert answer.recommendation == "Water less."
 
 
+def test_the_temperature_of_the_request_reaches_the_transport_and_defaults_to_none():
+    transport = RecordingTransport(GOOD_REPLY)
+    model = LlmDiagnosisModel(transport, guard(), FakePhotoReader())
+
+    model.diagnose(make_request())
+    model.diagnose(make_request(temperature=0.7))
+
+    assert transport.temperatures == [None, 0.7]
+
+
 def test_a_malformed_reply_is_an_invalid_answer():
     model = LlmDiagnosisModel(RecordingTransport("nope"), guard(), FakePhotoReader())
 
@@ -88,7 +102,9 @@ def test_an_unreadable_photo_fails_before_the_model_is_called():
 
 def test_a_failing_transport_is_unavailable():
     class Rejecting:
-        def complete(self, prompt: ModelPrompt, effort: ModelEffort) -> str:
+        def complete(
+            self, prompt: ModelPrompt, effort: ModelEffort, temperature: float | None = None
+        ) -> str:
             raise PermanentModelError
 
     model = LlmDiagnosisModel(Rejecting(), guard(), FakePhotoReader())

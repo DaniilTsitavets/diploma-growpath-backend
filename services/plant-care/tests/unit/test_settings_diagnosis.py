@@ -22,6 +22,45 @@ def test_the_thresholds_are_read_from_the_environment(monkeypatch: pytest.Monkey
     assert settings.diagnosis_rival_supports == {Support.HIGH, Support.LOW}
 
 
+def test_one_sample_at_a_temperature_above_zero_is_the_default():
+    settings = make_settings()
+
+    assert settings.diagnosis_samples == 1
+    assert 0 < settings.diagnosis_sample_temperature <= 1
+
+
+def test_the_samples_are_read_from_the_environment(monkeypatch: pytest.MonkeyPatch):
+    monkeypatch.setenv("PLANT_CARE_DIAGNOSIS_SAMPLES", "3")
+
+    assert make_settings().diagnosis_samples == 3
+
+
+@pytest.mark.parametrize(
+    "fields",
+    [
+        {"diagnosis_samples": 0},
+        {"diagnosis_samples": -1},
+        {"diagnosis_sample_temperature": 0},
+        {"diagnosis_sample_temperature": 1.5},
+        {"diagnosis_samples": 5},
+        {"diagnosis_samples": 3, "model_bulkhead_size": 2},
+    ],
+)
+def test_samples_and_temperature_are_validated_at_startup(fields: dict):
+    with pytest.raises(ValidationError):
+        make_settings(**fields)
+
+
+def test_the_bulkhead_may_be_exactly_as_wide_as_the_samples():
+    settings = make_settings(diagnosis_samples=2, model_bulkhead_size=2)
+
+    assert settings.diagnosis_samples == 2
+
+
+def test_the_split_mock_behaviour_is_accepted():
+    assert make_settings(model_mock_behavior="split").model_mock_behavior == "split"
+
+
 @pytest.mark.parametrize(
     "fields",
     [

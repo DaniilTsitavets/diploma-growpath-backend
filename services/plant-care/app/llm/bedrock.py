@@ -35,7 +35,11 @@ class BedrockTransport:
         self._max_output_tokens = max_output_tokens
         self._thinking_budgets = thinking_budgets
 
-    def complete(self, prompt: ModelPrompt, effort: ModelEffort) -> str:
+    def complete(
+        self, prompt: ModelPrompt, effort: ModelEffort, temperature: float | None = None
+    ) -> str:
+        # With extended thinking Bedrock fixes the temperature at 1 and rejects other values, so
+        # the requested one is not sent: the sampling is already non-deterministic.
         started = time.monotonic()
         budget = self._thinking_budgets[effort]
         try:

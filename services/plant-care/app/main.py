@@ -132,6 +132,8 @@ def create_app(
         diagnosis_model,
         effort_policy,
         DominanceRule(settings.diagnosis_dominant_support, settings.diagnosis_rival_supports),
+        settings.diagnosis_samples,
+        settings.diagnosis_sample_temperature,
     )
     app.state.chat_service = ChatService(
         unit_of_work,

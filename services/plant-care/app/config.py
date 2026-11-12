@@ -50,7 +50,7 @@ class Settings(BaseSettings):
     # `mock` needs no key; its behaviour is chosen with `model_mock_behavior` (see app.model.mock).
     model_provider: Literal["openrouter", "bedrock", "mock"] = "mock"
     model_mock_behavior: Literal[
-        "complete", "clarify", "clarify_no_dominant", "unavailable", "malformed"
+        "complete", "clarify", "clarify_no_dominant", "split", "unavailable", "malformed"
     ] = "complete"
     # The application decides dominance from the `support` labels of the model: the first candidate
     # must have `diagnosis_dominant_support` and no other may have one of `diagnosis_rival_supports`
@@ -59,6 +59,10 @@ class Settings(BaseSettings):
     diagnosis_rival_supports: Annotated[frozenset[Support], NoDecode] = frozenset(
         {Support.MEDIUM, Support.HIGH}
     )
+    # Model calls per diagnosis attempt, the same for every tier. With 2 or more they run in
+    # parallel at `diagnosis_sample_temperature` and one attempt still spends one unit of AI quota.
+    diagnosis_samples: int = Field(default=1, ge=1)
+    diagnosis_sample_temperature: float = Field(default=0.7, gt=0, le=1)
     openrouter_api_key: SecretStr | None = None
     openrouter_model: str | None = None
     # The chat needs no vision input; falls back to `openrouter_model` when unset.
@@ -109,6 +113,13 @@ class Settings(BaseSettings):
     def _require_acceptance_window(self) -> Self:
         if not 0 < self.escalation_ack_margin_seconds < self.expert_reservation_ttl_seconds:
             raise ValueError("the ack margin must be positive and shorter than the reservation TTL")
+        return self
+
+    @model_validator(mode="after")
+    def _require_bulkhead_for_samples(self) -> Self:
+        # The bulkhead never queues, so an attempt wider than it would reject its own samples.
+        if self.model_bulkhead_size < self.diagnosis_samples:
+            raise ValueError("the model bulkhead must hold at least one slot per diagnosis sample")
         return self
 
     @model_validator(mode="after")

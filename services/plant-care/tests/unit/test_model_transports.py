@@ -53,6 +53,23 @@ def test_openrouter_sends_the_prompt_the_photos_as_data_urls_and_the_effort():
     assert image_part["image_url"]["url"] == expected
 
 
+@pytest.mark.parametrize(("temperature", "sent"), [(None, False), (0.7, True), (0.0, True)])
+def test_openrouter_sends_a_temperature_only_when_one_is_asked_for(
+    temperature: float | None, sent: bool
+):
+    seen: list[dict] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        seen.append(json.loads(request.content))
+        return completion("{}")
+
+    openrouter(handler).complete(PROMPT, ModelEffort.MEDIUM, temperature)
+
+    assert ("temperature" in seen[0]) is sent
+    if sent:
+        assert seen[0]["temperature"] == temperature
+
+
 @pytest.mark.parametrize("status", [408, 429, 500, 503])
 def test_openrouter_throttling_and_server_errors_are_transient(status: int):
     with pytest.raises(TransientModelError):
@@ -211,6 +228,35 @@ def test_the_mock_can_finish_without_a_dominant_candidate():
 
     assert not second.has_dominant_candidate and second.recommendation
     assert second.escalation_offered
+
+
+def test_bedrock_leaves_the_temperature_to_the_thinking_mode():
+    client = StubBedrock(converse_answer({"text": "{}"}))
+
+    bedrock(client).complete(PROMPT, ModelEffort.MEDIUM, temperature=0.7)
+
+    assert "temperature" not in client.calls[0]["inferenceConfig"]
+
+
+def test_the_split_mock_alternates_the_first_cause_by_call():
+    transport = MockTransport("split")
+
+    firsts = [
+        parse_answer(transport.complete(FIRST_ROUND, ModelEffort.MEDIUM)).candidates[0].cause
+        for _ in range(4)
+    ]
+
+    assert firsts == ["Overwatering", "Root rot", "Overwatering", "Root rot"]
+
+
+def test_two_split_mock_samples_have_no_dominant_candidate():
+    transport = MockTransport("split")
+    answers = [parse_answer(transport.complete(FIRST_ROUND, ModelEffort.MEDIUM)) for _ in range(2)]
+
+    result = decide(answers, 2, RULE, clarified=False)
+
+    assert result.has_dominant_candidate is False
+    assert [c.cause for c in result.candidates][:2] == ["Overwatering", "Root rot"]
 
 
 def test_the_mock_can_fail_like_a_timeout():

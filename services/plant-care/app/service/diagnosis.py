@@ -8,6 +8,7 @@ from app.service.ai_quota import AiQuota
 from app.service.consensus import decide
 from app.service.diagnosis_model import DiagnosisModel, DiagnosisRequest, ModelFailure
 from app.service.diagnosis_prompt import ANSWER_LIMIT, FALLBACK_RECOMMENDATION
+from app.service.diagnosis_samples import collect_answers
 from app.service.dominance import DominanceRule
 from app.service.effort import EffortPolicy
 from app.service.errors import (
@@ -68,12 +69,16 @@ class DiagnosisService:
         model: DiagnosisModel,
         effort_policy: EffortPolicy,
         dominance_rule: DominanceRule,
+        samples: int,
+        sample_temperature: float,
     ) -> None:
         self._unit_of_work = unit_of_work
         self._ai_quota = ai_quota
         self._model = model
         self._effort_policy = effort_policy
         self._dominance_rule = dominance_rule
+        self._samples = samples
+        self._sample_temperature = sample_temperature
 
     def get(self, user_id: uuid.UUID, update_id: uuid.UUID) -> Diagnosis:
         with self._unit_of_work() as uow:
@@ -200,12 +205,13 @@ class DiagnosisService:
             effort=attempt.effort,
             clarifying_question=summary.clarifying_question,
             clarifying_answer=summary.clarifying_answer,
+            temperature=self._sample_temperature if self._samples > 1 else None,
         )
         update_id = context.diagnosis.update_id
         try:
             result = decide(
-                [self._model.diagnose(request)],
-                samples=1,
+                collect_answers(self._model, request, self._samples),
+                samples=self._samples,
                 rule=self._dominance_rule,
                 clarified=summary.clarifying_answer is not None,
             )
