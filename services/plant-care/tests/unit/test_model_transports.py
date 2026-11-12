@@ -10,9 +10,11 @@ from app.llm.bedrock import BedrockTransport
 from app.llm.mock import MockTransport
 from app.llm.openrouter import OpenRouterTransport
 from app.llm.transport import ModelPrompt, PermanentModelError, TransientModelError
+from app.service.consensus import decide
 from app.service.diagnosis_answer import parse_answer
 from app.service.diagnosis_model import Image
 from app.service.model import ModelEffort
+from tests.unit.fake_model import RULE
 
 PROMPT = ModelPrompt("system text", "user text", [Image("image/png", b"\x89PNG-bytes")])
 SECRET = "sk-secret-value"
@@ -49,6 +51,23 @@ def test_openrouter_sends_the_prompt_the_photos_as_data_urls_and_the_effort():
     assert text_part == {"type": "text", "text": "user text"}
     expected = "data:image/png;base64," + base64.b64encode(b"\x89PNG-bytes").decode()
     assert image_part["image_url"]["url"] == expected
+
+
+@pytest.mark.parametrize(("temperature", "sent"), [(None, False), (0.7, True), (0.0, True)])
+def test_openrouter_sends_a_temperature_only_when_one_is_asked_for(
+    temperature: float | None, sent: bool
+):
+    seen: list[dict] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        seen.append(json.loads(request.content))
+        return completion("{}")
+
+    openrouter(handler).complete(PROMPT, ModelEffort.MEDIUM, temperature)
+
+    assert ("temperature" in seen[0]) is sent
+    if sent:
+        assert seen[0]["temperature"] == temperature
 
 
 @pytest.mark.parametrize("status", [408, 429, 500, 503])
@@ -184,28 +203,60 @@ FIRST_ROUND = ModelPrompt("s", "<plant>Basil</plant>", [])
 SECOND_ROUND = ModelPrompt("s", "<plant>Basil</plant>\n<clarification>", [])
 
 
-def mock_answer(behavior: str, prompt: ModelPrompt):
-    return parse_answer(MockTransport(behavior).complete(prompt, ModelEffort.MEDIUM))
+def mock_result(behavior: str, prompt: ModelPrompt):
+    answer = parse_answer(MockTransport(behavior).complete(prompt, ModelEffort.MEDIUM))
+    return decide([answer], 1, RULE, clarified=prompt is SECOND_ROUND)
 
 
 def test_the_mock_completes_at_once_by_default():
-    answer = mock_answer("complete", FIRST_ROUND)
+    result = mock_result("complete", FIRST_ROUND)
 
-    assert answer.has_dominant_candidate and answer.recommendation
+    assert result.has_dominant_candidate and result.recommendation
 
 
 def test_the_mock_asks_first_and_completes_after_the_answer():
-    first = mock_answer("clarify", FIRST_ROUND)
-    second = mock_answer("clarify", SECOND_ROUND)
+    first = mock_result("clarify", FIRST_ROUND)
+    second = mock_result("clarify", SECOND_ROUND)
 
-    assert first.clarifying_question and first.request_roots_photo
+    assert first.clarifying_question and first.roots_photo_requested
+    assert not first.has_dominant_candidate
     assert second.has_dominant_candidate and second.recommendation
 
 
 def test_the_mock_can_finish_without_a_dominant_candidate():
-    second = mock_answer("clarify_no_dominant", SECOND_ROUND)
+    second = mock_result("clarify_no_dominant", SECOND_ROUND)
 
     assert not second.has_dominant_candidate and second.recommendation
+    assert second.escalation_offered
+
+
+def test_bedrock_leaves_the_temperature_to_the_thinking_mode():
+    client = StubBedrock(converse_answer({"text": "{}"}))
+
+    bedrock(client).complete(PROMPT, ModelEffort.MEDIUM, temperature=0.7)
+
+    assert "temperature" not in client.calls[0]["inferenceConfig"]
+
+
+def test_the_split_mock_alternates_the_first_cause_by_call():
+    transport = MockTransport("split")
+
+    firsts = [
+        parse_answer(transport.complete(FIRST_ROUND, ModelEffort.MEDIUM)).candidates[0].cause
+        for _ in range(4)
+    ]
+
+    assert firsts == ["Overwatering", "Root rot", "Overwatering", "Root rot"]
+
+
+def test_two_split_mock_samples_have_no_dominant_candidate():
+    transport = MockTransport("split")
+    answers = [parse_answer(transport.complete(FIRST_ROUND, ModelEffort.MEDIUM)) for _ in range(2)]
+
+    result = decide(answers, 2, RULE, clarified=False)
+
+    assert result.has_dominant_candidate is False
+    assert [c.cause for c in result.candidates][:2] == ["Overwatering", "Root rot"]
 
 
 def test_the_mock_can_fail_like_a_timeout():

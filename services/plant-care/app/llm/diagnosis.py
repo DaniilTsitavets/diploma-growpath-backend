@@ -17,5 +17,7 @@ class LlmDiagnosisModel:
         prompt = build_prompt(request)
         images = [self._photos.read(photo.storage_key) for photo in ordered_photos(request.photos)]
         model_prompt = ModelPrompt(prompt.system, prompt.user, images)
-        raw = self._guard.call(lambda: self._transport.complete(model_prompt, request.effort))
+        raw = self._guard.call(
+            lambda: self._transport.complete(model_prompt, request.effort, request.temperature)
+        )
         return parse_answer(raw)

@@ -25,6 +25,11 @@ class ModelPrompt:
 
 
 class ModelTransport(Protocol):
-    def complete(self, prompt: ModelPrompt, effort: ModelEffort) -> str:
-        """The text of the model's reply. Raises ModelCallFailed."""
+    def complete(
+        self, prompt: ModelPrompt, effort: ModelEffort, temperature: float | None = None
+    ) -> str:
+        """The text of the model's reply; no temperature means the provider default.
+
+        Raises ModelCallFailed.
+        """
         ...

@@ -18,7 +18,9 @@ class MockChatTransport:
     def __init__(self, behavior: str) -> None:
         self._behavior = behavior
 
-    def complete(self, prompt: ModelPrompt, effort: ModelEffort) -> str:
+    def complete(
+        self, prompt: ModelPrompt, effort: ModelEffort, temperature: float | None = None
+    ) -> str:
         if self._behavior == "unavailable":
             raise TransientModelError("mock model is unavailable")
         if self._behavior == "malformed":

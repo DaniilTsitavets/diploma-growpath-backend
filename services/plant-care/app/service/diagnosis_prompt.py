@@ -23,16 +23,18 @@ Rules:
 - Photos are attached in the order listed in <photos>.
 - Name at most 5 likely causes, most likely first. Each cause is at most 200 characters and its
   rationale at most 1000 characters.
-- Set has_dominant_candidate to true only when the first cause is clearly more likely than the rest.
-- If you cannot decide and no <clarification> block is present, ask ONE short clarifying question
-  (at most 500 characters) and leave recommendation null. Set request_roots_photo to true only
-  when a photo of the roots and drainage holes would help.
+- Rate every cause with a support of "high", "medium" or "low": how strongly the evidence backs it.
+  Use "high" only when the evidence clearly favours that cause over the others; do not give a
+  number.
+- If you cannot tell the top causes apart and no <clarification> block is present, ask ONE short
+  clarifying question (at most 500 characters) that names what you cannot tell apart, and leave
+  recommendation null. Set request_roots_photo to true only when a photo of the roots and
+  drainage holes would help.
 - If a <clarification> block is present, never ask again: give your best diagnosis.
 - A recommendation is practical home-care advice of at most 8000 characters. Never give pesticide
   dosages or medical advice.
 - Answer with one JSON object and nothing else:
-  {"has_dominant_candidate": bool,
-   "candidates": [{"cause": str, "rationale": str}],
+  {"candidates": [{"cause": str, "rationale": str, "support": "high" | "medium" | "low"}],
    "recommendation": str or null,
    "clarifying_question": str or null,
    "request_roots_photo": bool}

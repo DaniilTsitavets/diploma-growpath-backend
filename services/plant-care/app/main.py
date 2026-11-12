@@ -27,6 +27,7 @@ from app.service.chat_model import ChatModel
 from app.service.consumer import MessageQueue, QueueConsumer
 from app.service.diagnosis import DiagnosisService
 from app.service.diagnosis_model import DiagnosisModel
+from app.service.dominance import DominanceRule
 from app.service.effort import EffortPolicy
 from app.service.escalation_events import EscalationEvents
 from app.service.escalation_publisher import EscalationPublisher
@@ -126,7 +127,13 @@ def create_app(
         unit_of_work, photo_storage, settings.photo_url_ttl_seconds
     )
     app.state.diagnosis_service = DiagnosisService(
-        unit_of_work, ai_quota, diagnosis_model, effort_policy
+        unit_of_work,
+        ai_quota,
+        diagnosis_model,
+        effort_policy,
+        DominanceRule(settings.diagnosis_dominant_support, settings.diagnosis_rival_supports),
+        settings.diagnosis_samples,
+        settings.diagnosis_sample_temperature,
     )
     app.state.chat_service = ChatService(
         unit_of_work,

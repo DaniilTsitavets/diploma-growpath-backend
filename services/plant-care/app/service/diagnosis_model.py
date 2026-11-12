@@ -1,7 +1,8 @@
 from dataclasses import dataclass
 from typing import Protocol
 
-from app.service.model import Candidate, ModelEffort, Photo, UpdateRecord
+from app.service.dominance import Support
+from app.service.model import ModelEffort, Photo, UpdateRecord
 
 
 class ModelFailure(Exception):
@@ -27,11 +28,19 @@ class Image:
 
 
 @dataclass(frozen=True)
+class RankedCandidate:
+    """A cause as the model ranked it; `support` is used to decide dominance and never stored."""
+
+    cause: str
+    rationale: str
+    support: Support
+
+
+@dataclass(frozen=True)
 class ModelAnswer:
     """What the model concluded: either a clarifying question or a recommendation."""
 
-    has_dominant_candidate: bool
-    candidates: list[Candidate]
+    candidates: list[RankedCandidate]
     recommendation: str | None
     clarifying_question: str | None
     request_roots_photo: bool
@@ -45,6 +54,8 @@ class DiagnosisRequest:
     effort: ModelEffort
     clarifying_question: str | None
     clarifying_answer: str | None
+    temperature: float | None = None
+    """None leaves the temperature to the provider; parallel samples set one so they can differ."""
 
 
 class DiagnosisModel(Protocol):

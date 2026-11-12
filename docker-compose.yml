@@ -93,6 +93,11 @@ services:
       # mock | openrouter | bedrock; the key is needed (and validated by the service) only for openrouter.
       PLANT_CARE_MODEL_PROVIDER: ${PLANT_CARE_MODEL_PROVIDER:-mock}
       PLANT_CARE_MODEL_MOCK_BEHAVIOR: ${PLANT_CARE_MODEL_MOCK_BEHAVIOR:-complete}
+      # Model calls per diagnosis attempt (parallel from 2 on); one attempt spends one AI quota unit.
+      PLANT_CARE_DIAGNOSIS_SAMPLES: ${PLANT_CARE_DIAGNOSIS_SAMPLES:-1}
+      PLANT_CARE_DIAGNOSIS_SAMPLE_TEMPERATURE: ${PLANT_CARE_DIAGNOSIS_SAMPLE_TEMPERATURE:-0.7}
+      PLANT_CARE_DIAGNOSIS_DOMINANT_SUPPORT: ${PLANT_CARE_DIAGNOSIS_DOMINANT_SUPPORT:-high}
+      PLANT_CARE_DIAGNOSIS_RIVAL_SUPPORTS: ${PLANT_CARE_DIAGNOSIS_RIVAL_SUPPORTS:-medium,high}
       PLANT_CARE_OPENROUTER_API_KEY: ${PLANT_CARE_OPENROUTER_API_KEY:-}
       PLANT_CARE_OPENROUTER_MODEL: ${PLANT_CARE_OPENROUTER_MODEL:-}
       # Care chat: an empty chat model falls back to PLANT_CARE_OPENROUTER_MODEL.
