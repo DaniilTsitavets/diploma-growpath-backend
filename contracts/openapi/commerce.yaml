@@ -1,0 +1,274 @@
+openapi: 3.1.0
+info:
+  title: GrowPath commerce
+  version: 0.1.0
+  description: Catalog, orders, the mock payment and the first-purchase discount. Publishes `order.placed`.
+    Identity arrives in the `X-User-Id` header, which the API gateway sets from the verified JWT. The
+    `internal` tag marks operations the gateway does not expose.
+paths:
+  /health/live:
+    get:
+      tags:
+      - health
+      - internal
+      summary: Live
+      operationId: live_health_live_get
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HealthStatus'
+        default:
+          description: Problem details
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+      x-gateway: internal
+  /health/ready:
+    get:
+      tags:
+      - health
+      - internal
+      summary: Ready
+      operationId: ready_health_ready_get
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HealthStatus'
+        default:
+          description: Problem details
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+      x-gateway: internal
+  /v1/items:
+    get:
+      tags:
+      - catalog
+      summary: List Items
+      operationId: list_items_v1_items_get
+      parameters:
+      - name: label
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - type: string
+            minLength: 1
+            maxLength: 40
+          - type: 'null'
+          title: Label
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/ItemResponse'
+                title: Response List Items V1 Items Get
+        '422':
+          description: Problem details
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+        default:
+          description: Problem details
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+      x-gateway: public
+  /v1/orders:
+    post:
+      tags:
+      - orders
+      summary: Create Order
+      description: Place an order; repeating the request with the same key returns the same order (200).
+      operationId: create_order_v1_orders_post
+      parameters:
+      - name: idempotency-key
+        in: header
+        required: true
+        schema:
+          type: string
+          minLength: 1
+          maxLength: 128
+          title: Idempotency-Key
+      - name: x-user-id
+        in: header
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: X-User-Id
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateOrderRequest'
+      responses:
+        '201':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OrderResponse'
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OrderResponse'
+          description: OK
+        '422':
+          description: Problem details
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+        default:
+          description: Problem details
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+      x-gateway: public
+components:
+  schemas:
+    CreateOrderRequest:
+      properties:
+        item_id:
+          type: string
+          format: uuid
+          title: Item Id
+      type: object
+      required:
+      - item_id
+      title: CreateOrderRequest
+    HealthStatus:
+      properties:
+        status:
+          type: string
+          const: ok
+          title: Status
+          default: ok
+      type: object
+      title: HealthStatus
+    ItemResponse:
+      properties:
+        id:
+          type: string
+          format: uuid
+          title: Id
+        item_type:
+          type: string
+          title: Item Type
+        name:
+          type: string
+          title: Name
+        plant_species:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Plant Species
+        seed_count:
+          anyOf:
+          - type: integer
+          - type: 'null'
+          title: Seed Count
+        price_cents:
+          type: integer
+          title: Price Cents
+        first_purchase_discount_pct:
+          anyOf:
+          - type: integer
+          - type: 'null'
+          title: First Purchase Discount Pct
+        labels:
+          items:
+            type: string
+          type: array
+          title: Labels
+      type: object
+      required:
+      - id
+      - item_type
+      - name
+      - plant_species
+      - seed_count
+      - price_cents
+      - first_purchase_discount_pct
+      - labels
+      title: ItemResponse
+    OrderResponse:
+      properties:
+        id:
+          type: string
+          format: uuid
+          title: Id
+        item_id:
+          type: string
+          format: uuid
+          title: Item Id
+        list_price_cents:
+          type: integer
+          title: List Price Cents
+        discount_cents:
+          type: integer
+          title: Discount Cents
+        total_paid_cents:
+          type: integer
+          title: Total Paid Cents
+        placed_at:
+          type: string
+          format: date-time
+          title: Placed At
+      type: object
+      required:
+      - id
+      - item_id
+      - list_price_cents
+      - discount_cents
+      - total_paid_cents
+      - placed_at
+      title: OrderResponse
+    Problem:
+      type: object
+      title: Problem
+      description: Problem details (RFC 7807); members such as `code` or `errors` may follow.
+      required:
+      - type
+      - title
+      - status
+      properties:
+        type:
+          type: string
+        title:
+          type: string
+        status:
+          type: integer
+        detail:
+          anyOf:
+          - type: string
+          - type: 'null'
+        correlation_id:
+          anyOf:
+          - type: string
+          - type: 'null'
+        code:
+          type: string
+        errors:
+          type: array
+          items:
+            type: object
