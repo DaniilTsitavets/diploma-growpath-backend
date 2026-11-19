@@ -68,6 +68,22 @@ print(json.loads(base64.urlsafe_b64decode(payload + "=" * (-len(payload) % 4)))[
 expect "entitlement answers for the sub of the token" "$sub" \
   "$(curl -s -H "Authorization: $token" "$base/me/entitlement" | jq -r .user_id)"
 
+say "5b. CORS for the browser client (Vite on 127.0.0.1:5173): Cognito and S3 only, the API is same-origin"
+origin=http://127.0.0.1:5173
+# header <name> <curl args>: the value of one response header, or empty
+header() {
+  local name=$1; shift
+  curl -s -D - -o /dev/null "$@" | tr -d '\r' | awk -v n="$(echo "$name" | tr 'A-Z' 'a-z'):" 'tolower($1) == n { sub(/^[^:]*: */, ""); print; exit }'
+}
+login_body=$(jq -nc --arg c "$client_id" --arg u "$TEST_USER" --arg p "$TEST_PASSWORD" \
+  '{AuthFlow: "USER_PASSWORD_AUTH", ClientId: $c, AuthParameters: {USERNAME: $u, PASSWORD: $p}}')
+expect "Cognito accepts the origin" 200 \
+  "$(status -X POST -H "Origin: $origin" -H 'Content-Type: application/x-amz-json-1.1' \
+    -H 'X-Amz-Target: AWSCognitoIdentityProviderService.InitiateAuth' -d "$login_body" "$AWS_ENDPOINT_URL/")"
+expect "S3 preflight for a presigned PUT" "$origin" \
+  "$(header Access-Control-Allow-Origin -X OPTIONS -H "Origin: $origin" -H 'Access-Control-Request-Method: PUT' \
+    -H 'Access-Control-Request-Headers: content-type' "$AWS_ENDPOINT_URL/growpath-photos/probe.jpg")"
+
 say "6. Throttling (informational: LocalStack stores the limit but does not enforce it, so only 200 is expected)"
 for _ in $(seq 30); do curl -s -o /dev/null -w '%{http_code}\n' -H "Authorization: $token" "$base/items"; done | sort | uniq -c
 

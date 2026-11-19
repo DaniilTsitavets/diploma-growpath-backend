@@ -17,6 +17,9 @@ PLANT_CARE=http://plant-care:8000
 EXPERT_CONSULTATION=http://expert-consultation:8000
 RATE_LIMIT=2
 BURST_LIMIT=2
+# Browser clients (Vite dev and preview servers). Keep in step with EXTRA_CORS_ALLOWED_ORIGINS in docker-compose.yml.
+CLIENT_ORIGINS='["http://127.0.0.1:5173","http://127.0.0.1:4173","http://localhost:5173","http://localhost:4173","http://*.cloudfront.localhost.localstack.cloud:4566"]'
+FRONTEND_BUCKET=growpath-frontend
 
 pool_id=$(awslocal cognito-idp create-user-pool --pool-name "$POOL_NAME" --query UserPool.Id --output text)
 pool_arn="arn:aws:cognito-idp:${AWS_DEFAULT_REGION:-us-east-1}:000000000000:userpool/${pool_id}"
@@ -146,5 +149,40 @@ subscribe_queue "$escalation_topic_arn" \
 
 # plant-care issues presigned URLs for update photos; only object keys are stored in its database.
 awslocal s3api create-bucket --bucket growpath-photos >/dev/null
+awslocal s3api put-bucket-cors --bucket growpath-photos --cors-configuration "{\"CORSRules\":[{\"AllowedOrigins\":${CLIENT_ORIGINS},\"AllowedMethods\":[\"PUT\",\"GET\"],\"AllowedHeaders\":[\"Content-Type\",\"*\"],\"ExposeHeaders\":[\"ETag\"]}]}"
 
-echo "provisioned: api=${api_id} stage=${STAGE} pool=${pool_id} client=${client_id}"
+# The SPA build is uploaded to the frontend bucket. One CloudFront distribution serves both the SPA and
+# the API, so the browser sees a single origin and the API needs no CORS: /v1/* goes to the gateway
+# (the stage and path are in the origin path), everything else to the bucket. Unknown paths fall back
+# to index.html for client-side routing. The gateway origin is `localhost.localstack.cloud`, which
+# resolves to LocalStack itself; in AWS it is the execute-api domain with the stage as origin path.
+awslocal s3api create-bucket --bucket "$FRONTEND_BUCKET" >/dev/null
+distribution=none
+if ! distribution=$(awslocal cloudfront create-distribution --distribution-config "{
+  \"CallerReference\": \"growpath-${api_id}\",
+  \"Comment\": \"growpath spa and api\",
+  \"Enabled\": true,
+  \"DefaultRootObject\": \"index.html\",
+  \"Origins\": {\"Quantity\": 2, \"Items\": [
+    {\"Id\": \"frontend\", \"DomainName\": \"${FRONTEND_BUCKET}.s3.localhost.localstack.cloud\",
+     \"S3OriginConfig\": {\"OriginAccessIdentity\": \"\"}},
+    {\"Id\": \"gateway\", \"DomainName\": \"localhost.localstack.cloud\",
+     \"OriginPath\": \"/restapis/${api_id}/${STAGE}/_user_request_\",
+     \"CustomOriginConfig\": {\"HTTPPort\": 4566, \"HTTPSPort\": 4566, \"OriginProtocolPolicy\": \"http-only\"}}]},
+  \"DefaultCacheBehavior\": {\"TargetOriginId\": \"frontend\", \"ViewerProtocolPolicy\": \"allow-all\",
+    \"MinTTL\": 0, \"ForwardedValues\": {\"QueryString\": false, \"Cookies\": {\"Forward\": \"none\"}}},
+  \"CacheBehaviors\": {\"Quantity\": 1, \"Items\": [
+    {\"PathPattern\": \"/v1/*\", \"TargetOriginId\": \"gateway\", \"ViewerProtocolPolicy\": \"allow-all\",
+     \"AllowedMethods\": {\"Quantity\": 7, \"Items\": [\"GET\",\"HEAD\",\"OPTIONS\",\"PUT\",\"POST\",\"PATCH\",\"DELETE\"]},
+     \"MinTTL\": 0, \"DefaultTTL\": 0, \"MaxTTL\": 0,
+     \"ForwardedValues\": {\"QueryString\": true, \"Cookies\": {\"Forward\": \"none\"},
+       \"Headers\": {\"Quantity\": 3, \"Items\": [\"Authorization\", \"Content-Type\", \"Idempotency-Key\"]}}}]},
+  \"CustomErrorResponses\": {\"Quantity\": 2, \"Items\": [
+    {\"ErrorCode\": 403, \"ResponsePagePath\": \"/index.html\", \"ResponseCode\": \"200\", \"ErrorCachingMinTTL\": 0},
+    {\"ErrorCode\": 404, \"ResponsePagePath\": \"/index.html\", \"ResponseCode\": \"200\", \"ErrorCachingMinTTL\": 0}]}
+}" --query 'Distribution.[Id,DomainName]' --output text); then
+  echo "warning: CloudFront distribution not created; the API and the other services are unaffected" >&2
+  distribution=none
+fi
+
+echo "provisioned: api=${api_id} stage=${STAGE} pool=${pool_id} client=${client_id} cdn=${distribution}"
