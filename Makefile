@@ -3,7 +3,7 @@ UV ?= uv
 SERVICES := commerce entitlement plant-care expert-consultation
 COVERAGE_GATE := --cov-fail-under=70
 
-.PHONY: up down verify demo logs sync lock lint contracts test test-unit test-db-up test-db-down
+.PHONY: up down verify demo client-env deploy-frontend logs sync lock lint contracts test test-unit test-db-up test-db-down
 
 .env:
 	cp .env.example .env
@@ -20,6 +20,12 @@ verify:
 
 demo:
 	./scripts/demo.sh $(ACT)
+
+client-env:
+	./scripts/client-env.sh
+
+deploy-frontend:
+	./scripts/deploy-frontend.sh $(DIST)
 
 logs:
 	$(COMPOSE) logs -f
