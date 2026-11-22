@@ -14,7 +14,7 @@ if [ "$api_id" = None ] || [ "$pool_id" = None ]; then
   exit 1
 fi
 client_id=$(aws cognito-idp list-user-pool-clients --user-pool-id "$pool_id" \
-  --query "UserPoolClients[?ClientName=='growpath-client'].ClientId|[0]" --output text)
+  --query "UserPoolClients[0].ClientId" --output text)
 
 cdn_domain=$(aws cloudfront list-distributions --query "DistributionList.Items[?Comment=='growpath spa and api'].DomainName|[0]" --output text 2>/dev/null || echo None)
 

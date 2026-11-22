@@ -204,8 +204,13 @@ always sets the header).
 ### Other notes
 
 - **LocalStack:** the API Gateway invoke URL is the LocalStack form shown above, not an AWS URL. The
-  state of LocalStack is not persisted: after a LocalStack restart the init script runs again and the
-  gateway gets a new `<api-id>` (the scripts look it up each time).
+  state of LocalStack is not persisted: after a LocalStack restart the init script runs again. The
+  ids a client needs are fixed (LocalStack `_custom_id_`): API `growpath` (so the invoke URL is
+  `http://localhost:4566/restapis/growpath/v1/_user_request_/v1/<path>`), user pool
+  `us-east-1_growpath`, app client `growpathclient`, CloudFront `growpathspa`
+  (`http://growpathspa.cloudfront.localhost.localstack.cloud:4566/`). The stored data is not:
+  uploaded images and the frontend build must be uploaded again (`make catalog-images`,
+  `make deploy-frontend`), and the Cognito users are created again by the init script.
 - **Expiry is not live-demonstrable:** a ticket expires 72 hours after creation (an author's assumption);
   `ticket.cancelled` and the quota release are covered by tests (`services/expert-consultation/tests`).
 - **Care chat** over the knowledge base exists in plant-care (`/journals/{id}/chat/turns`) but is outside the
