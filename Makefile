@@ -16,7 +16,7 @@ down:
 	$(COMPOSE) down
 
 import-kb:
-	$(COMPOSE) --profile import run --rm kb-import $(ARGS)
+	$(COMPOSE) --profile import run --build --rm kb-import $(ARGS)
 
 verify:
 	./scripts/verify-localstack.sh

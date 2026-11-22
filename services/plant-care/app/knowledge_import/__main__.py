@@ -10,7 +10,7 @@ from growpath_observability import configure_logging
 from sqlalchemy.orm import sessionmaker
 
 from app.db import create_engine_for_url
-from app.knowledge_import.run import ImportRunner, read_plant_slugs
+from app.knowledge_import.run import ImportReport, ImportRunner, read_plant_slugs
 from app.knowledge_import.settings import ImportSettings
 from app.knowledge_import.source import PlantSolveSource, SourceError, create_http_client
 from app.repository.unit_of_work import SqlAlchemyUnitOfWork
@@ -56,20 +56,24 @@ def main(argv: Sequence[str] | None = None) -> int:
         return 1
     finally:
         engine.dispose()
-    summary = report.summary()
+    log_report(report)
+    print(report.summary())
+    return 0 if report.succeeded else 1
+
+
+def log_report(report: ImportReport) -> None:
+    """The counters use `documents_*` keys: `created` is a reserved LogRecord attribute."""
     logger.info(
         "knowledge import finished",
         extra={
-            "summary": summary,
-            "created": len(report.created),
-            "updated": len(report.updated),
-            "unchanged": len(report.unchanged),
-            "failed": len(report.failed),
-            "stale": len(report.stale),
+            "summary": report.summary(),
+            "documents_created": len(report.created),
+            "documents_updated": len(report.updated),
+            "documents_unchanged": len(report.unchanged),
+            "documents_failed": len(report.failed),
+            "documents_stale": len(report.stale),
         },
     )
-    print(summary)
-    return 0 if report.succeeded else 1
 
 
 if __name__ == "__main__":
