@@ -28,6 +28,9 @@ volume/
 .localstack/
 *.log
 
+# Original catalog photos (only the processed webp files go to S3)
+media/source/
+
 # BEGIN AI-DLC:gitignore
 # Logs
 logs

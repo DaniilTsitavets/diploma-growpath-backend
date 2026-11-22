@@ -3,10 +3,12 @@
 # requires-python = ">=3.12"
 # dependencies = ["boto3>=1.34", "pillow>=10.3"]
 # ///
-"""Download the catalog images listed in media/catalog-images.csv and upload them to S3.
+"""Upload the catalog images listed in media/catalog-images.csv to S3.
 
 Each image becomes `<slug>.webp` (at most --max-side px on the long side) in the media bucket, next
-to a `credits.json` with the author and licence of every image. The CSV is the only source of links.
+to a `credits.json` with the author, licence and source page of every image. The CSV is the only
+source: its `url` is an https link to download, or a file under media/source/ (stock sites that do
+not allow downloads by link). Transparent images are put on a light neutral background.
 
 Local LocalStack: set AWS_ENDPOINT_URL (`make catalog-images` does). Real S3: leave it unset and
 use the normal AWS credential chain (AWS_PROFILE, environment variables, or a role); nothing is
@@ -37,10 +39,17 @@ from PIL import Image, ImageOps, UnidentifiedImageError
 ROOT = Path(__file__).resolve().parent.parent
 DEFAULT_CSV = ROOT / "media" / "catalog-images.csv"
 DEFAULT_BUCKET = "growpath-media"
-COLUMNS = ["slug", "url", "author", "license"]
+LOCAL_SOURCE_DIR = ROOT / "media" / "source"
+COLUMNS = ["slug", "url", "author", "license", "page"]
 SLUG = re.compile(r"^[a-z0-9]+(-[a-z0-9]+)*$")
-# Only licences that allow use with credit to the author: CC0 and public domain, CC BY, CC BY-SA.
-ALLOWED_LICENSE = re.compile(r"^(CC0|Public domain|CC BY \d\.\d|CC BY-SA \d\.\d)", re.IGNORECASE)
+# Licences that allow commercial use; the author is always credited in credits.json: CC0 and public
+# domain, CC BY, CC BY-SA, and the free licences of the stock sites we take photos from.
+ALLOWED_LICENSE = re.compile(
+    r"^(CC0|Public domain|CC BY \d\.\d|CC BY-SA \d\.\d"
+    r"|Pixabay Content License|Pexels License|Unsplash License|Magnific Free License)",
+    re.IGNORECASE,
+)
+BACKGROUND = (246, 246, 243)  # light neutral, used under transparent areas
 MAX_DOWNLOAD_BYTES = 25 * 1024 * 1024
 USER_AGENT = "growpath-catalog-images/1.0 (diploma project; open-licence images)"
 CREDITS_KEY = "credits.json"
@@ -55,10 +64,27 @@ class Entry:
     url: str
     author: str
     license: str
+    page: str
 
     @property
     def key(self) -> str:
         return f"{self.slug}.webp"
+
+    @property
+    def credit_source(self) -> str:
+        return self.page or self.url
+
+
+def local_source(url: str) -> Path | None:
+    """The file under media/source for a `url` that is not an https link, None for a link."""
+    if url.startswith("https://"):
+        return None
+    path = (ROOT / url).resolve()
+    if not path.is_relative_to(LOCAL_SOURCE_DIR.resolve()):
+        raise ValueError(f"{url!r} is neither an https link nor a file under media/source/")
+    if not path.is_file():
+        raise ValueError(f"{url!r}: no such file")
+    return path
 
 
 def read_entries(path: Path) -> list[Entry]:
@@ -76,22 +102,28 @@ def read_entries(path: Path) -> list[Entry]:
         if entry.slug in seen:
             raise ValueError(f"duplicate slug {entry.slug!r}")
         seen.add(entry.slug)
-        if urlparse(entry.url).scheme != "https":
-            raise ValueError(f"{entry.slug}: the url must be https")
+        try:
+            source = local_source(entry.url)
+        except ValueError as error:
+            raise ValueError(f"{entry.slug}: {error}") from error
+        if source is not None and not entry.page.startswith("https://"):
+            raise ValueError(f"{entry.slug}: a local file needs the https `page` of its source")
         if not entry.author:
             raise ValueError(f"{entry.slug}: the author is required")
         if not ALLOWED_LICENSE.match(entry.license):
             raise ValueError(
-                f"{entry.slug}: licence {entry.license!r} is not CC0, "
-                "public domain, CC BY or CC BY-SA"
+                f"{entry.slug}: licence {entry.license!r} is not CC0, public domain, CC BY, "
+                "CC BY-SA or the free licence of Pixabay, Pexels, Unsplash or Magnific"
             )
     if not entries:
         raise ValueError(f"{path}: no images listed")
     return entries
 
 
-def fingerprint(entry: Entry, max_side: int, quality: int) -> str:
-    material = f"{PROCESSING_VERSION}|{entry.url}|{max_side}|{quality}"
+def fingerprint(entry: Entry, local: bytes | None, max_side: int, quality: int) -> str:
+    """Changes with the link, or with the content of a local file, and with the processing."""
+    source = hashlib.sha256(local).hexdigest() if local is not None else entry.url
+    material = f"{PROCESSING_VERSION}|{source}|{max_side}|{quality}"
     return hashlib.sha256(material.encode()).hexdigest()
 
 
@@ -123,10 +155,19 @@ def download(url: str) -> bytes:
     return data
 
 
+def flatten(image: Image.Image) -> Image.Image:
+    """RGB image; transparent areas become the light background instead of black."""
+    if image.mode in {"RGBA", "LA", "PA"} or "transparency" in image.info:
+        rgba = image.convert("RGBA")
+        canvas = Image.new("RGBA", rgba.size, (*BACKGROUND, 255))
+        return Image.alpha_composite(canvas, rgba).convert("RGB")
+    return image.convert("RGB")
+
+
 def to_webp(data: bytes, max_side: int, quality: int) -> bytes:
     try:
         image = Image.open(io.BytesIO(data))
-        image = ImageOps.exif_transpose(image).convert("RGB")
+        image = flatten(ImageOps.exif_transpose(image))
     except (UnidentifiedImageError, OSError, Image.DecompressionBombError) as error:
         raise ValueError(f"not a usable image: {error}") from error
     image.thumbnail((max_side, max_side), Image.Resampling.LANCZOS)
@@ -146,11 +187,14 @@ def stored_fingerprint(s3, bucket: str, key: str) -> str | None:
 
 
 def upload_image(s3, bucket: str, entry: Entry, max_side: int, quality: int) -> str:
-    wanted = fingerprint(entry, max_side, quality)
+    source = local_source(entry.url)
+    local = source.read_bytes() if source is not None else None
+    wanted = fingerprint(entry, local, max_side, quality)
     if stored_fingerprint(s3, bucket, entry.key) == wanted:
         return "unchanged"
-    time.sleep(PAUSE_BETWEEN_DOWNLOADS)
-    body = to_webp(download(entry.url), max_side, quality)
+    if local is None:
+        time.sleep(PAUSE_BETWEEN_DOWNLOADS)
+    body = to_webp(local if local is not None else download(entry.url), max_side, quality)
     s3.put_object(
         Bucket=bucket,
         Key=entry.key,
@@ -164,7 +208,13 @@ def upload_image(s3, bucket: str, entry: Entry, max_side: int, quality: int) -> 
 
 def upload_credits(s3, bucket: str, entries: list[Entry]) -> str:
     credits = [
-        {"slug": e.slug, "key": e.key, "author": e.author, "license": e.license, "source": e.url}
+        {
+            "slug": e.slug,
+            "key": e.key,
+            "author": e.author,
+            "license": e.license,
+            "source": e.credit_source,
+        }
         for e in entries
     ]
     body = (json.dumps(credits, ensure_ascii=False, indent=2) + "\n").encode()

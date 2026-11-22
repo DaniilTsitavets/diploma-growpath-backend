@@ -26,6 +26,8 @@ VITE_API_BASE_URL=http://localhost:4566/restapis/${api_id}/v1/_user_request_/v1
 VITE_COGNITO_ENDPOINT=http://localhost:4566/
 VITE_COGNITO_USER_POOL_ID=${pool_id}
 VITE_COGNITO_CLIENT_ID=${client_id}
+# Catalog images: <base>/<item slug>.webp (a missing file answers 404). Not part of the API.
+VITE_MEDIA_BASE_URL=${AWS_ENDPOINT_URL}/growpath-media
 EOF
 
 if [ "$cdn_domain" != None ] && [ -n "$cdn_domain" ]; then
