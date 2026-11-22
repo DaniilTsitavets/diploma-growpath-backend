@@ -77,7 +77,7 @@ make demo ACT=auth
 
 What the expert should see:
 
-1. `no token: 401` and `garbage token: 401`. The Cognito authorizer rejects before any service is reached.
+1. `no token: 401` and `garbage token: 401` on a protected route, and `catalog without a token (public): 200`. The Cognito authorizer rejects before any service is reached; only the catalog is open.
 2. A new user and the expert are created and log in. The printed claims show `sub` and
    `cognito:groups: ["users"]`; the expert has `["users","experts"]`. Tokens are printed truncated.
 3. A user who sends `X-User-Groups: experts` still gets `403`, and a user who sends a forged `X-User-Id`
