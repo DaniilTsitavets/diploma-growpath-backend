@@ -119,7 +119,8 @@ container would be run.
 
 Item pictures live in a separate public-read S3 bucket, `growpath-media` (the policy allows reading
 objects only, never listing the bucket). The file name is the item `slug`: `<base>/<slug>.webp`, one
-format (WebP, at most 1200 px on the long side). An item without a picture answers 404 and the
+format (WebP, always 4:5 portrait, at most 1000 x 1250 px and never enlarged; a tall picture with plain
+sides is widened, a wide one is cut at the sides). An item without a picture answers 404 and the
 client shows a placeholder; the catalog API does not carry an image field.
 
 [`media/catalog-images.csv`](media/catalog-images.csv) is the only list of images, with the columns
