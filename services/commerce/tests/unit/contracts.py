@@ -62,6 +62,9 @@ def build_openapi(app: FastAPI, description: str, public_prefixes: tuple[str, ..
             responses = operation["responses"]
             if "422" in responses:
                 responses["422"] = copy.deepcopy(problem)
+            for status, response in responses.items():
+                if status.isdigit() and int(status) >= 400:
+                    response.setdefault("content", copy.deepcopy(problem["content"]))
             responses["default"] = copy.deepcopy(problem)
     return document
 

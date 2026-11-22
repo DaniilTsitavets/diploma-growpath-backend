@@ -31,6 +31,8 @@ def make_item(**overrides) -> CatalogItem:
     fields = {
         "item_type": "pack",
         "name": "Basil Kit",
+        "slug": "basil-kit",
+        "plant_slug": "basil",
         "plant_species": "Basil",
         "seed_count": 5,
         "price_cents": 2500,
@@ -42,6 +44,8 @@ def make_sensor(**overrides) -> CatalogItem:
     fields = {
         "item_type": "sensor",
         "name": "Soil Sensor",
+        "slug": "soil-sensor",
+        "plant_slug": None,
         "plant_species": None,
         "seed_count": None,
     }

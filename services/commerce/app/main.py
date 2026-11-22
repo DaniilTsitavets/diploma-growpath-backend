@@ -56,7 +56,7 @@ def create_app(
     )
     app.state.republish_interval_seconds = settings.republish_interval_seconds
     app.add_middleware(CorrelationIdMiddleware)
-    register_error_handlers(app)
+    register_error_handlers(app, settings.unavailable_retry_after_seconds)
     app.include_router(health.router)
     app.include_router(items.router)
     app.include_router(orders.router)

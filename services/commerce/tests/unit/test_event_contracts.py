@@ -32,7 +32,10 @@ def publish(item, **order) -> dict:
 PUBLISHED = {
     "a pack with the discount": (make_item(), {"discount_cents": 500, "total_paid_cents": 2000}),
     "a pack at full price": (make_item(), {}),
-    "a sensor": (make_item(item_type="sensor", plant_species=None, seed_count=None), {}),
+    "a sensor": (
+        make_item(item_type="sensor", plant_slug=None, plant_species=None, seed_count=None),
+        {},
+    ),
 }
 
 

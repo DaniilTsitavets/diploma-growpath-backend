@@ -24,9 +24,11 @@ USER = str(uuid.uuid4())
 
 @pytest.fixture
 def make_client() -> Callable[..., TestClient]:
-    def build(*items, declines: bool = False) -> TestClient:
+    def build(*items, declines: bool = False, catalog_down: bool = False) -> TestClient:
         app = create_app(make_settings())
-        uow = FakeUnitOfWork(FakeOrders(), FakeCatalog(*items))
+        catalog = FakeCatalog(*items)
+        catalog.unavailable = catalog_down
+        uow = FakeUnitOfWork(FakeOrders(), catalog)
         app.state.purchase_service = PurchaseService(
             lambda: uow, RecordingPayments(declines), RecordingEvents()
         )
@@ -162,3 +164,95 @@ def test_catalog_label_filter_is_validated(make_client):
     response = make_client().get("/v1/items", params={"label": "x" * 41})
 
     assert response.status_code == 422
+
+
+def test_catalog_list_carries_slugs_and_is_cacheable(make_client):
+    response = make_client(make_entry(slug="golden-pothos", plant_slug="golden-pothos")).get(
+        "/v1/items"
+    )
+
+    (item,) = response.json()
+    assert (item["slug"], item["plant_slug"]) == ("golden-pothos", "golden-pothos")
+    assert response.headers["cache-control"] == "public, max-age=60"
+
+
+def test_item_is_found_by_slug(make_client):
+    entry = make_entry(labels=("beginner",), slug="golden-pothos", plant_slug="golden-pothos")
+
+    response = make_client(entry, make_entry(slug="cactus", plant_slug="cactus")).get(
+        "/v1/items/golden-pothos"
+    )
+
+    body = response.json()
+    assert response.status_code == 200
+    assert (body["id"], body["slug"], body["plant_slug"]) == (
+        str(entry.id),
+        "golden-pothos",
+        "golden-pothos",
+    )
+    assert body["labels"] == ["beginner"]
+    assert response.headers["cache-control"] == "public, max-age=60"
+
+
+def test_sensor_has_no_plant_slug(make_client):
+    sensor = make_entry(
+        slug="soil-moisture-sensor", item_type="sensor", plant_slug=None, plant_species=None
+    )
+
+    response = make_client(sensor).get("/v1/items/soil-moisture-sensor")
+
+    assert response.json()["plant_slug"] is None
+
+
+@pytest.mark.parametrize(
+    "slug", ["unknown", "Upper", "a" * 65, "with_underscore", "dot.dot"], ids=str
+)
+def test_unknown_or_malformed_slug_is_404_problem(make_client, slug):
+    response = make_client(make_entry()).get(f"/v1/items/{slug}")
+
+    assert response.status_code == 404
+    assert response.headers["content-type"] == PROBLEM_JSON
+    assert response.json()["title"] == "Item not found"
+    assert "cache-control" not in response.headers
+
+
+def test_inactive_item_is_404_by_slug(make_client):
+    response = make_client(make_entry(slug="old-pack", is_active=False)).get("/v1/items/old-pack")
+
+    assert response.status_code == 404
+
+
+@pytest.mark.parametrize("path", ["/v1/items", "/v1/items/golden-pothos"])
+def test_catalog_answers_503_with_retry_after_when_the_database_is_down(make_client, path):
+    response = make_client(make_entry(), catalog_down=True).get(path)
+
+    assert response.status_code == 503
+    assert response.headers["content-type"] == PROBLEM_JSON
+    assert response.headers["retry-after"] == "5"
+    assert "cache-control" not in response.headers
+
+
+@pytest.mark.parametrize("path", ["/v1/items", "/v1/items/golden-pothos"])
+def test_an_unreachable_database_is_503_through_the_real_repository(path):
+    client = TestClient(create_app(make_settings()), raise_server_exceptions=False)
+
+    response = client.get(path)
+
+    assert response.status_code == 503
+    assert response.headers["retry-after"] == "5"
+
+
+def test_catalog_does_not_need_a_user(make_client):
+    response = make_client(make_entry()).get("/v1/items/beginners-kit")
+
+    assert response.status_code == 200
+
+
+def test_order_for_an_inactive_item_is_404(make_client):
+    item = make_item(is_active=False)
+
+    response = make_client(item).post(
+        "/v1/orders", json={"item_id": str(item.id)}, headers=order_headers()
+    )
+
+    assert response.status_code == 404

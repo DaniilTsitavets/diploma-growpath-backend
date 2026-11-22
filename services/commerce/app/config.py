@@ -14,3 +14,4 @@ class Settings(BaseSettings):
     republish_interval_seconds: float = 10.0
     republish_grace_seconds: float = 30.0
     republish_batch_size: int = 50
+    unavailable_retry_after_seconds: int = 5

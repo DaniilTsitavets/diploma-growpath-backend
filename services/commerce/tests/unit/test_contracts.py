@@ -78,15 +78,18 @@ def test_every_operation_declares_its_gateway_exposure():
     }
     assert exposure[("POST", "/v1/orders")] == "public"
     assert exposure[("GET", "/v1/items")] == "public"
+    assert exposure[("GET", "/v1/items/{slug}")] == "public"
     assert exposure[("GET", "/health/ready")] == "internal"
     assert "internal" in document["paths"]["/health/live"]["get"]["tags"]
 
 
 @pytest.fixture
 def client():
-    def build(*items, declines: bool = False) -> TestClient:
+    def build(*items, declines: bool = False, catalog_down: bool = False) -> TestClient:
         app = build_app()
-        uow = FakeUnitOfWork(FakeOrders(), FakeCatalog(*items))
+        catalog = FakeCatalog(*items)
+        catalog.unavailable = catalog_down
+        uow = FakeUnitOfWork(FakeOrders(), catalog)
         app.state.purchase_service = PurchaseService(
             lambda: uow, RecordingPayments(declines), RecordingEvents()
         )
@@ -109,6 +112,29 @@ def test_the_item_list_conforms(client):
 
     assert response.status_code == 200 and response.json()
     assert_conforms(load_openapi(SERVICE), "/v1/items", "GET", response)
+
+
+def test_the_item_by_slug_conforms(client):
+    document = load_openapi(SERVICE)
+    app_client = client(make_item())
+
+    found = app_client.get("/v1/items/beginners-kit")
+    missing = app_client.get("/v1/items/unknown")
+
+    assert (found.status_code, missing.status_code) == (200, 404)
+    assert_conforms(document, "/v1/items/{slug}", "GET", found)
+    assert_conforms(document, "/v1/items/{slug}", "GET", missing)
+
+
+def test_an_unavailable_catalog_conforms_and_declares_retry_after(client):
+    document = load_openapi(SERVICE)
+
+    response = client(make_item(), catalog_down=True).get("/v1/items")
+
+    assert response.status_code == 503
+    assert_conforms(document, "/v1/items", "GET", response)
+    declared = document["paths"]["/v1/items"]["get"]["responses"]["503"]
+    assert "Retry-After" in declared["headers"]
 
 
 def test_a_created_order_conforms(client):

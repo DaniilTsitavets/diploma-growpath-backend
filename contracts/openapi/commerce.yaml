@@ -53,6 +53,7 @@ paths:
       tags:
       - catalog
       summary: List Items
+      description: 'Public: the gateway sets no identity for this route.'
       operationId: list_items_v1_items_get
       parameters:
       - name: label
@@ -67,7 +68,7 @@ paths:
           title: Label
       responses:
         '200':
-          description: Successful Response
+          description: Active items
           content:
             application/json:
               schema:
@@ -75,6 +76,80 @@ paths:
                 items:
                   $ref: '#/components/schemas/ItemResponse'
                 title: Response List Items V1 Items Get
+          headers:
+            Cache-Control:
+              description: The catalog is public and may be cached for a minute
+              schema:
+                type: string
+                const: public, max-age=60
+        '503':
+          description: The catalog database is unreachable
+          headers:
+            Retry-After:
+              description: Seconds to wait before retrying
+              schema:
+                type: integer
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+        '422':
+          description: Problem details
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+        default:
+          description: Problem details
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+      x-gateway: public
+  /v1/items/{slug}:
+    get:
+      tags:
+      - catalog
+      summary: Get Item
+      description: 'Public: the gateway sets no identity for this route.'
+      operationId: get_item_v1_items__slug__get
+      parameters:
+      - name: slug
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Slug
+      responses:
+        '200':
+          description: The active item
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ItemResponse'
+          headers:
+            Cache-Control:
+              description: The catalog is public and may be cached for a minute
+              schema:
+                type: string
+                const: public, max-age=60
+        '404':
+          description: No active item has this slug, or the slug is malformed
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+        '503':
+          description: The catalog database is unreachable
+          headers:
+            Retry-After:
+              description: Seconds to wait before retrying
+              schema:
+                type: integer
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
         '422':
           description: Problem details
           content:
@@ -177,6 +252,14 @@ components:
         name:
           type: string
           title: Name
+        slug:
+          type: string
+          title: Slug
+        plant_slug:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Plant Slug
         plant_species:
           anyOf:
           - type: string
@@ -205,6 +288,8 @@ components:
       - id
       - item_type
       - name
+      - slug
+      - plant_slug
       - plant_species
       - seed_count
       - price_cents

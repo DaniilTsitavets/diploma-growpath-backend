@@ -37,8 +37,13 @@ class CatalogRepository(Protocol):
 
     def get_active(self, item_id: uuid.UUID) -> Item | None: ...
 
+    def find_active_by_slug(self, slug: str) -> CatalogEntry | None: ...
+
     def list_active(self, label: str | None = None) -> list[CatalogEntry]:
-        """Active items ordered by name, optionally only those carrying `label`."""
+        """Active items ordered by name, optionally only those carrying `label`.
+
+        Raises CatalogUnavailable (also from find_active_by_slug) when the database is unreachable.
+        """
         ...
 
 
