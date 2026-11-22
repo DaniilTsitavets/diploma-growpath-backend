@@ -151,6 +151,11 @@ subscribe_queue "$escalation_topic_arn" \
 awslocal s3api create-bucket --bucket growpath-photos >/dev/null
 awslocal s3api put-bucket-cors --bucket growpath-photos --cors-configuration "{\"CORSRules\":[{\"AllowedOrigins\":${CLIENT_ORIGINS},\"AllowedMethods\":[\"PUT\",\"GET\"],\"AllowedHeaders\":[\"Content-Type\",\"*\"],\"ExposeHeaders\":[\"ETag\"]}]}"
 
+# Catalog images are public. The policy allows reading objects only, never listing the bucket, so a guest
+# can open <base>/<slug>.webp but cannot enumerate it. scripts/upload-catalog-images.py fills it.
+awslocal s3api create-bucket --bucket growpath-media >/dev/null
+awslocal s3api put-bucket-policy --bucket growpath-media --policy '{"Version":"2012-10-17","Statement":[{"Sid":"PublicReadObjects","Effect":"Allow","Principal":"*","Action":"s3:GetObject","Resource":"arn:aws:s3:::growpath-media/*"}]}'
+
 # The SPA build is uploaded to the frontend bucket. One CloudFront distribution serves both the SPA and
 # the API, so the browser sees a single origin and the API needs no CORS: /v1/* goes to the gateway
 # (the stage and path are in the origin path), everything else to the bucket. Unknown paths fall back

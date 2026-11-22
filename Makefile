@@ -3,7 +3,7 @@ UV ?= uv
 SERVICES := commerce entitlement plant-care expert-consultation
 COVERAGE_GATE := --cov-fail-under=70
 
-.PHONY: up down verify demo client-env deploy-frontend logs sync lock lint contracts test test-unit test-db-up test-db-down
+.PHONY: up down verify demo client-env deploy-frontend catalog-images logs sync lock lint contracts test test-unit test-db-up test-db-down
 
 .env:
 	cp .env.example .env
@@ -26,6 +26,10 @@ client-env:
 
 deploy-frontend:
 	./scripts/deploy-frontend.sh $(DIST)
+
+catalog-images:
+	AWS_ENDPOINT_URL=http://localhost:4566 AWS_DEFAULT_REGION=us-east-1 AWS_ACCESS_KEY_ID=test AWS_SECRET_ACCESS_KEY=test \
+		$(UV) run --script scripts/upload-catalog-images.py
 
 logs:
 	$(COMPOSE) logs -f
