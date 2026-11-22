@@ -54,6 +54,44 @@ expect "catalog is public: GET /items, no token" 200 "$(status "$base/items")"
 expect "catalog lists items without a token" yes \
   "$([ "$(curl -s "$base/items" | jq 'length')" -gt 0 ] && echo yes || echo no)"
 
+say "3b. Public catalog and plant profiles, no token"
+# header <name> <curl args>: the value of one response header, or empty
+header() {
+  local name=$1; shift
+  curl -s -D - -o /dev/null "$@" | tr -d '\r' | awk -v n="$(echo "$name" | tr 'A-Z' 'a-z'):" 'tolower($1) == n { sub(/^[^:]*: */, ""); print; exit }'
+}
+items_json=$(curl -s "$base/items")
+expect "every item has a slug" 0 "$(echo "$items_json" | jq '[.[] | select((.slug // "") == "")] | length')"
+expect "every item has the plant_slug key" 0 "$(echo "$items_json" | jq '[.[] | select(has("plant_slug") | not)] | length')"
+expect "plant_slug is null exactly for the sensors" "soil-moisture-sensor thermo-hygrometer" \
+  "$(echo "$items_json" | jq -r '[.[] | select(.plant_slug == null) | .slug] | sort | join(" ")')"
+expect "GET /items/lavender, no token" 200 "$(status "$base/items/lavender")"
+expect "GET /items/lavender sets Cache-Control with max-age" yes \
+  "$(header Cache-Control "$base/items/lavender" | grep -q 'max-age=' && echo yes || echo no)"
+expect "GET /items/no-such-item" 404 "$(status "$base/items/no-such-item")"
+expect "unknown item is problem+json" application/problem+json \
+  "$(header Content-Type "$base/items/no-such-item" | cut -d';' -f1)"
+expect "GET /plants/no-such-plant" 404 "$(status "$base/plants/no-such-plant")"
+expect "unknown plant is problem+json" application/problem+json \
+  "$(header Content-Type "$base/plants/no-such-plant" | cut -d';' -f1)"
+lavender_status=$(status "$base/plants/lavender")
+if [ "$lavender_status" = 404 ]; then
+  echo "  INFO  no plant profiles yet: run 'make import-kb' to fill them; profile checks skipped"
+else
+  expect "GET /plants/lavender, no token" 200 "$lavender_status"
+  lavender_json=$(curl -s "$base/plants/lavender")
+  expect "lavender profile has sources" yes \
+    "$([ "$(echo "$lavender_json" | jq '(.sources // []) | length')" -gt 0 ] && echo yes || echo no)"
+  expect "lavender profile has updated_at" yes "$(echo "$lavender_json" | jq -r 'if (.updated_at // "") != "" then "yes" else "no" end')"
+  expect "GET /plants/lavender sets Cache-Control with max-age" yes \
+    "$(header Cache-Control "$base/plants/lavender" | grep -q 'max-age=' && echo yes || echo no)"
+  # The care chat and the plant page match a pack to its profile by species.
+  while IFS=$'\t' read -r plant_slug plant_species; do
+    expect "profile $plant_slug has the species of its pack" "$plant_species" \
+      "$(curl -s "$base/plants/$plant_slug" | jq -r '.species // "missing"')"
+  done < <(echo "$items_json" | jq -r '.[] | select(.plant_slug != null) | [.plant_slug, .plant_species] | @tsv')
+fi
+
 say "4. Routes reach the right service"
 expect "GET /items (commerce)" 200 "$(status -H "Authorization: $token" "$base/items")"
 expect "GET /journals (plant-care)" 200 "$(status -H "Authorization: $token" "$base/journals")"
@@ -75,11 +113,6 @@ expect "entitlement answers for the sub of the token" "$sub" \
 
 say "5b. CORS for the browser client (Vite on 127.0.0.1:5173): Cognito and S3 only, the API is same-origin"
 origin=http://127.0.0.1:5173
-# header <name> <curl args>: the value of one response header, or empty
-header() {
-  local name=$1; shift
-  curl -s -D - -o /dev/null "$@" | tr -d '\r' | awk -v n="$(echo "$name" | tr 'A-Z' 'a-z'):" 'tolower($1) == n { sub(/^[^:]*: */, ""); print; exit }'
-}
 login_body=$(jq -nc --arg c "$client_id" --arg u "$TEST_USER" --arg p "$TEST_PASSWORD" \
   '{AuthFlow: "USER_PASSWORD_AUTH", ClientId: $c, AuthParameters: {USERNAME: $u, PASSWORD: $p}}')
 expect "Cognito accepts the origin" 200 \

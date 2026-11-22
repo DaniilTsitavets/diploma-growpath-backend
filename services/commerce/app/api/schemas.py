@@ -10,6 +10,8 @@ class ItemResponse(BaseModel):
     id: uuid.UUID
     item_type: str
     name: str
+    slug: str
+    plant_slug: str | None
     plant_species: str | None
     seed_count: int | None
     price_cents: int

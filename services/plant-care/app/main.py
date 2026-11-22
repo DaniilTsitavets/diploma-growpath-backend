@@ -8,7 +8,7 @@ from fastapi import FastAPI
 from growpath_observability import CorrelationIdMiddleware, configure_logging
 from sqlalchemy.orm import sessionmaker
 
-from app.api import chat, diagnoses, escalations, health, journals, photos, updates
+from app.api import chat, diagnoses, escalations, health, journals, photos, plants, updates
 from app.api.errors import register_error_handlers
 from app.background import run_periodically
 from app.config import Settings
@@ -37,6 +37,7 @@ from app.service.event_handlers import EventHandlers
 from app.service.expert_quota import ExpertQuota
 from app.service.journals import JournalService
 from app.service.photos import PhotoService, PhotoStorage
+from app.service.plants import PlantService
 from app.service.ticket_handlers import TicketEventHandlers
 from app.service.updates import UpdateService
 from app.storage.s3 import S3PhotoReader, S3PhotoStorage, create_s3_client
@@ -111,6 +112,7 @@ def create_app(
     unit_of_work = partial(SqlAlchemyUnitOfWork, sessionmaker(app.state.engine))
     effort_policy = EffortPolicy(tier_lookup)
     app.state.journal_service = JournalService(unit_of_work)
+    app.state.plant_service = PlantService(unit_of_work)
     app.state.update_service = UpdateService(
         unit_of_work,
         ai_quota,
@@ -190,4 +192,5 @@ def create_app(
     app.include_router(diagnoses.router)
     app.include_router(escalations.router)
     app.include_router(chat.router)
+    app.include_router(plants.router)
     return app

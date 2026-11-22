@@ -1,10 +1,12 @@
 import uuid
 from collections.abc import Collection
+from datetime import date
 from typing import Self
 
 from sqlalchemy.exc import SQLAlchemyError
 
 from app.service.knowledge_model import DocumentDraft, RetrievedSection, SyncResult
+from app.service.plant_profile_model import PlantProfile
 
 
 class FakeKnowledge:
@@ -40,11 +42,54 @@ class FakeKnowledge:
         return self.found[:limit]
 
 
+class FakePlantProfiles:
+    """Keeps profiles by slug and decides like the SQL repository: only a new hash rewrites."""
+
+    def __init__(self) -> None:
+        self.rows: dict[str, PlantProfile] = {}
+        self.get_error: Exception | None = None
+
+    def seed(self, slug: str = "lavender", **overrides) -> PlantProfile:
+        fields = {
+            "slug": slug,
+            "source_slug": f"{slug}-care",
+            "species": "Lavender",
+            "source_name": "PlantSolve",
+            "source_url": f"https://www.plantsolve.com/plants/{slug}/",
+            "license": "CC BY 4.0",
+            "imported_on": date(2026, 11, 22),
+            "content_sha256": "a" * 64,
+        }
+        profile = PlantProfile(**{**fields, **overrides})
+        self.rows[profile.slug] = profile
+        return profile
+
+    def sync_profile(self, profile: PlantProfile) -> SyncResult:
+        stored = self.rows.get(profile.slug)
+        if stored is None:
+            result = SyncResult.CREATED
+        elif stored.content_sha256 == profile.content_sha256:
+            return SyncResult.UNCHANGED
+        else:
+            result = SyncResult.UPDATED
+        self.rows[profile.slug] = profile
+        return result
+
+    def content_hashes(self, slugs: Collection[str]) -> dict[str, str]:
+        return {slug: row.content_sha256 for slug, row in self.rows.items() if slug in slugs}
+
+    def get(self, slug: str) -> PlantProfile | None:
+        if self.get_error is not None:
+            raise self.get_error
+        return self.rows.get(slug)
+
+
 class FakeKnowledgeUnitOfWork:
     """Every unit shares one FakeKnowledge; `sync_failures` lists slugs whose write fails."""
 
     def __init__(self) -> None:
         self.knowledge = FakeKnowledge()
+        self.plant_profiles = FakePlantProfiles()
         self.commits = 0
         self.units = 0
         self.sync_failures: set[str] = set()

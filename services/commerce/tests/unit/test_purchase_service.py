@@ -176,6 +176,7 @@ def test_placed_order_is_published_with_the_contract_fields_and_marked():
 def test_sensor_event_has_no_species_or_seed_count():
     sensor = make_item(
         item_type="sensor",
+        plant_slug=None,
         plant_species=None,
         seed_count=None,
         first_purchase_discount_pct=None,

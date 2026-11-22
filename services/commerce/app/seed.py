@@ -2,6 +2,7 @@ import uuid
 from dataclasses import dataclass
 
 from growpath_observability import configure_logging
+from sqlalchemy import select, update
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.orm import Session
 
@@ -14,8 +15,10 @@ SEED_NAMESPACE = uuid.UUID("7c1e2d9a-4b3f-4a6e-8d15-3f2b9c0a1e77")
 
 @dataclass(frozen=True)
 class SeedItem:
+    slug: str
     name: str
     item_type: str
+    plant_slug: str | None
     plant_species: str | None
     seed_count: int | None
     price_cents: int
@@ -24,21 +27,68 @@ class SeedItem:
 
     @property
     def id(self) -> uuid.UUID:
-        return uuid.uuid5(SEED_NAMESPACE, self.name)
+        return uuid.uuid5(SEED_NAMESPACE, LEGACY_ID_KEYS.get(self.slug, self.slug))
 
 
-# Demo catalog. Prices are chosen so that a few orders cross the $40 and $90 tier thresholds.
+def pack(
+    slug: str,
+    species: str,
+    price_cents: int,
+    seed_count: int,
+    labels: tuple[str, ...] = (),
+    first_purchase_discount_pct: int | None = None,
+) -> SeedItem:
+    return SeedItem(
+        slug=slug,
+        name=f"{species} Starter Pack",
+        item_type="pack",
+        plant_slug=slug,
+        plant_species=species,
+        seed_count=seed_count,
+        price_cents=price_cents,
+        labels=labels,
+        first_purchase_discount_pct=first_purchase_discount_pct,
+    )
+
+
+def sensor(slug: str, name: str, price_cents: int) -> SeedItem:
+    return SeedItem(slug, name, "sensor", None, None, None, price_cents, ())
+
+
+BEGINNER = ("beginner",)
+EASY_CARE = ("beginner", "low-maintenance")
+
+# Species are spelled as in the plant-care knowledge base, whose plant key is the pack slug.
 CATALOG = (
-    SeedItem("Beginner's Kit", "pack", "Basil", 5, 2500, ("beginner",), 20),
-    SeedItem("Mint Pack", "pack", "Mint", 10, 1800, ("beginner", "low-maintenance")),
-    SeedItem("Chili Pepper Pack", "pack", "Chili pepper", 8, 3200, ("rare",)),
-    SeedItem("Lavender Pack", "pack", "Lavender", 6, 4500, ("rare", "low-maintenance")),
-    SeedItem("Soil Moisture Sensor", "sensor", None, None, 1500, ()),
+    pack("lavender", "Lavender", 2400, 6, ("low-maintenance",)),
+    pack("holy-basil-tulsi", "Holy Basil (Tulsi)", 1800, 10, BEGINNER),
+    pack("golden-pothos", "Golden Pothos", 1500, 3, EASY_CARE, first_purchase_discount_pct=20),
+    pack("snake-plant", "Snake Plant", 2200, 3, EASY_CARE),
+    pack("zz-plant", "ZZ Plant", 2600, 3, EASY_CARE),
+    pack("jade-plant", "Jade Plant", 2000, 4, EASY_CARE),
+    pack("peace-lily", "Peace Lily", 2800, 3, BEGINNER),
+    pack("aloe-vera", "Aloe Vera", 1900, 3, EASY_CARE),
+    pack("spider-plant", "Spider Plant", 1400, 4, BEGINNER),
+    pack("monstera-deliciosa", "Monstera Deliciosa", 3600, 3, ("rare",)),
+    pack("ficus-lyrata", "Fiddle Leaf Fig", 4200, 2, ("rare",)),
+    pack("boston-fern", "Boston Fern", 2300, 3),
+    pack("calathea-orbifolia", "Calathea Orbifolia", 3200, 3, ("rare",)),
+    pack("cactus", "Cactus", 1600, 5, ("low-maintenance",)),
+    pack("maranta-prayer-plant", "Maranta Prayer Plant", 2700, 3, ("rare",)),
+    sensor("soil-moisture-sensor", "Soil Moisture Sensor", 1500),
+    sensor("thermo-hygrometer", "Thermo-Hygrometer", 1800),
 )
+
+# The sensor was seeded before slugs existed, with an id derived from its name.
+LEGACY_ID_KEYS = {"soil-moisture-sensor": "Soil Moisture Sensor"}
+LEGACY_PACK_NAMES = ("Beginner's Kit", "Mint Pack", "Chili Pepper Pack", "Lavender Pack")
 
 
 def seed_catalog(session: Session) -> None:
-    """Insert the demo catalog; rows that already exist are left untouched."""
+    """Insert the missing catalog items and labels and deactivate the legacy packs.
+
+    Existing rows are left as they are: a conflict on id, name or slug means "already there".
+    """
     for item in CATALOG:
         session.execute(
             insert(CatalogItem)
@@ -46,19 +96,27 @@ def seed_catalog(session: Session) -> None:
                 id=item.id,
                 item_type=item.item_type,
                 name=item.name,
+                slug=item.slug,
+                plant_slug=item.plant_slug,
                 plant_species=item.plant_species,
                 seed_count=item.seed_count,
                 price_cents=item.price_cents,
                 first_purchase_discount_pct=item.first_purchase_discount_pct,
             )
-            .on_conflict_do_nothing(index_elements=["name"])
+            .on_conflict_do_nothing()
         )
+        stored_id = session.scalars(
+            select(CatalogItem.id).where(CatalogItem.slug == item.slug)
+        ).one()
         for label in item.labels:
             session.execute(
                 insert(CatalogItemLabel)
-                .values(item_id=item.id, label=label)
+                .values(item_id=stored_id, label=label)
                 .on_conflict_do_nothing()
             )
+    session.execute(
+        update(CatalogItem).where(CatalogItem.name.in_(LEGACY_PACK_NAMES)).values(is_active=False)
+    )
 
 
 def main() -> None:

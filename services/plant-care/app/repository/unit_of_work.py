@@ -9,6 +9,7 @@ from app.repository.escalations import SqlAlchemyEscalationRepository
 from app.repository.journals import SqlAlchemyJournalRepository
 from app.repository.knowledge import SqlAlchemyKnowledgeRepository
 from app.repository.photos import SqlAlchemyPhotoRepository
+from app.repository.plant_profiles import SqlAlchemyPlantProfileRepository
 from app.repository.ticket_events import SqlAlchemyTicketEventRepository
 from app.repository.updates import SqlAlchemyUpdateRepository
 
@@ -27,6 +28,7 @@ class SqlAlchemyUnitOfWork:
         self.escalation_delivery = SqlAlchemyEscalationDeliveryRepository(self._session)
         self.ticket_events = SqlAlchemyTicketEventRepository(self._session)
         self.knowledge = SqlAlchemyKnowledgeRepository(self._session)
+        self.plant_profiles = SqlAlchemyPlantProfileRepository(self._session)
         self.chat_turns = SqlAlchemyChatTurnRepository(self._session)
         return self
 

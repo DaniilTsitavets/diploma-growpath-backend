@@ -11,10 +11,13 @@ from app.knowledge_import.convert import (
     clean_text,
     convert_plant,
     convert_problem,
+    convert_profile,
     parse_vulnerabilities,
     split_body,
 )
+from app.knowledge_import.plants import PlantEntry
 from app.service.knowledge_model import DocumentDraft
+from app.service.plant_profile_model import PlantProfile
 from tests.unit.plantsolve_data import load_fixture, plant_record
 
 TODAY = date(2026, 11, 22)
@@ -25,10 +28,15 @@ def relationships() -> list[Relationship]:
     return parse_vulnerabilities(load_fixture("relationships"))
 
 
+ENTRY = PlantEntry("lavender", "english-lavender", "English Lavender")
+
+
 def plant(**overrides) -> DocumentDraft:
-    return convert_plant(
-        plant_record(**overrides), "lavender", relationships(), PROBLEM_NAMES, TODAY
-    )
+    return convert_plant(plant_record(**overrides), ENTRY, relationships(), PROBLEM_NAMES, TODAY)
+
+
+def profile(imported_on: date = TODAY, **overrides) -> PlantProfile:
+    return convert_profile(plant_record(**overrides), ENTRY, imported_on)
 
 
 def sections_of(document: DocumentDraft) -> dict[str, str]:
@@ -43,9 +51,9 @@ def test_a_plant_becomes_a_document_with_the_mapped_fields():
     document = plant()
 
     assert document.slug == "plantsolve-lavender"
-    assert document.title == "Lavender care (PlantSolve)"
-    assert document.species == "Lavender"
-    assert document.source_title == "PlantSolve: Lavender"
+    assert document.title == "English Lavender care (PlantSolve)"
+    assert document.species == "English Lavender"
+    assert document.source_title == "PlantSolve: English Lavender"
     assert document.source_url == "https://www.plantsolve.com/plants/lavender/"
     assert document.license == "CC BY 4.0"
     assert document.imported_on == TODAY
@@ -241,30 +249,42 @@ def test_a_bad_licence_or_source_url_fails_the_document(citation):
         plant(citation=citation)
 
 
-def test_a_record_of_another_plant_or_without_a_name_fails():
+def test_a_record_of_another_plant_fails():
+    other = PlantEntry("pothos", "pothos", "Pothos")
+
     with pytest.raises(ConversionError):
-        convert_plant(plant_record(), "pothos", [], {}, TODAY)
+        convert_plant(plant_record(), other, [], {}, TODAY)
     with pytest.raises(ConversionError):
-        plant(commonName=" ")
+        convert_profile(plant_record(), other, TODAY)
+
+
+def test_a_plant_without_a_common_name_still_converts_under_the_species_of_the_entry():
+    document = plant(commonName=" ")
+
+    assert document.species == "English Lavender"
+    assert "Common name" not in sections_of(document)["Overview"]
 
 
 def test_a_slug_that_does_not_fit_the_database_fails():
     long_slug = "a" * 60
+    entry = PlantEntry(long_slug, "x", "X")
 
     with pytest.raises(ConversionError):
-        convert_plant(plant_record(slug=long_slug), long_slug, [], {}, TODAY)
+        convert_plant(plant_record(slug=long_slug), entry, [], {}, TODAY)
 
 
 def test_a_species_longer_than_the_column_fails():
+    entry = PlantEntry("lavender", "lavender", "Plant " * 30)
+
     with pytest.raises(ConversionError):
-        plant(commonName="Plant " * 30)
+        convert_plant(plant_record(), entry, [], {}, TODAY)
+    with pytest.raises(ConversionError):
+        convert_profile(plant_record(), entry, TODAY)
 
 
 def test_the_hash_is_stable_between_runs_and_ignores_the_import_date():
     first = plant()
-    second = convert_plant(
-        plant_record(), "lavender", relationships(), PROBLEM_NAMES, date(2030, 1, 1)
-    )
+    second = convert_plant(plant_record(), ENTRY, relationships(), PROBLEM_NAMES, date(2030, 1, 1))
 
     assert first.content_sha256 == second.content_sha256
     assert first.imported_on != second.imported_on
@@ -348,3 +368,89 @@ def test_only_well_formed_vulnerabilities_are_parsed():
     ]
 
     assert parse_vulnerabilities(rows) == [Relationship("a", "b", 5, "n")]
+
+
+def test_a_plant_becomes_a_profile_with_the_mapped_fields():
+    result = profile()
+
+    assert (result.slug, result.source_slug) == ("english-lavender", "lavender")
+    assert result.species == "English Lavender"
+    assert result.common_name == "Lavender"
+    assert result.scientific_name == "Lavandula angustifolia"
+    assert result.family == "Lamiaceae"
+    assert result.difficulty == "moderate"
+    assert result.light.startswith("Requires intense, direct sunlight")
+    assert result.sunlight_hours == "6-8+ hours of direct sunlight daily"
+    assert result.watering.startswith("Low: Let the soil dry out")
+    assert result.placement.startswith("Outdoor full sun")
+    assert result.soil.startswith("Sandy, gravelly")
+    assert result.humidity == "low; recommended 20-40%"
+    assert result.temperature == "65-85°F (18-29°C)"
+    assert result.pruning.startswith("Prune back")
+    assert result.toxicity.splitlines()[0] == "toxic to pets"
+    assert result.toxicity.splitlines()[1].startswith("Lavender contains small amounts")
+    assert len(result.key_takeaways) == 2 and result.key_takeaways[0].startswith("Plant in gritty")
+    assert (result.source_name, result.license) == ("PlantSolve", "CC BY 4.0")
+    assert result.source_url == "https://www.plantsolve.com/plants/lavender/"
+    assert result.imported_on == TODAY
+
+
+def test_empty_profile_values_become_none_and_the_rest_is_cleaned():
+    result = profile(
+        summary="  ",
+        quickAnswer="Water <b>rarely</b>\x00 &amp; sparingly.",
+        keyTakeaways=[" ", "<i>Sun</i>", 5, None],
+        taxonomy={},
+        parameters={"humidity": {"recommended": "30%"}},
+        care={"humidity": ""},
+    )
+
+    assert result.summary is None and result.scientific_name is None
+    assert result.temperature is None and result.watering is None
+    assert result.quick_answer == "Water rarely & sparingly."
+    assert result.key_takeaways == ("Sun", "5")
+    assert result.humidity == "recommended 30%"
+
+
+def test_profile_texts_are_bounded_and_the_takeaways_capped():
+    result = profile(summary="word " * 1000, keyTakeaways=[f"point {n}" for n in range(30)])
+
+    assert len(result.summary) <= 2000 and result.summary.endswith("...")
+    assert len(result.key_takeaways) == 12
+
+
+def test_a_profile_without_takeaways_has_none():
+    assert profile(keyTakeaways=[]).key_takeaways is None
+
+
+@pytest.mark.parametrize(
+    "citation",
+    [
+        {"canonicalUrl": "https://www.plantsolve.com/plants/lavender/", "license": "MIT"},
+        {"canonicalUrl": "http://www.plantsolve.com/plants/lavender/", "license": "CC BY 4.0"},
+        {"canonicalUrl": "https://example.com/plants/lavender/", "license": "CC BY 4.0"},
+    ],
+)
+def test_a_profile_needs_the_same_source_rules_as_the_document(citation):
+    with pytest.raises(ConversionError):
+        profile(citation=citation)
+
+
+def test_the_profile_hash_ignores_the_import_date_and_follows_every_fact():
+    base = profile()
+
+    assert base.content_sha256 == profile(date(2030, 1, 1)).content_sha256
+    assert profile(summary="Changed.").content_sha256 != base.content_sha256
+    assert profile(keyTakeaways=["Other"]).content_sha256 != base.content_sha256
+    assert (
+        convert_profile(
+            plant_record(), PlantEntry("lavender", "lavender", "Lavender"), TODAY
+        ).content_sha256
+        != base.content_sha256
+    )
+
+
+def test_profile_text_has_no_angle_brackets():
+    result = profile(quickAnswer="<script>x</script> a < b > c")
+
+    assert "<" not in result.quick_answer and ">" not in result.quick_answer

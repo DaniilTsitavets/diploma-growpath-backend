@@ -7,6 +7,14 @@ class ItemNotFound(Exception):
         self.item_id = item_id
 
 
+class ItemSlugNotFound(Exception):
+    """No active item has this slug."""
+
+
+class CatalogUnavailable(Exception):
+    """The catalog database cannot be reached; raised by the catalog repository."""
+
+
 class IdempotencyKeyReused(Exception):
     """The key already belongs to an order for a different item."""
 

@@ -87,20 +87,25 @@ prefix_route() {
     method.request.path.proxy=true
 }
 
-# The catalog is readable without signing in. There is no authorizer, so the claims are empty and the
-# identity headers are not mapped: a client-sent X-User-Id passes through, which is harmless because
-# GET /items does not read it. Never use this for a route that does.
+# The catalog and the plant profiles are readable without signing in. There is no authorizer, so the
+# claims are empty and the identity headers are not mapped: a client-sent X-User-Id passes through, which
+# is harmless because these routes do not read it. Never use this for a route that does.
+# public_route <path under /v1> <http method> <upstream uri> [extra integration parameters] [method parameters]
 public_route() {
-  local resource_id method=$2 uri=$3
+  local resource_id method=$2 uri=$3 extra=${4:+$4,} declared=${5:-}
   resource_id=$(resource_for "$1")
   awslocal apigateway put-method --rest-api-id "$api_id" --resource-id "$resource_id" --http-method "$method" \
-    --authorization-type NONE >/dev/null
+    --authorization-type NONE ${declared:+--request-parameters "$declared"} >/dev/null
   awslocal apigateway put-integration --rest-api-id "$api_id" --resource-id "$resource_id" --http-method "$method" \
     --type HTTP_PROXY --integration-http-method "$method" --uri "$uri" \
-    --request-parameters '{"integration.request.header.X-Correlation-Id":"context.requestId"}' >/dev/null
+    --request-parameters "{${extra}\"integration.request.header.X-Correlation-Id\":\"context.requestId\"}" >/dev/null
 }
 
 public_route items GET "$COMMERCE/v1/items"
+public_route 'items/{slug}' GET "$COMMERCE/v1/items/{slug}" '"integration.request.path.slug":"method.request.path.slug"' \
+  method.request.path.slug=true
+public_route 'plants/{slug}' GET "$PLANT_CARE/v1/plants/{slug}" '"integration.request.path.slug":"method.request.path.slug"' \
+  method.request.path.slug=true
 route orders POST "$COMMERCE/v1/orders"
 prefix_route journals "$PLANT_CARE"
 route 'updates/{proxy+}' ANY "$PLANT_CARE/v1/updates/{proxy}" '"integration.request.path.proxy":"method.request.path.proxy"' \

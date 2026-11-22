@@ -53,9 +53,19 @@ def run_alembic(connection: Connection, revision: str) -> None:
     connection.commit()
 
 
+def downgrade_alembic(connection: Connection, revision: str) -> None:
+    command.downgrade(alembic_config(connection), revision)
+    connection.commit()
+
+
 @pytest.fixture
 def migrate() -> Callable[[Connection, str], None]:
     return run_alembic
+
+
+@pytest.fixture
+def downgrade() -> Callable[[Connection, str], None]:
+    return downgrade_alembic
 
 
 @pytest.fixture
@@ -110,6 +120,8 @@ def committed_item(engine: Engine) -> Iterator[CatalogItem]:
                 id=item.id,
                 item_type="pack",
                 name=item.name,
+                slug=f"race-{item.id.hex[:12]}",
+                plant_slug="basil",
                 plant_species="Basil",
                 seed_count=5,
                 price_cents=2500,

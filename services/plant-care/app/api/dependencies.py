@@ -7,6 +7,7 @@ from app.service.chat import ChatService
 from app.service.diagnosis import DiagnosisService
 from app.service.escalations import EscalationService
 from app.service.journals import JournalService
+from app.service.plants import PlantService
 from app.service.updates import UpdateService
 
 
@@ -28,6 +29,10 @@ def get_escalation_service(request: Request) -> EscalationService:
 
 def get_chat_service(request: Request) -> ChatService:
     return request.app.state.chat_service
+
+
+def get_plant_service(request: Request) -> PlantService:
+    return request.app.state.plant_service
 
 
 def current_user_id(x_user_id: Annotated[str | None, Header()] = None) -> uuid.UUID:

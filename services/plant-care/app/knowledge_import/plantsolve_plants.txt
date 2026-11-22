@@ -1,16 +1,17 @@
-# PlantSolve plant slugs imported into the care-chat knowledge base (one per line).
-lavender
-holy-basil-tulsi-care
-golden-pothos-care
-snake-plant
-zz-plant
-jade-plant
-peace-lily
-aloe-vera
-spider-plant
-monstera-deliciosa
-ficus-lyrata
-boston-fern
-calathea-orbifolia
-cactus
-maranta-prayer-plant-care
+# Plants imported from PlantSolve, one per line: plantsolve-slug | our-slug | Species
+# Our slug and species must equal the plant_slug and plant_species of the catalog item.
+lavender | lavender | Lavender
+holy-basil-tulsi-care | holy-basil-tulsi | Holy Basil (Tulsi)
+golden-pothos-care | golden-pothos | Golden Pothos
+snake-plant | snake-plant | Snake Plant
+zz-plant | zz-plant | ZZ Plant
+jade-plant | jade-plant | Jade Plant
+peace-lily | peace-lily | Peace Lily
+aloe-vera | aloe-vera | Aloe Vera
+spider-plant | spider-plant | Spider Plant
+monstera-deliciosa | monstera-deliciosa | Monstera Deliciosa
+ficus-lyrata | ficus-lyrata | Fiddle Leaf Fig
+boston-fern | boston-fern | Boston Fern
+calathea-orbifolia | calathea-orbifolia | Calathea Orbifolia
+cactus | cactus | Cactus
+maranta-prayer-plant-care | maranta-prayer-plant | Maranta Prayer Plant

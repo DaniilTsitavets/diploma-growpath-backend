@@ -47,6 +47,19 @@ def test_sensor_has_neither_species_nor_seed_count(session: Session):
         ({"plant_species": "x" * 81}, "ck_catalog_items_plant_species"),
         ({"name": ""}, "ck_catalog_items_name_length"),
         ({"name": "x" * 121}, "ck_catalog_items_name_length"),
+        ({"plant_slug": None}, "ck_catalog_items_kind"),
+        (
+            {"item_type": "sensor", "plant_species": None, "seed_count": None},
+            "ck_catalog_items_kind",
+        ),
+        ({"slug": ""}, "ck_catalog_items_slug"),
+        ({"slug": "Upper"}, "ck_catalog_items_slug"),
+        ({"slug": "with space"}, "ck_catalog_items_slug"),
+        ({"slug": "under_score"}, "ck_catalog_items_slug"),
+        ({"slug": "a" * 65}, "ck_catalog_items_slug"),
+        ({"plant_slug": "Upper"}, "ck_catalog_items_plant_slug"),
+        ({"plant_slug": ""}, "ck_catalog_items_plant_slug"),
+        ({"plant_slug": "a" * 65}, "ck_catalog_items_plant_slug"),
     ],
     ids=[
         "pack without seed count",
@@ -62,6 +75,16 @@ def test_sensor_has_neither_species_nor_seed_count(session: Session):
         "species of 81 characters",
         "empty name",
         "name of 121 characters",
+        "pack without plant slug",
+        "sensor with plant slug",
+        "empty slug",
+        "uppercase slug",
+        "slug with a space",
+        "slug with an underscore",
+        "slug of 65 characters",
+        "uppercase plant slug",
+        "empty plant slug",
+        "plant slug of 65 characters",
     ],
 )
 def test_catalog_item_rejects_invalid_values(session: Session, overrides: dict, constraint: str):
@@ -80,9 +103,28 @@ def test_discount_percent_accepts_the_bounds(session: Session, pct: int):
 
 def test_item_names_are_unique(session: Session, item: CatalogItem):
     with violated(session) as violation:
-        session.add(make_item(name=item.name))
+        session.add(make_item(name=item.name, slug="another-slug"))
 
     assert violation.constraint == "uq_catalog_items_name"
+
+
+def test_item_slugs_are_unique(session: Session, item: CatalogItem):
+    with violated(session) as violation:
+        session.add(make_item(name="Another Name", slug=item.slug))
+
+    assert violation.constraint == "uq_catalog_items_slug"
+
+
+def test_packs_of_one_plant_may_share_a_plant_slug(session: Session, item: CatalogItem):
+    session.add(make_item(name="Basil Deluxe", slug="basil-deluxe", plant_slug=item.plant_slug))
+
+    session.flush()
+
+
+def test_slug_accepts_digits_dashes_and_the_length_bound(session: Session):
+    session.add(make_item(slug="a-1-" + "b" * 60, plant_slug="0" * 64))
+
+    session.flush()
 
 
 @pytest.mark.parametrize("label", ["", "x" * 41], ids=["empty label", "label of 41 characters"])

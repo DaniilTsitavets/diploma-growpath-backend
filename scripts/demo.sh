@@ -287,7 +287,8 @@ journal_for_order() {
 load_catalog() {
   gw GET items "$TOKEN"
   expect "GET /items" 200 "$CODE"
-  KIT_ID=$(jq -r '[.[] | select(.first_purchase_discount_pct != null)][0].id' <<<"$BODY")
+  KIT_ID=$(jq -r '[.[] | select(.slug == "golden-pothos")][0].id // empty' <<<"$BODY")
+  [ -n "$KIT_ID" ] || die "the golden-pothos pack is not in the catalog: run the commerce seed"
   PRICIEST_ID=$(jq -r '[.[] | select(.item_type == "pack")] | max_by(.price_cents) | .id' <<<"$BODY")
   jq -r '.[] | "    \(.name): \(.price_cents / 100)" + (if .first_purchase_discount_pct then " (first purchase -\(.first_purchase_discount_pct)%)" else "" end)' <<<"$BODY"
 }

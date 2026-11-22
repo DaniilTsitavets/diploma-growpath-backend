@@ -49,12 +49,14 @@ def catalog(session: Session) -> SqlAlchemyCatalogRepository:
         [
             make_item(
                 name="Mint Pack",
+                slug="mint-pack",
+                plant_slug="mint",
                 plant_species="Mint",
                 labels=[CatalogItemLabel(label="rare"), CatalogItemLabel(label="beginner")],
             ),
             make_item(name="Basil Kit", labels=[CatalogItemLabel(label="beginner")]),
             make_sensor(),
-            make_item(name="Retired Pack", is_active=False),
+            make_item(name="Retired Pack", slug="retired-pack", is_active=False),
         ]
     )
     session.flush()
@@ -77,6 +79,22 @@ def test_list_can_be_filtered_by_label(catalog: SqlAlchemyCatalogRepository):
     assert [e.name for e in catalog.list_active("rare")] == ["Mint Pack"]
     assert [e.name for e in catalog.list_active("beginner")] == ["Basil Kit", "Mint Pack"]
     assert catalog.list_active("unknown") == []
+
+
+def test_active_item_is_found_by_slug_with_its_labels(catalog: SqlAlchemyCatalogRepository):
+    entry = catalog.find_active_by_slug("mint-pack")
+
+    assert (entry.name, entry.slug, entry.plant_slug, entry.labels) == (
+        "Mint Pack",
+        "mint-pack",
+        "mint",
+        ("beginner", "rare"),
+    )
+
+
+def test_inactive_or_unknown_slug_is_not_found(catalog: SqlAlchemyCatalogRepository):
+    assert catalog.find_active_by_slug("retired-pack") is None
+    assert catalog.find_active_by_slug("nothing") is None
 
 
 def test_list_of_an_empty_catalog_is_empty(session: Session):

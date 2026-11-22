@@ -6,7 +6,7 @@ from typing import Self
 from growpath_observability import get_correlation_id
 
 from app.config import Settings
-from app.service.errors import DiscountAlreadyUsed, PaymentFailed, PublishFailed
+from app.service.errors import CatalogUnavailable, DiscountAlreadyUsed, PaymentFailed, PublishFailed
 from app.service.events import OrderPlaced
 from app.service.model import CatalogEntry, Item, NewOrder, OrderData
 
@@ -24,6 +24,8 @@ def make_item(**overrides) -> Item:
         "id": uuid.uuid4(),
         "item_type": "pack",
         "name": "Beginner's Kit",
+        "slug": "beginners-kit",
+        "plant_slug": "basil",
         "plant_species": "Basil",
         "seed_count": 5,
         "price_cents": 2500,
@@ -96,6 +98,7 @@ class FakeOrders:
 class FakeCatalog:
     def __init__(self, *items: Item) -> None:
         self._items = {item.id: item for item in items}
+        self.unavailable = False
 
     def deactivate(self, item_id: uuid.UUID) -> None:
         self._items[item_id] = replace(self._items[item_id], is_active=False)
@@ -107,7 +110,14 @@ class FakeCatalog:
         item = self.get(item_id)
         return item if item is not None and item.is_active else None
 
+    def find_active_by_slug(self, slug: str) -> CatalogEntry | None:
+        if self.unavailable:
+            raise CatalogUnavailable
+        return next((entry for entry in self.list_active() if entry.slug == slug), None)
+
     def list_active(self, label: str | None = None) -> list[CatalogEntry]:
+        if self.unavailable:
+            raise CatalogUnavailable
         entries = [
             item if isinstance(item, CatalogEntry) else CatalogEntry(**vars(item), labels=())
             for item in self._items.values()

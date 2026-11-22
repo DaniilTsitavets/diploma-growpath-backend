@@ -5,7 +5,8 @@ info:
   description: Plant journals and their updates, AI diagnosis, escalation to an expert and the care chat.
     Consumes `order.placed` and `ticket.*`, publishes `escalation.requested`. Identity arrives in the
     `X-User-Id` header, which the API gateway sets from the verified JWT. The gateway exposes `/v1/journals/**`
-    and `/v1/updates/**`; the `internal` tag marks operations it does not expose.
+    and `/v1/updates/**`, and `/v1/plants/{slug}` without authorization; the `internal` tag marks operations
+    it does not expose.
 paths:
   /health/live:
     get:
@@ -793,6 +794,61 @@ paths:
               schema:
                 $ref: '#/components/schemas/Problem'
       x-gateway: public
+  /v1/plants/{slug}:
+    get:
+      tags:
+      - plants
+      summary: Get Plant
+      description: The public plant page; needs no sign-in.
+      operationId: get_plant_v1_plants__slug__get
+      parameters:
+      - name: slug
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Slug
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PlantProfileResponse'
+          headers:
+            Cache-Control:
+              schema:
+                type: string
+        '404':
+          description: No such plant
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+        '503':
+          description: The database is unavailable; retry after the given time
+          headers:
+            Retry-After:
+              description: Seconds to wait before retrying
+              schema:
+                type: integer
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+        '422':
+          description: Problem details
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+        default:
+          description: Problem details
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+      x-gateway: public
 components:
   schemas:
     CandidateResponse:
@@ -1275,6 +1331,130 @@ components:
       - photos
       - missing_required
       title: PhotosResponse
+    PlantProfileResponse:
+      properties:
+        slug:
+          type: string
+          title: Slug
+        species:
+          type: string
+          title: Species
+        sources:
+          items:
+            $ref: '#/components/schemas/PlantSourceResponse'
+          type: array
+          title: Sources
+        updated_at:
+          type: string
+          format: date
+          title: Updated At
+        common_name:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Common Name
+        scientific_name:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Scientific Name
+        family:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Family
+        difficulty:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Difficulty
+        summary:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Summary
+        quick_answer:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Quick Answer
+        key_takeaways:
+          anyOf:
+          - items:
+              type: string
+            type: array
+          - type: 'null'
+          title: Key Takeaways
+        light:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Light
+        sunlight_hours:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Sunlight Hours
+        watering:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Watering
+        placement:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Placement
+        soil:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Soil
+        humidity:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Humidity
+        temperature:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Temperature
+        pruning:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Pruning
+        toxicity:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Toxicity
+      type: object
+      required:
+      - slug
+      - species
+      - sources
+      - updated_at
+      title: PlantProfileResponse
+      description: Absent facts are left out of the JSON, not sent as null.
+    PlantSourceResponse:
+      properties:
+        name:
+          type: string
+          title: Name
+        url:
+          type: string
+          title: Url
+        license:
+          type: string
+          title: License
+      type: object
+      required:
+      - name
+      - url
+      - license
+      title: PlantSourceResponse
     PlantingRequest:
       properties:
         planted_on:

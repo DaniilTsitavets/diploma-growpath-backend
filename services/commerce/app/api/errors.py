@@ -8,22 +8,35 @@ from fastapi.responses import JSONResponse
 from growpath_observability import CORRELATION_HEADER, get_correlation_id
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
-from app.service.errors import IdempotencyKeyReused, ItemNotFound, PaymentFailed
+from app.service.errors import (
+    CatalogUnavailable,
+    IdempotencyKeyReused,
+    ItemNotFound,
+    ItemSlugNotFound,
+    PaymentFailed,
+)
 
 PROBLEM_JSON = "application/problem+json"
 logger = logging.getLogger(__name__)
 
 
-def problem_response(status: int, detail: str | None = None, **extra: object) -> JSONResponse:
+def problem_response(
+    status: int,
+    detail: str | None = None,
+    *,
+    title: str | None = None,
+    headers: dict[str, str] | None = None,
+    **extra: object,
+) -> JSONResponse:
     body = {
         "type": "about:blank",
-        "title": HTTPStatus(status).phrase,
+        "title": title or HTTPStatus(status).phrase,
         "status": status,
         "detail": detail,
         "correlation_id": get_correlation_id(),
         **extra,
     }
-    return JSONResponse(body, status_code=status, media_type=PROBLEM_JSON)
+    return JSONResponse(body, status_code=status, headers=headers, media_type=PROBLEM_JSON)
 
 
 async def handle_http_exception(_: Request, exc: StarletteHTTPException) -> JSONResponse:
@@ -54,8 +67,25 @@ def domain_error_handler(status: int, detail: str | None = None):
     return handle
 
 
-def register_error_handlers(app: FastAPI) -> None:
+def unavailable_handler(retry_after_seconds: int):
+    async def handle(_: Request, exc: Exception) -> JSONResponse:
+        return problem_response(
+            503,
+            "The catalog is temporarily unavailable, retry shortly",
+            headers={"Retry-After": str(retry_after_seconds)},
+        )
+
+    return handle
+
+
+async def handle_item_slug_not_found(_: Request, exc: Exception) -> JSONResponse:
+    return problem_response(404, "No active item has this slug", title="Item not found")
+
+
+def register_error_handlers(app: FastAPI, retry_after_seconds: int) -> None:
     app.add_exception_handler(ItemNotFound, domain_error_handler(404))
+    app.add_exception_handler(ItemSlugNotFound, handle_item_slug_not_found)
+    app.add_exception_handler(CatalogUnavailable, unavailable_handler(retry_after_seconds))
     app.add_exception_handler(
         IdempotencyKeyReused,
         domain_error_handler(422, "Idempotency-Key was already used for a different item"),

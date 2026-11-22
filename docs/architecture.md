@@ -166,6 +166,9 @@ REST over HTTP, versioned under `/v1`, errors as RFC 7807 `application/problem+j
 - **Service to service:** a single edge, `plant-care` to `entitlement` (reserve, commit and release AI quota;
   reserve and release expert quota; read the tier). The call chain is gateway, plant-care, entitlement: two
   services, below the limit of three. `entitlement` calls nobody.
+- **No commerce-to-plant-care call.** The plant page reads the pack from `commerce` (`GET /v1/items/{slug}`) and
+  the plant profile from `plant-care` (`GET /v1/plants/{slug}`) as two parallel public calls, so ordering keeps
+  working when plant-care is down. Both routes are cacheable (`Cache-Control` `public`, 60 s and 300 s).
 - The client is [`services/plant-care/app/quota.py`](../services/plant-care/app/quota.py). Every call carries
   the `X-Correlation-Id` and is bounded by timeouts, a retry with jitter and a circuit breaker
   (section 7). Every quota call is safe to repeat: reserve is idempotent by reservation id, commit and
@@ -362,9 +365,9 @@ expert-consultation), that the SQS queues answer. commerce only publishes, so it
 
 ## 8. Security and identity
 
-- **Authentication at the gateway.** Every route except the public catalog (`GET /v1/items`) uses a Cognito user pool authorizer (`COGNITO_USER_POOLS`).
+- **Authentication at the gateway.** Every route except the public ones (`GET /v1/items`, `GET /v1/items/{slug}`, `GET /v1/plants/{slug}`) uses a Cognito user pool authorizer (`COGNITO_USER_POOLS`).
   A request without a token or with a garbage token gets `401` from the gateway and never reaches a service.
-  The catalog has no authorizer so a guest can browse before signing up; it reads no identity header.
+  The public routes have no authorizer so a guest can browse the catalog and a plant page before signing up; they read no identity header.
 - **Identity headers are derived, not trusted.** On every authorized route the gateway maps verified claims onto request headers:
   `X-User-Id` from `sub`, `X-User-Groups` from `cognito:groups`, `X-Correlation-Id` from `$context.requestId`
   (`IDENTITY_HEADERS` in `01-provision.sh`). A mapped header replaces whatever the client sent. The demo shows a user
@@ -391,7 +394,8 @@ The care-chat knowledge base is filled by a separate one-shot command, `python -
 (compose service `kb-import`, profile `import`, run with `make import-kb`), built from the plant-care image.
 It reads a list of 15 plants, fetches the open PlantSolve data (`https://www.plantsolve.com/api/v1/`, static
 JSON, licence CC BY 4.0), converts it and writes `kb_documents` and `kb_sections` of the plant-care database
-through the plant-care repository; the table rows keep the licence and the import date. It is idempotent
+through the plant-care repository; the table rows keep the licence and the import date. The same run fills
+the plant profiles served by `GET /v1/plants/{slug}` (the plants file maps the PlantSolve slug, our slug and the species). It is idempotent
 (a re-run changes nothing unless the source changed) and never deletes documents that left the list; it only
 reports them. plant-care has no runtime dependency on the import or on PlantSolve: an empty knowledge base is a
 normal state and does not affect readiness. Cited sources carry the PlantSolve record URL so the client can

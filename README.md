@@ -45,15 +45,19 @@ Each service has its own PostgreSQL 16 container (`commerce-db`, `entitlement-db
 `expert-db`; not published to the host). The service ports are for health checks and debugging.
 
 The product API is reached **through the gateway** (LocalStack API Gateway, REST API `growpath-gateway`,
-stage `v1`), always with a Cognito ID token in the `Authorization` header:
+stage `v1`), with a Cognito ID token in the `Authorization` header (three read-only routes are public, see below):
 
 ```
 http://localhost:4566/restapis/<api-id>/v1/_user_request_/v1/<path>
 ```
 
-Routes: `GET /items`, `POST /orders` (commerce); `/journals/...`, `/updates/{id}/...` (plant-care);
+Public routes (no token): `GET /items`, `GET /items/{slug}` (commerce) and `GET /plants/{slug}` (plant-care).
+Everything else is behind Cognito: `POST /orders` (commerce); `/journals/...`, `/updates/{id}/...` (plant-care);
 `GET /me/entitlement` (entitlement); `/expert/tickets/...` (expert-consultation). The entitlement quota API
-is internal and has no route. Test users (LocalStack only): `check@growpath.test` and the expert
+is internal and has no route. The demo catalog is 15 plant packs (one per PlantSolve plant, `<Species> Starter Pack`)
+and two sensors; every item has a `slug`, and `plant_slug` (equal to `slug` for a pack, `null` for a sensor)
+links a pack to its plant profile. The plant page calls `GET /items/{slug}` and `GET /plants/{slug}` in parallel and
+renders each block on its own, so an order can be placed even when plant-care is down. Test users (LocalStack only): `check@growpath.test` and the expert
 `expert@growpath.test`; see `scripts/verify-localstack.sh` and `infra/localstack/init/ready.d/01-provision.sh`.
 
 ### Model provider
@@ -75,7 +79,10 @@ promises (see below).
 The care chat in plant-care answers from a knowledge base held in the plant-care database
 (`kb_documents`, `kb_sections`). Its content is open data from [PlantSolve](https://www.plantsolve.com/):
 15 plants (the list is `services/plant-care/app/knowledge_import/plantsolve_plants.txt`) and 5 problem
-records, fetched from the static JSON API `https://www.plantsolve.com/api/v1/`.
+records, fetched from the static JSON API `https://www.plantsolve.com/api/v1/`. The same import fills the plant
+profiles served by the public `GET /v1/plants/{slug}`; the plants file maps the PlantSolve slug, our slug and the
+species, and the species must match `plant_species` of the catalog pack. Until `make import-kb` has run, the
+endpoint answers `404`.
 
 **Licence and attribution.** PlantSolve `/api/v1/*` is licensed
 [CC BY 4.0](https://www.plantsolve.com/terms/) (section 4), which requires visible attribution and a link
@@ -83,7 +90,8 @@ to the record. Each source cited in a chat response has a `document_title` endin
 `source_url` pointing at the PlantSolve page of that plant. Problem records have no page of their own on
 the site, so their `source_url` is the PlantSolve dataset page (`/dataset/`). The frontend shows "PlantSolve, CC BY 4.0" with a
 link to `source_url` for URLs on `www.plantsolve.com`. PlantSolve images and all non-API content (site
-design, code, calculators) are not open and are not used.
+design, code, calculators) are not open and are not used. The plant profile response carries `sources`
+(`name`, `url`, `license`: PlantSolve, the link to the record, CC BY 4.0), and the frontend shows that link.
 
 **Run it locally.** The import is a one-shot command, separate from `make up`, and needs internet access
 from the container:
@@ -130,7 +138,7 @@ make contracts     # regenerate contracts/openapi/*.yaml from the apps (commit t
 | Health endpoints | Done | `/health/live` and `/health/ready` in every service (`app/api/health.py`); ready checks the database and the consumed SQS queues | `make verify` (section 9), demo act 0 |
 | Logs with correlation ID | Done | JSON logs from [`libs/observability`](libs/observability); gateway `$context.requestId` becomes `X-Correlation-Id`, forwarded in HTTP calls and SNS attributes | Demo act 4 prints one id across three services; or `docker compose logs` and `jq` ([how](docs/architecture.md#9-observability)) |
 | API Gateway: routing | Done | [`infra/localstack/init/ready.d/01-provision.sh`](infra/localstack/init/ready.d/01-provision.sh) | `make verify` (section 4) |
-| API Gateway: authorization | Done | Cognito JWT authorizer on every route except the public catalog (`GET /items`); identity headers set from claims, overwriting client values; experts group check in expert-consultation | `make verify` (sections 3 and 5), demo act 1: `401` without a token (the catalog is `200`), forged `X-User-Groups` gets `403` |
+| API Gateway: authorization | Done | Cognito JWT authorizer on every route except the public read-only ones (`GET /items`, `GET /items/{slug}`, `GET /plants/{slug}`); identity headers set from claims, overwriting client values; experts group check in expert-consultation | `make verify` (sections 3 and 5), demo act 1: `401` without a token (the catalog is `200`), forged `X-User-Groups` gets `403` |
 | API Gateway: rate limit | Declared, not demonstrable locally | Stage throttle (2 rps, burst 2) in `01-provision.sh`; LocalStack does not enforce it, and there is no service-side `429` yet | Demo act 1 shows the declared setting and that a burst still returns `200`; see Known limitations |
 | Message broker | Done | SNS topic at the publisher, SQS queue per subscriber, five events: `order.placed`, `escalation.requested`, `ticket.created`, `ticket.answered`, `ticket.cancelled` ([table](docs/architecture.md#5-asynchronous-interaction)) | Demo acts 2, 4, 5b |
 | Dead-letter queues, idempotent consumers, at-least-once publishing | Done | `maxReceiveCount = 2` DLQ per queue; idempotent handlers; published-at flag plus repeater in commerce, plant-care and expert-consultation instead of an outbox table | `make verify` (section 7), demo acts 5b and 5c |

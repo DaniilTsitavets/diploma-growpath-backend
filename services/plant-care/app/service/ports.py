@@ -21,6 +21,7 @@ from app.service.model import (
     PhotoKind,
     UpdateRecord,
 )
+from app.service.plant_profile_model import PlantProfile
 
 
 class JournalRepository(Protocol):
@@ -188,6 +189,21 @@ class KnowledgeRepository(Protocol):
         ...
 
 
+class PlantProfileRepository(Protocol):
+    def sync_profile(self, profile: PlantProfile) -> SyncResult:
+        """Create the profile, replace it when its content changed, or do nothing.
+
+        `imported_on` is stored only when the profile is created or replaced.
+        """
+        ...
+
+    def content_hashes(self, slugs: Collection[str]) -> dict[str, str]:
+        """The stored content hash of each of the slugs that exist."""
+        ...
+
+    def get(self, slug: str) -> PlantProfile | None: ...
+
+
 class ChatTurnRepository(Protocol):
     def add(self, turn: NewChatTurn) -> bool:
         """Store the turn with its citations; False when its id exists (a retried request)."""
@@ -211,6 +227,7 @@ class UnitOfWork(Protocol):
     escalation_delivery: EscalationDeliveryRepository
     ticket_events: TicketEventRepository
     knowledge: KnowledgeRepository
+    plant_profiles: PlantProfileRepository
     chat_turns: ChatTurnRepository
 
     def __enter__(self) -> Self: ...
