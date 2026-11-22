@@ -3,7 +3,7 @@ UV ?= uv
 SERVICES := commerce entitlement plant-care expert-consultation
 COVERAGE_GATE := --cov-fail-under=70
 
-.PHONY: up down verify demo client-env deploy-frontend logs sync lock lint contracts test test-unit test-db-up test-db-down
+.PHONY: up down import-kb verify demo client-env deploy-frontend logs sync lock lint contracts test test-unit test-db-up test-db-down
 
 .env:
 	cp .env.example .env
@@ -14,6 +14,9 @@ up: .env
 
 down:
 	$(COMPOSE) down
+
+import-kb:
+	$(COMPOSE) --profile import run --rm kb-import $(ARGS)
 
 verify:
 	./scripts/verify-localstack.sh

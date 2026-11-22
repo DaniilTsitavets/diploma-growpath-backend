@@ -70,6 +70,43 @@ The demo prints which provider is active. With a live provider the diagnosis out
 and on network conditions; a failure shows as the `degraded` fallback, which is also what the architecture
 promises (see below).
 
+### Care-chat knowledge base
+
+The care chat in plant-care answers from a knowledge base held in the plant-care database
+(`kb_documents`, `kb_sections`). Its content is open data from [PlantSolve](https://www.plantsolve.com/):
+15 plants (the list is `services/plant-care/app/knowledge_import/plantsolve_plants.txt`) and 5 problem
+records, fetched from the static JSON API `https://www.plantsolve.com/api/v1/`.
+
+**Licence and attribution.** PlantSolve `/api/v1/*` is licensed
+[CC BY 4.0](https://www.plantsolve.com/terms/) (section 4), which requires visible attribution and a link
+to the record. Each source cited in a chat response has a `document_title` ending with `(PlantSolve)` and a
+`source_url` pointing at the PlantSolve page of that plant. Problem records have no page of their own on
+the site, so their `source_url` is the PlantSolve dataset page (`/dataset/`). The frontend shows "PlantSolve, CC BY 4.0" with a
+link to `source_url` for URLs on `www.plantsolve.com`. PlantSolve images and all non-API content (site
+design, code, calculators) are not open and are not used.
+
+**Run it locally.** The import is a one-shot command, separate from `make up`, and needs internet access
+from the container:
+
+```bash
+make up                          # the stack must be healthy first (migrations done)
+make import-kb                   # fetch, convert and store
+make import-kb ARGS=--dry-run    # show what would change, write nothing
+```
+
+It runs `python -m app.knowledge_import` in a `kb-import` container (compose profile `import`) built from
+the plant-care image, against the plant-care database only. It is idempotent: a re-run changes nothing
+unless the source changed, and documents that are no longer in the list are reported, never deleted.
+
+An empty knowledge base is a normal state, not an error: the chat answers that the topic is not in the
+knowledge base, and the question still spends one AI quota unit. plant-care never waits for the import.
+
+**Running it in Kubernetes.** Use the same image and command as a Job: once after install (for example a
+Helm post-install hook or an Argo CD PostSync hook), and as a CronJob for refreshes (for example weekly).
+The service never waits for either, and an empty knowledge base does not fail readiness. No Kubernetes
+manifests are in this repository (EKS is out of scope here); this paragraph describes how the same
+container would be run.
+
 ### Tests
 
 ```bash

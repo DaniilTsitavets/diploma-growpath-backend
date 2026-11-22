@@ -130,6 +130,26 @@ services:
       timeout: 3s
       retries: 10
 
+  # One-shot import of the care-chat knowledge base (PlantSolve open data, CC BY 4.0). Not part of
+  # `make up`; run it with `make import-kb`. It needs internet access and only the plant-care database.
+  kb-import:
+    profiles: ["import"]
+    build:
+      context: .
+      dockerfile: services/plant-care/Dockerfile
+    # An entrypoint, not a command: `compose run kb-import --dry-run` appends to an entrypoint
+    # but would replace a command.
+    entrypoint: ["python", "-m", "app.knowledge_import"]
+    restart: "no"
+    environment:
+      PLANT_CARE_DATABASE_URL: postgresql+psycopg://plant_care:${PLANT_CARE_DB_PASSWORD:?set PLANT_CARE_DB_PASSWORD}@plant-care-db:5432/plant_care
+      PLANT_CARE_LOG_LEVEL: ${PLANT_CARE_LOG_LEVEL:-INFO}
+    depends_on:
+      plant-care-db:
+        condition: service_healthy
+      plant-care:
+        condition: service_healthy
+
   expert-consultation:
     build:
       context: .

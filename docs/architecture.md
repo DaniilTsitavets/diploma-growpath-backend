@@ -384,6 +384,18 @@ expert-consultation), that the SQS queues answer. commerce only publishes, so it
   enforce it, so a `429` cannot be demonstrated locally; on real API Gateway the same configuration returns `429`. There is no
   service-side `429` today. See Known limitations in the README.
 
+### Care-chat knowledge base ingestion
+
+The care-chat knowledge base is filled by a separate one-shot command, `python -m app.knowledge_import`
+(compose service `kb-import`, profile `import`, run with `make import-kb`), built from the plant-care image.
+It reads a list of 15 plants, fetches the open PlantSolve data (`https://www.plantsolve.com/api/v1/`, static
+JSON, licence CC BY 4.0), converts it and writes `kb_documents` and `kb_sections` of the plant-care database
+through the plant-care repository; the table rows keep the licence and the import date. It is idempotent
+(a re-run changes nothing unless the source changed) and never deletes documents that left the list; it only
+reports them. plant-care has no runtime dependency on the import or on PlantSolve: an empty knowledge base is a
+normal state and does not affect readiness. Cited sources carry the PlantSolve record URL so the client can
+show the attribution the licence requires.
+
 ## 9. Observability
 
 - **Logs:** JSON, one object per line on stdout, from the shared formatter
