@@ -3,7 +3,12 @@
 set -euo pipefail
 
 POOL_NAME=growpath
-CLIENT_NAME=growpath-client
+# Fixed ids (LocalStack `_custom_id_`), so a client's .env.local and the URLs survive a LocalStack
+# restart. On AWS the ids are assigned; these values are only for the local stack.
+API_ID=growpath
+POOL_ID=us-east-1_growpath
+CLIENT_ID=growpathclient
+CDN_ID=growpathspa  # lowercase: LocalStack looks the distribution up by the lowercase host
 TEST_USER=check@growpath.test
 TEST_PASSWORD='Passw0rd!Check'
 EXPERT_USER=expert@growpath.test
@@ -21,9 +26,10 @@ BURST_LIMIT=2
 CLIENT_ORIGINS='["http://127.0.0.1:5173","http://127.0.0.1:4173","http://localhost:5173","http://localhost:4173","http://*.cloudfront.localhost.localstack.cloud:4566"]'
 FRONTEND_BUCKET=growpath-frontend
 
-pool_id=$(awslocal cognito-idp create-user-pool --pool-name "$POOL_NAME" --query UserPool.Id --output text)
+pool_id=$(awslocal cognito-idp create-user-pool --pool-name "$POOL_NAME" --user-pool-tags "_custom_id_=${POOL_ID}" \
+  --query UserPool.Id --output text)
 pool_arn="arn:aws:cognito-idp:${AWS_DEFAULT_REGION:-us-east-1}:000000000000:userpool/${pool_id}"
-client_id=$(awslocal cognito-idp create-user-pool-client --user-pool-id "$pool_id" --client-name "$CLIENT_NAME" \
+client_id=$(awslocal cognito-idp create-user-pool-client --user-pool-id "$pool_id" --client-name "_custom_id_:${CLIENT_ID}" \
   --explicit-auth-flows ALLOW_USER_PASSWORD_AUTH ALLOW_REFRESH_TOKEN_AUTH --query UserPoolClient.ClientId --output text)
 awslocal cognito-idp admin-create-user --user-pool-id "$pool_id" --username "$TEST_USER" \
   --message-action SUPPRESS >/dev/null
@@ -42,7 +48,7 @@ done
 awslocal cognito-idp admin-add-user-to-group --user-pool-id "$pool_id" --username "$EXPERT_USER" \
   --group-name "$EXPERT_GROUP"
 
-api_id=$(awslocal apigateway create-rest-api --name growpath-gateway --query id --output text)
+api_id=$(awslocal apigateway create-rest-api --name growpath-gateway --tags "_custom_id_=${API_ID}" --query id --output text)
 root_id=$(awslocal apigateway get-resources --rest-api-id "$api_id" --query 'items[0].id' --output text)
 v1_id=$(awslocal apigateway create-resource --rest-api-id "$api_id" --parent-id "$root_id" --path-part v1 --query id --output text)
 auth_id=$(awslocal apigateway create-authorizer --rest-api-id "$api_id" --name cognito --type COGNITO_USER_POOLS \
@@ -181,7 +187,9 @@ awslocal s3api put-bucket-policy --bucket growpath-media --policy '{"Version":"2
 # resolves to LocalStack itself; in AWS it is the execute-api domain with the stage as origin path.
 awslocal s3api create-bucket --bucket "$FRONTEND_BUCKET" >/dev/null
 distribution=none
-if ! distribution=$(awslocal cloudfront create-distribution --distribution-config "{
+if ! distribution=$(awslocal cloudfront create-distribution-with-tags --distribution-config-with-tags "{
+ \"Tags\": {\"Items\": [{\"Key\": \"_custom_id_\", \"Value\": \"${CDN_ID}\"}]},
+ \"DistributionConfig\": {
   \"CallerReference\": \"growpath-${api_id}\",
   \"Comment\": \"growpath spa and api\",
   \"Enabled\": true,
@@ -203,6 +211,7 @@ if ! distribution=$(awslocal cloudfront create-distribution --distribution-confi
   \"CustomErrorResponses\": {\"Quantity\": 2, \"Items\": [
     {\"ErrorCode\": 403, \"ResponsePagePath\": \"/index.html\", \"ResponseCode\": \"200\", \"ErrorCachingMinTTL\": 0},
     {\"ErrorCode\": 404, \"ResponsePagePath\": \"/index.html\", \"ResponseCode\": \"200\", \"ErrorCachingMinTTL\": 0}]}
+ }
 }" --query 'Distribution.[Id,DomainName]' --output text); then
   echo "warning: CloudFront distribution not created; the API and the other services are unaffected" >&2
   distribution=none
