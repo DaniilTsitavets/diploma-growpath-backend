@@ -1,0 +1,16 @@
+# PlantSolve plant slugs imported into the care-chat knowledge base (one per line).
+lavender
+holy-basil-tulsi-care
+golden-pothos-care
+snake-plant
+zz-plant
+jade-plant
+peace-lily
+aloe-vera
+spider-plant
+monstera-deliciosa
+ficus-lyrata
+boston-fern
+calathea-orbifolia
+cactus
+maranta-prayer-plant-care

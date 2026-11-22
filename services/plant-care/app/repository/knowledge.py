@@ -1,4 +1,5 @@
 import uuid
+from collections.abc import Collection
 
 from sqlalchemy import (
     Boolean,
@@ -75,6 +76,22 @@ class SqlAlchemyKnowledgeRepository:
         )
         self._insert_sections(document)
         return SyncResult.UPDATED
+
+    def slugs_with_prefix(self, prefix: str) -> list[str]:
+        rows = self._session.execute(
+            select(KbDocumentModel.slug)
+            .where(KbDocumentModel.slug.startswith(prefix, autoescape=True))
+            .order_by(KbDocumentModel.slug)
+        )
+        return list(rows.scalars())
+
+    def content_hashes(self, slugs: Collection[str]) -> dict[str, str]:
+        rows = self._session.execute(
+            select(KbDocumentModel.slug, KbDocumentModel.content_sha256).where(
+                KbDocumentModel.slug.in_(slugs)
+            )
+        )
+        return {slug: content_sha256 for slug, content_sha256 in rows}
 
     def search(self, question: str, species: str, limit: int) -> list[RetrievedSection]:
         """Sections matching any word of the question, best first; topped up from the species' own.

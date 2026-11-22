@@ -1,0 +1,12 @@
+[
+  {
+    "slug": "overwatering",
+    "name": "Overwatering",
+    "symptom": "Yellow leaves, soft stems, fungus gnats, or soil that stays wet for days."
+  },
+  {
+    "slug": "root-rot",
+    "name": "Root rot",
+    "symptom": "Mushy roots, sour soil smell, collapsing foliage, or a plant that wilts while wet."
+  }
+]
