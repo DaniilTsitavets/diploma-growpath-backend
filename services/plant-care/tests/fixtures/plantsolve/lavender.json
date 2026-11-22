@@ -1,0 +1,200 @@
+{
+  "schemaVersion": "2.0.0",
+  "id": "plant-lavender",
+  "entityType": "plant",
+  "status": "published",
+  "slug": "lavender",
+  "seoTitle": "Lavender Indoor Guide: Soil, Pruning & Fragrant Bloom Tips",
+  "metaDescription": "Lavender needs sandy soil and soak-and-dry watering to thrive indoors.",
+  "featuredImage": "/assets/images/lavender-og.webp",
+  "schemaType": ["Taxon", "Article"],
+  "taxonomyTags": ["herbs", "outdoor-plants"],
+  "references": [
+    {
+      "title": "Growing Lavender - University of Maryland Extension",
+      "url": "https://extension.umd.edu/resource/growing-lavender",
+      "doi": ""
+    },
+    {
+      "title": "Lavandula - Royal Horticultural Society",
+      "url": "https://www.rhs.org.uk/plants/lavandula",
+      "doi": ""
+    }
+  ],
+  "taxonomy": {
+    "sciName": "Lavandula angustifolia",
+    "family": "Lamiaceae",
+    "origin": "Mediterranean Region",
+    "type": "Perennial Herb",
+    "nativeClimate": "Warm, dry summers and mild winters",
+    "commonUses": ["Culinary", "Aromatherapy"]
+  },
+  "care": {
+    "difficulty": "moderate",
+    "placement": "Outdoor full sun (Requires excellent airflow)",
+    "watering": "Low: Let the soil dry out entirely between waterings. Highly susceptible to overwatering.",
+    "humidity": "low",
+    "soil": "Sandy, gravelly, well-draining soil. It thrives in poor, rocky conditions.",
+    "pruning": "Prune back by about one-third after flowering to keep it compact. Never cut into old, dead wood.",
+    "toxicity": "toxic to pets",
+    "toxicityNote": "Lavender contains small amounts of linalool, which are mildly toxic to dogs and cats.",
+    "bestFor": "Gardeners with sunny, dry yards looking for a low-maintenance, fragrant perennial."
+  },
+  "vastu": {
+    "enabled": true,
+    "directions": ["south"],
+    "rooms": ["bedroom"],
+    "notes": "In modern Vastu, lavender is famous for its calming properties.",
+    "sourceUrl": "https://www.rhs.org.uk/plants/lavandula"
+  },
+  "growthCharacteristics": {
+    "growthRate": "moderate",
+    "matureHeight": "1-3 feet (depending on variety)",
+    "lifeCycle": "Perennial"
+  },
+  "parameters": {
+    "temperature": {
+      "recommended": "65-85°F (18-29°C)",
+      "survivable": "10-95°F (-12-35°C) depending on species"
+    },
+    "humidity": {
+      "recommended": "20-40%",
+      "survivable": "10-60%"
+    },
+    "soilPH": {
+      "recommended": "6.5-8.0 (Prefers slightly alkaline)",
+      "survivable": "6.0-8.5"
+    }
+  },
+  "lighting": {
+    "description": "Requires intense, direct sunlight to produce its signature oils and flowers.",
+    "sunlightHours": "6-8+ hours of direct sunlight daily",
+    "intensity": "high",
+    "indoorWindow": "south-facing (only if outdoors is impossible)",
+    "shadeTolerance": "very low"
+  },
+  "nutrients": {
+    "nitrogenDemand": "very low",
+    "phosphateDemand": "low",
+    "potassiumDemand": "low",
+    "micronutrientNotes": "Lavender actually prefers poor soil. Too much fertilizer leads to floppy, weak growth and fewer flowers.",
+    "fertilizerFrequency": "Do not fertilize. A light top-dressing of compost in the spring is more than enough.",
+    "organicOptions": "A handful of crushed eggshells can help boost the soil's alkalinity."
+  },
+  "relationships": [
+    {
+      "target": "root-rot",
+      "type": "vulnerability",
+      "strength": 10,
+      "notes": "Lavender's worst enemy is wet feet."
+    }
+  ],
+  "calculatorReferences": ["plant-watering-calculator"],
+  "faq": [
+    {
+      "question": "Is lavender toxic to dogs or cats?",
+      "answer": "Lavender contains small amounts of linalool, which is mildly toxic to dogs, cats, and horses if eaten in large quantities."
+    },
+    {
+      "question": "How often should I water my outdoor lavender?",
+      "answer": "Once established, almost never. Lavender is incredibly drought-tolerant. Only water during extended dry spells."
+    }
+  ],
+  "shortDesc": "A hardy, aromatic perennial herb prized for its purple flowers and soothing fragrance.",
+  "content": "<h2>Overview</h2><p>If there's one herb that truly transforms a garden, it's lavender.</p>",
+  "quickAnswer": "Lavender needs three things to thrive: full blazing sun, gritty fast-draining soil, and very little water.",
+  "ogImage": "/assets/images/lavender-og.webp",
+  "ogImageAlt": "A vibrant field of blooming purple lavender flowers under a sunny sky",
+  "heroImage": "/assets/images/lavender-og.webp",
+  "heroImageAlt": "Close up of healthy lavender spikes blooming in a sunny herb garden",
+  "featuredImageAlt": "Close up of healthy lavender spikes blooming in a sunny herb garden",
+  "category": "Herbs & Outdoor Plants",
+  "publishedAt": "2026-05-30",
+  "updatedAt": "2026-07-20",
+  "author": "PlantSolve Editorial Team",
+  "troubleshooting": [
+    {
+      "symptom": "Plant is turning brown, yellow, and mushy from the bottom up",
+      "diagnosis": "Root rot due to overwatering or heavy clay soil",
+      "treatment": "Stop watering immediately. If in a pot, repot into dry, sandy soil.",
+      "prevention": "Maintain optimal care conditions.",
+      "confidence": 0.9,
+      "evidence": []
+    },
+    {
+      "symptom": "Plant is splitting open in the middle and looks woody",
+      "diagnosis": "Lack of annual pruning",
+      "treatment": "Start pruning the green tips regularly to encourage bushiness, but do not cut into the dead wood.",
+      "prevention": "Maintain optimal care conditions.",
+      "confidence": 0.9,
+      "evidence": []
+    }
+  ],
+  "glossaryTerms": [
+    {
+      "term": "Woody base",
+      "definition": "The thick, hard, brown stems that develop at the base of aging herbs."
+    }
+  ],
+  "h1": "Lavender Care Guide: Grow Fragrant Lavandula Indoors and Outdoors",
+  "breadcrumbName": "Lavender Care Guide",
+  "relatedEntitySlugs": ["ultimate-lavender-growing-guide", "sunlight"],
+  "expertInsights": [
+    {
+      "type": "mistake",
+      "title": "Biggest Owner Mistake",
+      "content": "Overwatering and using standard indoor potting mix."
+    }
+  ],
+  "searchIntents": [
+    {
+      "text": "growing lavender",
+      "type": "alias",
+      "source": "bing",
+      "approved": true
+    }
+  ],
+  "commonName": "Lavender",
+  "aliases": ["how to care for Lavender", "Lavender guide"],
+  "summary": "Lavandula angustifolia is an aromatic perennial herb that thrives in full sun, lean alkaline soils, and dry root conditions.",
+  "keyTakeaways": [
+    "Plant in gritty, lean, well-draining alkaline soil within porous terracotta containers.",
+    "Provide at least 6 to 8 hours of direct, unfiltered sunlight daily."
+  ],
+  "confidenceLevel": "medium",
+  "readingTime": 10,
+  "lastReviewed": "2026-07-27",
+  "plantHero": {
+    "plantType": "Perennial Herb",
+    "difficulty": "intermediate",
+    "light": "Full sun",
+    "water": "Let the soil dry out entirely between waterings.",
+    "petSafety": "toxic"
+  },
+  "geo": {
+    "targetAudience": ["US"],
+    "unitSystems": ["metric"]
+  },
+  "structuredData": {
+    "suppressHowTo": true,
+    "aboutEntities": ["watering"]
+  },
+  "canonicalUrl": "https://www.plantsolve.com/plants/lavender/",
+  "sections": [
+    {
+      "id": "watering",
+      "content": "Water Lavender only when the top several inches of soil are dry to the touch."
+    }
+  ],
+  "petSafe": {
+    "cat": false,
+    "dog": false,
+    "sources": ["https://www.aspca.org/pet-care/aspca-poison-control/toxic-and-non-toxic-plants/lavender"]
+  },
+  "citation": {
+    "source": "PlantSolve",
+    "canonicalUrl": "https://www.plantsolve.com/plants/lavender/",
+    "lastReviewed": "2026-07-27",
+    "license": "CC BY 4.0"
+  }
+}

@@ -1,0 +1,10 @@
+{
+  "id": "problem-overwatering",
+  "name": "Overwatering",
+  "slug": "overwatering",
+  "symptom": "Yellow leaves, soft stems, fungus gnats, or soil that stays wet for days.",
+  "fix": "Check drainage, let the root zone breathe, and recalculate watering by pot size and light.",
+  "plants": ["african-violet", "aglaonema-red-siam"],
+  "blogs": ["how-long-indoor-plants-survive-without-water", "broken-plant-stem-triage"],
+  "calculators": ["watering"]
+}

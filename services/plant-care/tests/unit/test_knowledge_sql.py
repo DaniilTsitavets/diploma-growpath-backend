@@ -66,6 +66,7 @@ def test_constraints_carry_the_names_of_the_design():
     assert "CONSTRAINT pk_kb_documents PRIMARY KEY (id)" in ddl(KbDocumentModel)
     assert "CONSTRAINT uq_kb_documents_slug UNIQUE (slug)" in ddl(KbDocumentModel)
     assert "CONSTRAINT ck_kb_documents_source_url CHECK" in ddl(KbDocumentModel)
+    assert "CONSTRAINT ck_kb_documents_license CHECK" in ddl(KbDocumentModel)
     sections = ddl(KbSectionModel)
     assert "CONSTRAINT uq_kb_sections_document_position UNIQUE (document_id, position)" in sections
     assert "CONSTRAINT uq_kb_sections_document_anchor UNIQUE (document_id, anchor)" in sections
@@ -138,8 +139,7 @@ def test_the_top_k_is_limited_to_the_citation_ranks(top_k: int):
         make_settings(chat_top_k=top_k)
 
 
-def test_the_defaults_are_four_sections_from_the_knowledge_directory():
+def test_the_default_is_four_sections():
     settings: Settings = make_settings()
 
     assert settings.chat_top_k == 4
-    assert str(settings.knowledge_dir) == "knowledge"

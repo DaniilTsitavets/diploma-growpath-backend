@@ -1,5 +1,5 @@
 import uuid
-from datetime import datetime
+from datetime import date, datetime
 
 from sqlalchemy import (
     CheckConstraint,
@@ -34,6 +34,10 @@ class KbDocumentModel(Base):
             " AND char_length(source_title) <= 300 AND char_length(source_url) <= 1000",
             name="lengths",
         ),
+        CheckConstraint(
+            "license IS NULL OR (btrim(license) <> '' AND char_length(license) <= 100)",
+            name="license",
+        ),
     )
 
     id: Mapped[uuid.UUID] = mapped_column(primary_key=True)
@@ -43,6 +47,8 @@ class KbDocumentModel(Base):
     source_title: Mapped[str]
     source_url: Mapped[str]
     content_sha256: Mapped[str]
+    license: Mapped[str | None]
+    imported_on: Mapped[date | None]
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
 

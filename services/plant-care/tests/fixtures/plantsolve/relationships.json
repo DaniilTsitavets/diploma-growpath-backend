@@ -1,0 +1,37 @@
+[
+  {
+    "source": "lavender",
+    "target": "sunlight",
+    "relationship": "association",
+    "strength": 10,
+    "notes": "Without massive amounts of direct sun, the plant will become leggy and refuse to bloom."
+  },
+  {
+    "source": "lavender",
+    "target": "root-rot",
+    "relationship": "vulnerability",
+    "strength": 10,
+    "notes": "Lavender's worst enemy is wet feet. Heavy clay soil or overwatering will kill it quickly."
+  },
+  {
+    "source": "lavender",
+    "target": "overwatering",
+    "relationship": "vulnerability",
+    "strength": 8,
+    "notes": "Soggy soil kills the roots."
+  },
+  {
+    "source": "dracaena-marginata",
+    "target": "overwatering",
+    "relationship": "vulnerability",
+    "strength": 9,
+    "notes": "A common cause of soft canes, rotten roots and leaf drop."
+  },
+  {
+    "source": "golden-pothos-care",
+    "target": "overwatering",
+    "relationship": "vulnerability",
+    "strength": 9,
+    "notes": "The fastest way to kill a Golden Pothos is keeping the soil constantly wet."
+  }
+]

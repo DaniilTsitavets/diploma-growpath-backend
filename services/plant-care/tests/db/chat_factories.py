@@ -24,6 +24,8 @@ def add_kb_document(session: Session, **overrides) -> dict:
         "species": None,
         "source_title": "Notes",
         "source_url": "https://example.test/guide",
+        "license": None,
+        "imported_on": None,
         "content_sha256": SHA,
     }
     return _insert(session, KbDocumentModel, values, overrides)

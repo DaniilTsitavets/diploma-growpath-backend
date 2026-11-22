@@ -1,5 +1,5 @@
 import asyncio
-from collections.abc import AsyncIterator, Callable
+from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 from datetime import timedelta
 from functools import partial
@@ -36,7 +36,6 @@ from app.service.escalations import EscalationService
 from app.service.event_handlers import EventHandlers
 from app.service.expert_quota import ExpertQuota
 from app.service.journals import JournalService
-from app.service.knowledge_seed import KnowledgeSeeder
 from app.service.photos import PhotoService, PhotoStorage
 from app.service.ticket_handlers import TicketEventHandlers
 from app.service.updates import UpdateService
@@ -45,7 +44,6 @@ from app.storage.s3 import S3PhotoReader, S3PhotoStorage, create_s3_client
 
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncIterator[None]:
-    await asyncio.to_thread(app.state.seed_knowledge)
     stop = asyncio.Event()
     consuming = [
         asyncio.create_task(
@@ -79,7 +77,6 @@ def create_app(
     escalation_events: EscalationEvents | None = None,
     ticket_queue: MessageQueue | None = None,
     chat_model: ChatModel | None = None,
-    seed_knowledge: Callable[[], object] | None = None,
 ) -> FastAPI:
     settings = settings or Settings()
     configure_logging(settings.service_name, settings.log_level)
@@ -112,9 +109,6 @@ def create_app(
     )
     chat_model = chat_model or create_chat_model(settings, model_guard)
     unit_of_work = partial(SqlAlchemyUnitOfWork, sessionmaker(app.state.engine))
-    app.state.seed_knowledge = (
-        seed_knowledge or KnowledgeSeeder(unit_of_work, settings.knowledge_dir).run
-    )
     effort_policy = EffortPolicy(tier_lookup)
     app.state.journal_service = JournalService(unit_of_work)
     app.state.update_service = UpdateService(

@@ -1,4 +1,5 @@
 import uuid
+from datetime import date
 
 import pytest
 from sqlalchemy import func, select
@@ -48,6 +49,16 @@ def test_a_document_hash_is_64_lowercase_hex_digits(session: Session, sha: str):
 )
 def test_document_texts_are_bounded(session: Session, fields: dict):
     rejected_by(session, "ck_kb_documents_lengths", add_kb_document, **fields)
+
+
+@pytest.mark.parametrize("license_text", ["", "  ", "l" * 101])
+def test_a_document_licence_is_non_blank_and_bounded(session: Session, license_text: str):
+    rejected_by(session, "ck_kb_documents_license", add_kb_document, license=license_text)
+
+
+def test_a_document_may_have_no_licence_or_import_date(session: Session):
+    add_kb_document(session, license=None, imported_on=None)
+    add_kb_document(session, license="CC BY 4.0", imported_on=date(2026, 11, 23))
 
 
 def test_a_section_needs_an_existing_document(session: Session):

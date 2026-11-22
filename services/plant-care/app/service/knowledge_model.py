@@ -1,5 +1,6 @@
 import uuid
 from dataclasses import dataclass
+from datetime import date
 from enum import StrEnum
 
 
@@ -20,7 +21,7 @@ class SectionDraft:
 
 @dataclass(frozen=True)
 class DocumentDraft:
-    """A knowledge file as the loader parsed it; `species` None means general care."""
+    """A knowledge document as the importer built it; `species` None means general care."""
 
     id: uuid.UUID
     slug: str
@@ -30,6 +31,8 @@ class DocumentDraft:
     source_url: str
     content_sha256: str
     sections: list[SectionDraft]
+    license: str | None = None
+    imported_on: date | None = None
 
 
 @dataclass(frozen=True)

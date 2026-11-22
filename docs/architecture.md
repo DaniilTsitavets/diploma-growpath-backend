@@ -103,7 +103,7 @@ flowchart TB
 | `localstack` | 4566 | API Gateway, Cognito, SNS, SQS, S3 (`SERVICES=apigateway,cognito-idp,sns,sqs,s3,sts,iam`). Provisioned at start by [`infra/localstack/init/ready.d/01-provision.sh`](../infra/localstack/init/ready.d/01-provision.sh) |
 | `commerce` | 8001 | Alembic migrations and catalog seed run at container start (see `services/commerce/Dockerfile`) |
 | `entitlement` | 8002 | |
-| `plant-care` | 8003 | Also seeds the care knowledge base from `services/plant-care/knowledge/` |
+| `plant-care` | 8003 | The care knowledge base is empty until `make import-kb` has been run (see below) |
 | `expert-consultation` | 8004 | |
 | `*-db` | not published | Each Postgres has its own database, role and password (from `.env`); nothing but its owner service can reach it by design |
 
@@ -383,6 +383,18 @@ expert-consultation), that the SQS queues answer. commerce only publishes, so it
 - **Rate limiting.** A stage-level throttle is declared on the gateway (2 requests per second, burst 2). LocalStack stores it but does not
   enforce it, so a `429` cannot be demonstrated locally; on real API Gateway the same configuration returns `429`. There is no
   service-side `429` today. See Known limitations in the README.
+
+### Care-chat knowledge base ingestion
+
+The care-chat knowledge base is filled by a separate one-shot command, `python -m app.knowledge_import`
+(compose service `kb-import`, profile `import`, run with `make import-kb`), built from the plant-care image.
+It reads a list of 15 plants, fetches the open PlantSolve data (`https://www.plantsolve.com/api/v1/`, static
+JSON, licence CC BY 4.0), converts it and writes `kb_documents` and `kb_sections` of the plant-care database
+through the plant-care repository; the table rows keep the licence and the import date. It is idempotent
+(a re-run changes nothing unless the source changed) and never deletes documents that left the list; it only
+reports them. plant-care has no runtime dependency on the import or on PlantSolve: an empty knowledge base is a
+normal state and does not affect readiness. Cited sources carry the PlantSolve record URL so the client can
+show the attribution the licence requires.
 
 ## 9. Observability
 

@@ -1,4 +1,5 @@
 import uuid
+from collections.abc import Collection
 from datetime import date, datetime, timedelta
 from typing import Protocol, Self
 
@@ -168,6 +169,14 @@ class TicketEventRepository(Protocol):
 class KnowledgeRepository(Protocol):
     def sync(self, document: DocumentDraft) -> SyncResult:
         """Create the document, replace its sections when its content changed, or do nothing."""
+        ...
+
+    def slugs_with_prefix(self, prefix: str) -> list[str]:
+        """Slugs of the stored documents that start with `prefix`, sorted."""
+        ...
+
+    def content_hashes(self, slugs: Collection[str]) -> dict[str, str]:
+        """The stored content hash of each of the slugs that exist."""
         ...
 
     def search(self, question: str, species: str, limit: int) -> list[RetrievedSection]:

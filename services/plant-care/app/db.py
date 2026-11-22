@@ -1,12 +1,17 @@
 from fastapi import Request
+from pydantic import SecretStr
 from sqlalchemy import Engine, create_engine
 
 from app.config import Settings
 
 
 def create_db_engine(settings: Settings) -> Engine:
+    return create_engine_for_url(settings.database_url)
+
+
+def create_engine_for_url(database_url: SecretStr) -> Engine:
     return create_engine(
-        settings.database_url.get_secret_value(),
+        database_url.get_secret_value(),
         pool_pre_ping=True,
         # Day boundaries and `now()` arithmetic must not depend on the server setting.
         connect_args={"options": "-c timezone=UTC"},

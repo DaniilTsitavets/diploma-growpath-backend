@@ -16,7 +16,7 @@ class ChatOutcome(StrEnum):
 
 @dataclass(frozen=True)
 class Citation:
-    """A knowledge-base section the answer relies on, copied so that reseeding cannot change it."""
+    """A knowledge-base section the answer relies on, copied so a re-import cannot change it."""
 
     rank: int
     section_id: uuid.UUID
