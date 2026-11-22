@@ -115,6 +115,34 @@ The service never waits for either, and an empty knowledge base does not fail re
 manifests are in this repository (EKS is out of scope here); this paragraph describes how the same
 container would be run.
 
+### Catalog images
+
+Item pictures live in a separate public-read S3 bucket, `growpath-media` (the policy allows reading
+objects only, never listing the bucket). The file name is the item `slug`: `<base>/<slug>.webp`, one
+format (WebP, at most 1200 px on the long side). An item without a picture answers 404 and the
+client shows a placeholder; the catalog API does not carry an image field.
+
+[`media/catalog-images.csv`](media/catalog-images.csv) is the only list of images, with the columns
+`slug, url, author, license, page`. `url` is an https link to download, or a file under
+`media/source/` (stock sites that do not allow downloads by link; those originals are git-ignored).
+`page` is the source page of the photo. Only licences that allow commercial use are accepted: CC0,
+public domain, CC BY, CC BY-SA and the free licences of Pixabay, Pexels, Unsplash and Magnific. The
+upload writes a `credits.json` next to the images with the author, licence and source page of every
+image; the client shows them.
+
+```bash
+make catalog-images             # uploads to LocalStack (needs uv; creates nothing outside the bucket)
+make client-env                 # prints VITE_MEDIA_BASE_URL=http://localhost:4566/growpath-media
+```
+
+The script is idempotent: an image is uploaded again only when its source or the processing changed.
+Against real S3, run it without `AWS_ENDPOINT_URL` and with the normal AWS credential chain
+(`AWS_PROFILE` or a role; keys are never stored here), choosing the bucket with `--bucket` or
+`MEDIA_BUCKET`: `uv run --script scripts/upload-catalog-images.py --bucket my-media-bucket`. The
+public URL there is `https://<bucket>.s3.<region>.amazonaws.com/<slug>.webp` (or the CloudFront
+domain in front of the bucket). On real S3 the bucket needs the same read-objects-only policy, and
+"Block public access" turned off for it.
+
 ### Tests
 
 ```bash

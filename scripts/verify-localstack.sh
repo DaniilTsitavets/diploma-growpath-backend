@@ -151,6 +151,13 @@ for name in order-placed ticket-events escalation-requested; do
 done
 aws_ s3api head-bucket --bucket growpath-photos >/dev/null 2>&1 && expect "bucket growpath-photos" yes yes \
   || expect "bucket growpath-photos" yes no
+aws_ s3api head-bucket --bucket growpath-media >/dev/null 2>&1 && expect "bucket growpath-media" yes yes \
+  || expect "bucket growpath-media" yes no
+policy=$(aws_ s3api get-bucket-policy --bucket growpath-media --query Policy --output text 2>/dev/null || true)
+expect "media policy: public read of objects" yes \
+  "$(echo "$policy" | jq -e '.Statement[] | select(.Action == "s3:GetObject" and .Principal == "*")' >/dev/null 2>&1 && echo yes || echo no)"
+expect "media policy: no public listing" yes \
+  "$(echo "$policy" | jq -e '[.Statement[] | select(.Action | tostring | test("ListBucket"))] | length == 0' >/dev/null 2>&1 && echo yes || echo no)"
 
 say "9. Service readiness (database and queues)"
 for entry in $SERVICE_PORTS; do
