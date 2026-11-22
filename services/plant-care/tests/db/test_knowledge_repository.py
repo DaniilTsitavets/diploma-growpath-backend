@@ -1,4 +1,5 @@
 from collections.abc import Callable
+from datetime import date
 from pathlib import Path
 
 import pytest
@@ -94,6 +95,32 @@ def test_a_changed_file_replaces_the_sections_and_keeps_the_document(
     assert document.content_sha256 == changed.content_sha256
     assert document.created_at == created_at
     assert sections == [("watering", "Water rarely."), ("feeding", "Feed monthly.")]
+
+
+def test_the_licence_and_import_date_are_stored_and_updated_with_the_file(
+    unit_of_work: Callable[[], SqlAlchemyUnitOfWork], engine: Engine
+):
+    plain = make_document()
+    licensed = make_document(extra_header="license: CC BY 4.0\nimported: 2026-11-23\n")
+    with unit_of_work() as uow:
+        uow.knowledge.sync(plain)
+        uow.commit()
+    with engine.connect() as connection:
+        before = connection.execute(
+            select(KbDocumentModel.license, KbDocumentModel.imported_on)
+        ).one()
+
+    with unit_of_work() as uow:
+        result = uow.knowledge.sync(licensed)
+        uow.commit()
+
+    with engine.connect() as connection:
+        after = connection.execute(
+            select(KbDocumentModel.license, KbDocumentModel.imported_on)
+        ).one()
+    assert tuple(before) == (None, None)
+    assert result is SyncResult.UPDATED
+    assert tuple(after) == ("CC BY 4.0", date(2026, 11, 23))
 
 
 def test_the_shipped_knowledge_base_loads_every_document(

@@ -1,5 +1,6 @@
 import hashlib
 import uuid
+from datetime import date
 from pathlib import Path
 
 import pytest
@@ -68,6 +69,46 @@ def test_quoted_header_values_lose_their_quotes():
     )
 
     assert parsed.title == "Basil: care"
+
+
+def test_the_licence_and_import_date_are_optional():
+    plain = parse_document(document())
+    licensed = parse_document(document(HEADER.replace("\n---\n", "\nlicense: CC BY 4.0\n---\n")))
+    dated = parse_document(document(HEADER.replace("\n---\n", "\nimported: 2026-11-23\n---\n")))
+
+    assert (plain.license, plain.imported_on) == (None, None)
+    assert (licensed.license, licensed.imported_on) == ("CC BY 4.0", None)
+    assert (dated.license, dated.imported_on) == (None, date(2026, 11, 23))
+
+
+def test_both_new_header_lines_are_read_and_do_not_change_the_hash_rule():
+    text = document(HEADER.replace("\n---\n", "\nlicense: CC BY 4.0\nimported: 2026-11-23\n---\n"))
+
+    parsed = parse_document(text)
+
+    assert (parsed.license, parsed.imported_on) == ("CC BY 4.0", date(2026, 11, 23))
+    assert parsed.content_sha256 == hashlib.sha256(text.encode()).hexdigest()
+
+
+@pytest.mark.parametrize(
+    ("line", "message"),
+    [
+        ("license:", "license must not be empty"),
+        ('license: "   "', "license must not be empty"),
+        ("license: " + "x" * 101, "license is longer than 100"),
+        ("imported: 2026-13-45", "not a real date"),
+        ("imported: 23.11.2026", "must be a date"),
+        ("imported: 2026-1-5", "must be a date"),
+        ("imported:", "must be a date"),
+        ("license: MIT\nlicense: CC0", "unexpected header"),
+        ("licence: MIT", "unexpected header"),
+    ],
+)
+def test_a_bad_licence_or_import_date_is_rejected(line: str, message: str):
+    header = HEADER.replace("\n---\n", f"\n{line}\n---\n")
+
+    with pytest.raises(InvalidKnowledgeFile, match=message):
+        parse_document(document(header))
 
 
 def test_headings_inside_a_body_are_kept_as_text():

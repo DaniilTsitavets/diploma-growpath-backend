@@ -45,6 +45,8 @@ class SqlAlchemyKnowledgeRepository:
             "species": document.species,
             "source_title": document.source_title,
             "source_url": document.source_url,
+            "license": document.license,
+            "imported_on": document.imported_on,
             "content_sha256": document.content_sha256,
         }
         inserted = self._session.execute(

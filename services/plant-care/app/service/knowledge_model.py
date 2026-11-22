@@ -1,5 +1,6 @@
 import uuid
 from dataclasses import dataclass
+from datetime import date
 from enum import StrEnum
 
 
@@ -30,6 +31,8 @@ class DocumentDraft:
     source_url: str
     content_sha256: str
     sections: list[SectionDraft]
+    license: str | None = None
+    imported_on: date | None = None
 
 
 @dataclass(frozen=True)

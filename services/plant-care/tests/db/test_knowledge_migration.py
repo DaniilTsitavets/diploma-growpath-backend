@@ -21,6 +21,7 @@ CONSTRAINTS = {
     "ck_kb_documents_source_url",
     "ck_kb_documents_sha",
     "ck_kb_documents_lengths",
+    "ck_kb_documents_license",
     "pk_kb_sections",
     "fk_kb_sections_document_id_kb_documents",
     "uq_kb_sections_document_position",
@@ -115,6 +116,20 @@ def test_the_creation_time_defaults_to_now(migrated):
     ).all()
 
     assert dict(defaults) == {"kb_documents": "now()", "chat_turns": "now()"}
+
+
+def test_downgrade_removes_the_licence_columns_and_upgrade_restores_them(migrated, migrate):
+    command.downgrade(alembic_config(migrated), "0002")
+    migrated.commit()
+
+    assert not {"license", "imported_on"} & {
+        column["name"] for column in inspect(migrated).get_columns("kb_documents")
+    }
+
+    migrate(migrated, "head")
+
+    columns = {column["name"] for column in inspect(migrated).get_columns("kb_documents")}
+    assert {"license", "imported_on"} <= columns
 
 
 def test_downgrade_removes_only_the_new_tables_and_upgrade_restores_them(migrated, migrate):

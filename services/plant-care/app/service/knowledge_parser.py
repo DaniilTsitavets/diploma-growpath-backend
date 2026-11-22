@@ -1,14 +1,18 @@
 import hashlib
 import re
 import uuid
+from datetime import date
 
 from app.service.knowledge_model import DocumentDraft, SectionDraft
 
 NS_GROWPATH_KB = uuid.UUID("8c2f6a1e-3b5d-4f7a-9e0c-5d1a2b3c4e6f")
 HEADER_KEYS = ("slug", "title", "species", "source_title", "source_url")
+OPTIONAL_HEADER_KEYS = ("license", "imported")
+ALLOWED_KEYS = HEADER_KEYS + OPTIONAL_HEADER_KEYS
 FORBIDDEN_MARKERS = ("<kb_section", "<question")
 
 _SLUG = re.compile(r"^[a-z0-9-]{1,64}$")
+_ISO_DATE = re.compile(r"^\d{4}-\d{2}-\d{2}$")
 _SECTION_HEADING = re.compile(r"^## (?P<heading>\S.*)$")
 _ANCHOR_SEPARATORS = re.compile(r"[^a-z0-9]+")
 
@@ -16,6 +20,7 @@ TITLE_LIMIT = 200
 SPECIES_LIMIT = 100
 SOURCE_TITLE_LIMIT = 300
 SOURCE_URL_LIMIT = 1000
+LICENSE_LIMIT = 100
 HEADING_LIMIT = 200
 BODY_LIMIT = 4000
 
@@ -44,6 +49,8 @@ def parse_document(text: str) -> DocumentDraft:
         species=fields["species"] or None,
         source_title=fields["source_title"],
         source_url=fields["source_url"],
+        license=fields.get("license"),
+        imported_on=_parse_date(fields["imported"]) if "imported" in fields else None,
         content_sha256=hashlib.sha256(text.encode("utf-8")).hexdigest(),
         sections=_parse_sections(document_id, body_lines),
     )
@@ -66,7 +73,7 @@ def _parse_header(lines: list[str]) -> dict[str, str]:
             continue
         key, separator, value = line.partition(":")
         key = key.strip()
-        if not separator or key not in HEADER_KEYS or key in fields:
+        if not separator or key not in ALLOWED_KEYS or key in fields:
             raise InvalidKnowledgeFile(f"unexpected header line: {line!r}")
         fields[key] = _unquoted(value.strip())
     missing = [key for key in HEADER_KEYS if key not in fields]
@@ -91,6 +98,19 @@ def _check_header(fields: dict[str, str]) -> None:
     _require_length("source_url", fields["source_url"], SOURCE_URL_LIMIT, required=True)
     if not fields["source_url"].startswith("https://"):
         raise InvalidKnowledgeFile("source_url must start with https://")
+    if "license" in fields:
+        _require_length("license", fields["license"].strip(), LICENSE_LIMIT, required=True)
+    if "imported" in fields:
+        _parse_date(fields["imported"])
+
+
+def _parse_date(value: str) -> date:
+    if not _ISO_DATE.match(value):
+        raise InvalidKnowledgeFile("imported must be a date like 2026-11-23")
+    try:
+        return date.fromisoformat(value)
+    except ValueError:
+        raise InvalidKnowledgeFile(f"imported is not a real date: {value!r}") from None
 
 
 def _require_length(name: str, value: str, limit: int, required: bool = False) -> None:

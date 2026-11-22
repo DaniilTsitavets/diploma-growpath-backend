@@ -66,6 +66,7 @@ def test_constraints_carry_the_names_of_the_design():
     assert "CONSTRAINT pk_kb_documents PRIMARY KEY (id)" in ddl(KbDocumentModel)
     assert "CONSTRAINT uq_kb_documents_slug UNIQUE (slug)" in ddl(KbDocumentModel)
     assert "CONSTRAINT ck_kb_documents_source_url CHECK" in ddl(KbDocumentModel)
+    assert "CONSTRAINT ck_kb_documents_license CHECK" in ddl(KbDocumentModel)
     sections = ddl(KbSectionModel)
     assert "CONSTRAINT uq_kb_sections_document_position UNIQUE (document_id, position)" in sections
     assert "CONSTRAINT uq_kb_sections_document_anchor UNIQUE (document_id, anchor)" in sections
