@@ -18,11 +18,12 @@ def problem_response(
     status: int,
     detail: str | None = None,
     headers: dict[str, str] | None = None,
+    title: str | None = None,
     **extra: object,
 ) -> JSONResponse:
     body = {
         "type": "about:blank",
-        "title": HTTPStatus(status).phrase,
+        "title": title or HTTPStatus(status).phrase,
         "status": status,
         "detail": detail,
         "correlation_id": get_correlation_id(),
@@ -53,7 +54,7 @@ async def handle_unexpected_error(request: Request, exc: Exception) -> JSONRespo
 
 
 async def handle_not_found(_: Request, exc: Exception) -> JSONResponse:
-    return problem_response(404, str(exc))
+    return problem_response(404, str(exc), title=getattr(exc, "title", None))
 
 
 async def handle_conflict(_: Request, exc: Exception) -> JSONResponse:

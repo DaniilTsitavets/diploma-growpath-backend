@@ -1,6 +1,8 @@
 class NotFound(Exception):
     """The resource is missing, or belongs to another user: the two are indistinguishable."""
 
+    title: str | None = None
+
 
 class Conflict(Exception):
     """The request conflicts with the state of the resource (HTTP 409)."""
@@ -14,6 +16,13 @@ class InvalidRequest(Exception):
 
 class Unavailable(Exception):
     """A dependency of the service did not answer (HTTP 503)."""
+
+
+class PlantNotFound(NotFound):
+    title = "Plant not found"
+
+    def __init__(self) -> None:
+        super().__init__("the plant does not exist")
 
 
 class JournalNotFound(NotFound):

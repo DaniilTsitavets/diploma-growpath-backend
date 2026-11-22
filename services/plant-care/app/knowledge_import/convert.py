@@ -9,10 +9,14 @@ from datetime import date
 from typing import Any
 from urllib.parse import urlsplit
 
+from app.knowledge_import.plants import MAX_SPECIES as MAX_PROFILE_SPECIES
+from app.knowledge_import.plants import PLANT_SLUG, PlantEntry
 from app.service.knowledge_model import DocumentDraft, SectionDraft
+from app.service.plant_profile_model import PlantProfile
 
 KB_NAMESPACE = uuid.UUID("5e348c49-ad5f-422f-bdb5-afa4290841a4")
 ALLOWED_HOST = "www.plantsolve.com"
+SOURCE_NAME = "PlantSolve"
 DEFAULT_LICENSE = "CC BY 4.0"
 # Problem records have no page of their own on the site; this page describes the open dataset.
 DATASET_URL = f"https://{ALLOWED_HOST}/dataset/"
@@ -27,6 +31,8 @@ MAX_SOURCE_URL = 1000
 MAX_LICENSE = 100
 MAX_HEADING = 200
 MAX_BODY = 4000
+MAX_PROFILE_TEXT = 2000
+MAX_TAKEAWAYS = 12
 MAX_FAQ_HEADING = 120
 
 _TAG = re.compile(r"<[^>]*>")
@@ -102,30 +108,67 @@ def split_body(text: str, limit: int = MAX_BODY) -> list[str]:
 
 def convert_plant(
     record: Mapping[str, Any],
-    slug: str,
+    entry: PlantEntry,
     relationships: Sequence[Relationship],
     problem_names: Mapping[str, str],
     imported_on: date,
 ) -> DocumentDraft:
-    if record.get("slug") != slug:
-        raise ConversionError(f"the record is for {record.get('slug')!r}, not {slug!r}")
-    common_name = _text(record.get("commonName"))
-    if not common_name:
-        raise ConversionError("the plant has no common name")
+    """The document keeps the PlantSolve slug in its own slug; the species comes from the entry."""
+    _require_record_of(record, entry.source_slug)
     citation = _mapping(record.get("citation"))
     sections = _Sections()
-    for heading, body in _plant_sections(record, common_name, slug, relationships, problem_names):
+    for heading, body in _plant_sections(record, entry.source_slug, relationships, problem_names):
         sections.add(heading, body)
     return _document(
-        slug=f"{PLANT_PREFIX}{slug}",
-        title=f"{common_name} care (PlantSolve)",
-        species=common_name,
-        source_title=f"PlantSolve: {common_name}",
+        slug=f"{PLANT_PREFIX}{entry.source_slug}",
+        title=f"{entry.species} care (PlantSolve)",
+        species=entry.species,
+        source_title=f"PlantSolve: {entry.species}",
         source_url=_valid_url(citation.get("canonicalUrl")),
         license=_valid_license(citation.get("license")),
         sections=sections,
         imported_on=imported_on,
     )
+
+
+def convert_profile(
+    record: Mapping[str, Any], entry: PlantEntry, imported_on: date
+) -> PlantProfile:
+    """The facts of the plant page, cleaned like the document text; empty values become None."""
+    _require_record_of(record, entry.source_slug)
+    _require(bool(PLANT_SLUG.fullmatch(entry.slug)), f"invalid plant slug {entry.slug!r}")
+    _require(0 < len(entry.species) <= MAX_PROFILE_SPECIES, "the species is empty or too long")
+    care = _mapping(record.get("care"))
+    parameters = _mapping(record.get("parameters"))
+    lighting = _mapping(record.get("lighting"))
+    taxonomy = _mapping(record.get("taxonomy"))
+    citation = _mapping(record.get("citation"))
+    humidity_range = _mapping(parameters.get("humidity")).get("recommended")
+    fields: dict[str, Any] = {
+        "slug": entry.slug,
+        "source_slug": entry.source_slug,
+        "species": entry.species,
+        "common_name": _optional(record.get("commonName")),
+        "scientific_name": _optional(taxonomy.get("sciName")),
+        "family": _optional(taxonomy.get("family")),
+        "difficulty": _optional(care.get("difficulty")),
+        "summary": _optional(record.get("summary")),
+        "quick_answer": _optional(record.get("quickAnswer")),
+        "key_takeaways": _takeaways(record.get("keyTakeaways")),
+        "light": _optional(lighting.get("description")),
+        "sunlight_hours": _optional(lighting.get("sunlightHours")),
+        "watering": _optional(care.get("watering")),
+        "placement": _optional(care.get("placement")),
+        "soil": _optional(care.get("soil")),
+        "humidity": _joined("; ", care.get("humidity"), _prefixed("recommended ", humidity_range)),
+        "temperature": _optional(_mapping(parameters.get("temperature")).get("recommended")),
+        "pruning": _optional(care.get("pruning")),
+        "toxicity": _joined("\n", care.get("toxicity"), care.get("toxicityNote")),
+        "source_name": SOURCE_NAME,
+        "source_url": _valid_url(citation.get("canonicalUrl")),
+        "license": _valid_license(citation.get("license")),
+    }
+    return PlantProfile(**fields, imported_on=imported_on, content_sha256=_sha256(fields))
 
 
 def convert_problem(
@@ -135,8 +178,7 @@ def convert_problem(
     plant_names: Mapping[str, str],
     imported_on: date,
 ) -> DocumentDraft:
-    if record.get("slug") != slug:
-        raise ConversionError(f"the record is for {record.get('slug')!r}, not {slug!r}")
+    _require_record_of(record, slug)
     name = _text(record.get("name"))
     if not name:
         raise ConversionError("the problem has no name")
@@ -271,7 +313,7 @@ def content_hash(
     sections: Sequence[tuple[str, str]],
 ) -> str:
     """Hash of everything a re-import could change, except the import date."""
-    canonical = json.dumps(
+    return _sha256(
         {
             "title": title,
             "species": species,
@@ -279,17 +321,22 @@ def content_hash(
             "source_url": source_url,
             "license": license,
             "sections": [[heading, body] for heading, body in sections],
-        },
-        ensure_ascii=False,
-        sort_keys=True,
-        separators=(",", ":"),
+        }
     )
+
+
+def _sha256(payload: Mapping[str, Any]) -> str:
+    canonical = json.dumps(payload, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
     return hashlib.sha256(canonical.encode("utf-8")).hexdigest()
 
 
 def _require(condition: bool, message: str) -> None:
     if not condition:
         raise ConversionError(message)
+
+
+def _require_record_of(record: Mapping[str, Any], slug: str) -> None:
+    _require(record.get("slug") == slug, f"the record is for {record.get('slug')!r}, not {slug!r}")
 
 
 def _valid_url(value: object) -> str:
@@ -331,6 +378,24 @@ def _sequence(value: object) -> list[Any]:
     return value if isinstance(value, list) else []
 
 
+def _optional(value: object) -> str | None:
+    return _shorten(_text(value), MAX_PROFILE_TEXT) or None
+
+
+def _joined(separator: str, *values: object) -> str | None:
+    return _optional(separator.join(text for value in values if (text := _text(value))))
+
+
+def _prefixed(prefix: str, value: object) -> str:
+    text = _text(value)
+    return f"{prefix}{text}" if text else ""
+
+
+def _takeaways(value: object) -> tuple[str, ...] | None:
+    items = (_shorten(clean_line(_text(item)), MAX_PROFILE_TEXT) for item in _sequence(value))
+    return tuple(item for item in items if item)[:MAX_TAKEAWAYS] or None
+
+
 def _lines(pairs: Iterable[tuple[str, object]]) -> str:
     return "\n".join(f"{label}: {text}" for label, value in pairs if (text := _text(value)))
 
@@ -357,7 +422,6 @@ def _readable(slug: str) -> str:
 
 def _plant_sections(
     record: Mapping[str, Any],
-    common_name: str,
     slug: str,
     relationships: Sequence[Relationship],
     problem_names: Mapping[str, str],
@@ -372,7 +436,7 @@ def _plant_sections(
         "Overview",
         _lines(
             [
-                ("Common name", common_name),
+                ("Common name", record.get("commonName")),
                 ("Scientific name", taxonomy.get("sciName")),
                 ("Family", taxonomy.get("family")),
                 ("Difficulty", care.get("difficulty")),

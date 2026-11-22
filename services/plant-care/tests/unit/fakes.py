@@ -24,6 +24,7 @@ from app.service.model import (
     PotWeight,
     UpdateRecord,
 )
+from tests.unit.knowledge_fakes import FakePlantProfiles
 
 NOW = datetime(2026, 11, 11, 12, 0, tzinfo=UTC)
 TODAY = date(2026, 11, 11)
@@ -313,6 +314,7 @@ class FakeUnitOfWork:
         self.diagnoses = FakeDiagnoses()
         self.updates = FakeUpdates(self.diagnoses, self.journals)
         self.photos = FakePhotos()
+        self.plant_profiles = FakePlantProfiles()
         self.commits = 0
         self.fail_commit_with: Exception | None = None
 

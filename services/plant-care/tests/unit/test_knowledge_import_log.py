@@ -14,6 +14,8 @@ def test_the_summary_is_logged_with_its_counters(caplog: pytest.LogCaptureFixtur
         failed={"plantsolve-d": "bad licence"},
         stale=["plantsolve-e"],
     )
+    report.profiles.created.extend(["a", "b", "c"])
+    report.profiles.unchanged.append("d")
 
     with caplog.at_level(logging.INFO, logger="app.knowledge_import.__main__"):
         log_report(report)
@@ -29,5 +31,8 @@ def test_the_summary_is_logged_with_its_counters(caplog: pytest.LogCaptureFixtur
             "documents_unchanged",
             "documents_failed",
             "documents_stale",
+            "profiles_created",
+            "profiles_updated",
+            "profiles_unchanged",
         )
-    ] == [2, 1, 0, 1, 1]
+    ] == [2, 1, 0, 1, 1, 3, 0, 1]

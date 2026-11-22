@@ -21,7 +21,7 @@ ADMIN_URL = os.environ.get(
 SESSION_OPTIONS = {"options": "-c timezone=UTC"}
 TABLES = (
     "journals, updates, update_photos, diagnoses, diagnosis_candidates, escalations,"
-    " chat_turn_sources, chat_turns, kb_sections, kb_documents"
+    " chat_turn_sources, chat_turns, kb_sections, kb_documents, plant_profiles"
 )
 
 

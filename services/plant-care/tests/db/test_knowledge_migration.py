@@ -141,5 +141,6 @@ def test_downgrade_removes_only_the_new_tables_and_upgrade_restores_them(migrate
     migrate(migrated, "head")
 
     assert set(inspect(migrated).get_table_names()) == OLD_TABLES | set(NEW_TABLES) | {
-        "alembic_version"
+        "plant_profiles",
+        "alembic_version",
     }

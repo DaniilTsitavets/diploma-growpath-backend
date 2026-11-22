@@ -8,6 +8,7 @@ from httpx import Response
 
 from app.main import create_app
 from app.service.journals import JournalService
+from app.service.plants import PlantService
 from app.service.updates import UpdateService
 from tests.unit.contracts import (
     assert_conforms,
@@ -30,10 +31,10 @@ DESCRIPTION = (
     "Plant journals and their updates, AI diagnosis, escalation to an expert and the care chat. "
     "Consumes `order.placed` and `ticket.*`, publishes `escalation.requested`. Identity arrives "
     "in the `X-User-Id` header, which the API gateway sets from the verified JWT. The gateway "
-    "exposes `/v1/journals/**` and `/v1/updates/**`; the `internal` tag marks operations it "
-    "does not expose."
+    "exposes `/v1/journals/**` and `/v1/updates/**`, and `/v1/plants/{slug}` without "
+    "authorization; the `internal` tag marks operations it does not expose."
 )
-PUBLIC_PREFIXES = ("/v1/journals", "/v1/updates")
+PUBLIC_PREFIXES = ("/v1/journals", "/v1/updates", "/v1/plants")
 AS_USER = {"X-User-Id": str(USER)}
 QUESTIONNAIRE = {
     "drainage": "good",
@@ -139,6 +140,29 @@ def test_a_completed_diagnosis_conforms():
 
     assert response.status_code == 200 and response.json()["status"] == "completed"
     assert_conforms(load_openapi(SERVICE), "/v1/updates/{update_id}/diagnosis", "POST", response)
+
+
+def test_the_plant_page_is_public_and_documents_its_failures():
+    operation = load_openapi(SERVICE)["paths"]["/v1/plants/{slug}"]["get"]
+
+    assert operation["x-gateway"] == "public"
+    assert {"200", "404", "503"} <= set(operation["responses"])
+    assert "Retry-After" in operation["responses"]["503"]["headers"]
+
+
+def test_plant_pages_conform(uow: FakeUnitOfWork):
+    uow.plant_profiles.seed("cactus", species="Cactus", key_takeaways=("Sun",))
+    app = build_app()
+    app.state.plant_service = PlantService(lambda: uow)
+    client = TestClient(app, raise_server_exceptions=False)
+    document = load_openapi(SERVICE)
+
+    found = client.get("/v1/plants/cactus")
+    missing = client.get("/v1/plants/ghost")
+
+    assert (found.status_code, missing.status_code) == (200, 404)
+    assert_conforms(document, "/v1/plants/{slug}", "GET", found)
+    assert_conforms(document, "/v1/plants/{slug}", "GET", missing)
 
 
 def test_the_conformance_check_rejects_a_body_that_breaks_the_schema():

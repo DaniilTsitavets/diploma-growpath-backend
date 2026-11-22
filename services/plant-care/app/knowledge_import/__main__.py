@@ -10,7 +10,8 @@ from growpath_observability import configure_logging
 from sqlalchemy.orm import sessionmaker
 
 from app.db import create_engine_for_url
-from app.knowledge_import.run import ImportReport, ImportRunner, read_plant_slugs
+from app.knowledge_import.plants import read_plant_entries
+from app.knowledge_import.run import ImportReport, ImportRunner
 from app.knowledge_import.settings import ImportSettings
 from app.knowledge_import.source import PlantSolveSource, SourceError, create_http_client
 from app.repository.unit_of_work import SqlAlchemyUnitOfWork
@@ -28,7 +29,12 @@ def parse_args(argv: Sequence[str] | None) -> argparse.Namespace:
     parser.add_argument(
         "--dry-run", action="store_true", help="compare with the database, write nothing"
     )
-    parser.add_argument("--plants-file", type=Path, default=DEFAULT_PLANTS_FILE)
+    parser.add_argument(
+        "--plants-file",
+        type=Path,
+        default=DEFAULT_PLANTS_FILE,
+        help="lines of `plantsolve-slug | our-slug | Species`",
+    )
     parser.add_argument(
         "--pause", type=float, default=None, help="seconds between requests (default from settings)"
     )
@@ -39,14 +45,14 @@ def main(argv: Sequence[str] | None = None) -> int:
     args = parse_args(argv)
     settings = ImportSettings()
     configure_logging(settings.service_name, settings.log_level)
-    plant_slugs = read_plant_slugs(args.plants_file)
+    plants = read_plant_entries(args.plants_file)
     engine = create_engine_for_url(settings.database_url)
     try:
         with create_http_client(settings.kb_import_timeout_seconds) as client:
             runner = ImportRunner(
                 PlantSolveSource(client, settings.fetch_policy(args.pause)),
                 partial(SqlAlchemyUnitOfWork, sessionmaker(engine)),
-                plant_slugs,
+                plants,
                 lambda: datetime.now(UTC).date(),
                 args.dry_run,
             )
@@ -72,6 +78,9 @@ def log_report(report: ImportReport) -> None:
             "documents_unchanged": len(report.unchanged),
             "documents_failed": len(report.failed),
             "documents_stale": len(report.stale),
+            "profiles_created": len(report.profiles.created),
+            "profiles_updated": len(report.profiles.updated),
+            "profiles_unchanged": len(report.profiles.unchanged),
         },
     )
 
