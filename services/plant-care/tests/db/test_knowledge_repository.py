@@ -1,6 +1,5 @@
 from collections.abc import Callable
 from datetime import date
-from pathlib import Path
 
 import pytest
 from sqlalchemy import Engine, func, select, text
@@ -10,10 +9,7 @@ from app.models import KbDocumentModel, KbSectionModel
 from app.repository.knowledge import SqlAlchemyKnowledgeRepository
 from app.repository.unit_of_work import SqlAlchemyUnitOfWork
 from app.service.knowledge_model import SyncResult
-from app.service.knowledge_seed import KnowledgeSeeder
 from tests.db.knowledge_data import make_document
-
-KNOWLEDGE_DIR = Path(__file__).parent.parent.parent / "knowledge"
 
 
 def repository(session: Session) -> SqlAlchemyKnowledgeRepository:
@@ -57,14 +53,20 @@ def test_a_new_document_is_stored_with_its_sections_and_a_search_vector(session:
 def test_syncing_the_same_content_again_changes_nothing(
     unit_of_work: Callable[[], SqlAlchemyUnitOfWork], engine: Engine
 ):
-    seeder = KnowledgeSeeder(unit_of_work, KNOWLEDGE_DIR)
-    first = seeder.run()
+    document = make_document(sections={"Watering": "Water often.", "Light": "Sun."})
+
+    def sync() -> SyncResult:
+        with unit_of_work() as uow:
+            result = uow.knowledge.sync(document)
+            uow.commit()
+        return result
+
+    first = sync()
     before = section_rows(engine)
 
-    second = seeder.run()
+    second = sync()
 
-    assert set(first.values()) == {SyncResult.CREATED}
-    assert set(second.values()) == {SyncResult.UNCHANGED}
+    assert (first, second) == (SyncResult.CREATED, SyncResult.UNCHANGED)
     assert section_rows(engine) == before
 
 
@@ -101,7 +103,7 @@ def test_the_licence_and_import_date_are_stored_and_updated_with_the_file(
     unit_of_work: Callable[[], SqlAlchemyUnitOfWork], engine: Engine
 ):
     plain = make_document()
-    licensed = make_document(extra_header="license: CC BY 4.0\nimported: 2026-11-23\n")
+    licensed = make_document(license="CC BY 4.0", imported_on=date(2026, 11, 23))
     with unit_of_work() as uow:
         uow.knowledge.sync(plain)
         uow.commit()
@@ -121,26 +123,6 @@ def test_the_licence_and_import_date_are_stored_and_updated_with_the_file(
     assert tuple(before) == (None, None)
     assert result is SyncResult.UPDATED
     assert tuple(after) == ("CC BY 4.0", date(2026, 11, 23))
-
-
-def test_the_shipped_knowledge_base_loads_every_document(
-    unit_of_work: Callable[[], SqlAlchemyUnitOfWork], engine: Engine
-):
-    KnowledgeSeeder(unit_of_work, KNOWLEDGE_DIR).run()
-
-    with engine.connect() as connection:
-        species = dict(
-            connection.execute(select(KbDocumentModel.slug, KbDocumentModel.species)).all()
-        )
-        sections = connection.scalar(select(func.count()).select_from(KbSectionModel))
-    assert species == {
-        "basil": "Basil",
-        "mint": "Mint",
-        "chili-pepper": "Chili pepper",
-        "lavender": "Lavender",
-        "general-care": None,
-    }
-    assert sections >= 40
 
 
 def test_only_the_journal_species_and_general_sections_are_searched(session: Session):

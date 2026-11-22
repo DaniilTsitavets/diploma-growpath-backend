@@ -21,7 +21,7 @@ class SectionDraft:
 
 @dataclass(frozen=True)
 class DocumentDraft:
-    """A knowledge file as the loader parsed it; `species` None means general care."""
+    """A knowledge document as the importer built it; `species` None means general care."""
 
     id: uuid.UUID
     slug: str

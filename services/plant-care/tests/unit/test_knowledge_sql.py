@@ -139,8 +139,7 @@ def test_the_top_k_is_limited_to_the_citation_ranks(top_k: int):
         make_settings(chat_top_k=top_k)
 
 
-def test_the_defaults_are_four_sections_from_the_knowledge_directory():
+def test_the_default_is_four_sections():
     settings: Settings = make_settings()
 
     assert settings.chat_top_k == 4
-    assert str(settings.knowledge_dir) == "knowledge"

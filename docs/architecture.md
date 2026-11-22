@@ -103,7 +103,7 @@ flowchart TB
 | `localstack` | 4566 | API Gateway, Cognito, SNS, SQS, S3 (`SERVICES=apigateway,cognito-idp,sns,sqs,s3,sts,iam`). Provisioned at start by [`infra/localstack/init/ready.d/01-provision.sh`](../infra/localstack/init/ready.d/01-provision.sh) |
 | `commerce` | 8001 | Alembic migrations and catalog seed run at container start (see `services/commerce/Dockerfile`) |
 | `entitlement` | 8002 | |
-| `plant-care` | 8003 | Also seeds the care knowledge base from `services/plant-care/knowledge/` |
+| `plant-care` | 8003 | The care knowledge base is empty until `make import-kb` has been run (see below) |
 | `expert-consultation` | 8004 | |
 | `*-db` | not published | Each Postgres has its own database, role and password (from `.env`); nothing but its owner service can reach it by design |
 

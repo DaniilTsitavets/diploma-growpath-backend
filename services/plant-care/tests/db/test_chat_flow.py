@@ -1,6 +1,5 @@
 import uuid
 from collections.abc import Callable
-from pathlib import Path
 
 import pytest
 from sqlalchemy import Engine, func, select
@@ -13,14 +12,13 @@ from app.service.chat_model import ChatOutcome, NewChatTurn
 from app.service.diagnosis_model import ModelUnavailable
 from app.service.effort import EffortPolicy
 from app.service.errors import AiQuotaExhausted
-from app.service.knowledge_seed import KnowledgeSeeder
 from app.service.model import ModelEffort, Tier
 from tests.db.factories import add_journal
+from tests.db.knowledge_data import basil_guide, store_documents
 from tests.unit.chat_fakes import FakeChatModel, answered
 from tests.unit.fakes import FakeAiQuota
 from tests.unit.scenario import StaticTiers
 
-KNOWLEDGE_DIR = Path(__file__).parent.parent.parent / "knowledge"
 USER = uuid.uuid4()
 
 
@@ -60,7 +58,7 @@ def quota(engine: Engine) -> CheckingQuota:
 def service_for(
     unit_of_work: Callable[[], SqlAlchemyUnitOfWork], quota: CheckingQuota
 ) -> Callable[[FakeChatModel], ChatService]:
-    KnowledgeSeeder(unit_of_work, KNOWLEDGE_DIR).run()
+    store_documents(unit_of_work, basil_guide())
 
     def build(model: FakeChatModel) -> ChatService:
         return ChatService(
@@ -75,7 +73,7 @@ def count(engine: Engine, model) -> int:
         return session.scalar(select(func.count()).select_from(model))
 
 
-def test_a_question_is_answered_from_the_shipped_knowledge_base_and_saved_before_payment(
+def test_a_question_is_answered_from_the_knowledge_base_and_saved_before_payment(
     service_for, journal_id: uuid.UUID, engine: Engine, quota: CheckingQuota
 ):
     model = FakeChatModel(answered("S1"))

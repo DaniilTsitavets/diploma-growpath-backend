@@ -8,12 +8,12 @@ from sqlalchemy.engine import URL
 from sqlalchemy.orm import Session
 
 from app.main import create_app
-from app.models import ChatTurnModel, KbDocumentModel, KbSectionModel
+from app.models import ChatTurnModel
 from app.repository.unit_of_work import SqlAlchemyUnitOfWork
 from app.service.diagnosis_model import ModelUnavailable
-from app.service.knowledge_seed import KnowledgeSeeder
 from app.service.model import Tier
 from tests.db.factories import add_journal
+from tests.db.knowledge_data import basil_guide, store_documents
 from tests.unit.chat_fakes import FakeChatModel, answered
 from tests.unit.fake_queue import FakeQueue
 from tests.unit.fake_storage import FakePhotoStorage
@@ -53,7 +53,7 @@ def app_for(database_url: URL, quota: FakeAiQuota, model: FakeChatModel, **overr
 
 @pytest.fixture
 def seeded(unit_of_work: Callable[[], SqlAlchemyUnitOfWork]) -> None:
-    KnowledgeSeeder(unit_of_work, make_settings().knowledge_dir).run()
+    store_documents(unit_of_work, basil_guide())
 
 
 def test_a_question_goes_through_the_database_and_the_history_returns_it(
@@ -105,16 +105,3 @@ def test_a_journal_of_another_user_is_404(
     response = client.get(f"/v1/journals/{journal_id}/chat/turns", headers=stranger)
 
     assert response.status_code == 404
-
-
-def test_starting_the_application_loads_the_knowledge_base(
-    database_url: URL, quota: FakeAiQuota, engine: Engine
-):
-    app = app_for(database_url, quota, FakeChatModel())
-
-    with TestClient(app):
-        pass
-
-    with Session(engine) as session:
-        assert session.scalar(select(func.count()).select_from(KbDocumentModel)) == 5
-        assert session.scalar(select(func.count()).select_from(KbSectionModel)) >= 40

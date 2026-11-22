@@ -35,7 +35,7 @@ class ChatTurnModel(Base):
 
 
 class ChatTurnSourceModel(Base):
-    """A citation kept as a snapshot: no foreign key to the section, so reseeding keeps it valid."""
+    """A citation kept as a snapshot: no foreign key to the section, so a re-import keeps it."""
 
     __tablename__ = "chat_turn_sources"
     __table_args__ = (
