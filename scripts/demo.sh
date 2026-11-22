@@ -404,11 +404,13 @@ act_preflight() {
 
 act_auth() {
   act "1. Authentication and identity at the gateway"
-  step "No token and a garbage token are refused by the Cognito authorizer"
-  gw GET items ""
+  step "No token and a garbage token are refused by the Cognito authorizer; only the catalog is public"
+  gw GET journals ""
   expect "no token" 401 "$CODE"
-  gw GET items "garbage"
+  gw GET journals "garbage"
   expect "garbage token" 401 "$CODE"
+  gw GET items ""
+  expect "catalog without a token (public)" 200 "$CODE"
 
   step "Log in as a new user and as the expert; both come from Cognito on LocalStack"
   ensure_user
@@ -418,7 +420,7 @@ act_auth() {
   jwt_claims "$EXPERT_TOKEN" | jq -c '{sub, "cognito:groups"}'
 
   step "A valid token passes; X-User-Id and X-User-Groups are set by the gateway, not by the client"
-  gw GET items "$TOKEN"
+  gw GET journals "$TOKEN"
   expect "valid token" 200 "$CODE"
   gw GET expert/tickets "$TOKEN"
   expect "user without the experts group" 403 "$CODE"

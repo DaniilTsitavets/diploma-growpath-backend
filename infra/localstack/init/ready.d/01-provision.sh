@@ -87,7 +87,20 @@ prefix_route() {
     method.request.path.proxy=true
 }
 
-route items GET "$COMMERCE/v1/items"
+# The catalog is readable without signing in. There is no authorizer, so the claims are empty and the
+# identity headers are not mapped: a client-sent X-User-Id passes through, which is harmless because
+# GET /items does not read it. Never use this for a route that does.
+public_route() {
+  local resource_id method=$2 uri=$3
+  resource_id=$(resource_for "$1")
+  awslocal apigateway put-method --rest-api-id "$api_id" --resource-id "$resource_id" --http-method "$method" \
+    --authorization-type NONE >/dev/null
+  awslocal apigateway put-integration --rest-api-id "$api_id" --resource-id "$resource_id" --http-method "$method" \
+    --type HTTP_PROXY --integration-http-method "$method" --uri "$uri" \
+    --request-parameters '{"integration.request.header.X-Correlation-Id":"context.requestId"}' >/dev/null
+}
+
+public_route items GET "$COMMERCE/v1/items"
 route orders POST "$COMMERCE/v1/orders"
 prefix_route journals "$PLANT_CARE"
 route 'updates/{proxy+}' ANY "$PLANT_CARE/v1/updates/{proxy}" '"integration.request.path.proxy":"method.request.path.proxy"' \

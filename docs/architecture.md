@@ -362,9 +362,10 @@ expert-consultation), that the SQS queues answer. commerce only publishes, so it
 
 ## 8. Security and identity
 
-- **Authentication at the gateway.** Every route uses a Cognito user pool authorizer (`COGNITO_USER_POOLS`).
+- **Authentication at the gateway.** Every route except the public catalog (`GET /v1/items`) uses a Cognito user pool authorizer (`COGNITO_USER_POOLS`).
   A request without a token or with a garbage token gets `401` from the gateway and never reaches a service.
-- **Identity headers are derived, not trusted.** On every route the gateway maps verified claims onto request headers:
+  The catalog has no authorizer so a guest can browse before signing up; it reads no identity header.
+- **Identity headers are derived, not trusted.** On every authorized route the gateway maps verified claims onto request headers:
   `X-User-Id` from `sub`, `X-User-Groups` from `cognito:groups`, `X-Correlation-Id` from `$context.requestId`
   (`IDENTITY_HEADERS` in `01-provision.sh`). A mapped header replaces whatever the client sent. The demo shows a user
   forging `X-User-Groups: experts` and getting `403`, and forging `X-User-Id` and still receiving their own data.

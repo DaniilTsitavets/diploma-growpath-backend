@@ -44,10 +44,15 @@ echo "pool=$pool_id client=$client_id user_token_length=${#token} expert_token_l
 api_id=$(aws_ apigateway get-rest-apis --query 'items[?name==`growpath-gateway`].id|[0]' --output text)
 base="$AWS_ENDPOINT_URL/restapis/$api_id/$STAGE/_user_request_/v1"
 
-say "3. Authorizer: no token and a garbage token are refused"
-expect "no token" 401 "$(status "$base/items")"
-expect "garbage token" 401 "$(status -H 'Authorization: garbage' "$base/items")"
-expect "valid token" 200 "$(status -H "Authorization: $token" "$base/items")"
+say "3. Authorizer: no token and a garbage token are refused, except on the public catalog"
+expect "journals, no token" 401 "$(status "$base/journals")"
+expect "journals, garbage token" 401 "$(status -H 'Authorization: garbage' "$base/journals")"
+expect "POST /orders, no token" 401 "$(status -X POST -H 'Content-Type: application/json' -d '{}' "$base/orders")"
+expect "expert tickets, no token" 401 "$(status "$base/expert/tickets")"
+expect "valid token" 200 "$(status -H "Authorization: $token" "$base/journals")"
+expect "catalog is public: GET /items, no token" 200 "$(status "$base/items")"
+expect "catalog lists items without a token" yes \
+  "$([ "$(curl -s "$base/items" | jq 'length')" -gt 0 ] && echo yes || echo no)"
 
 say "4. Routes reach the right service"
 expect "GET /items (commerce)" 200 "$(status -H "Authorization: $token" "$base/items")"
