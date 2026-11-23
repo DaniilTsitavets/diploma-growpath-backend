@@ -18,7 +18,7 @@ from tests.unit.scenario import USER, Scenario
 from tests.unit.settings import make_settings
 
 PROBLEM_JSON = "application/problem+json"
-AS_USER = {"X-User-Id": str(USER)}
+AS_USER = {"X-User-Id": str(USER), "X-User-Groups": "users"}
 RETRY_AFTER_SECONDS = 7
 
 
@@ -169,7 +169,7 @@ def test_declining_without_an_offer_is_409(scenario: Scenario):
 
 def test_another_users_update_is_404_everywhere(scenario: Scenario):
     client = client_for(scenario, FakeModel(conclusion()))
-    stranger = {"X-User-Id": str(uuid.uuid4())}
+    stranger = {"X-User-Id": str(uuid.uuid4()), "X-User-Groups": "users"}
 
     responses = [
         client.get(url(scenario), headers=stranger),

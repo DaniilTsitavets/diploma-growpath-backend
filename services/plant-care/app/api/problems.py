@@ -3,6 +3,7 @@ from typing import Any
 PROBLEM_REF = {"$ref": "#/components/schemas/Problem"}
 
 UNAUTHORIZED = "unauthorized"
+FORBIDDEN = "forbidden"
 NOT_FOUND = "not-found"
 VALIDATION_ERROR = "validation-error"
 SERVICE_UNAVAILABLE = "service-unavailable"
@@ -27,7 +28,14 @@ def problem(status: int, description: str, *codes: str, retry_after: bool = Fals
 
 
 def identity_required() -> dict:
-    return problem(401, "`X-User-Id` is missing or not a user id", UNAUTHORIZED)
+    return responses(
+        problem(401, "`X-User-Id` is missing or not a user id", UNAUTHORIZED),
+        problem(
+            403,
+            "The caller is not a customer: `X-User-Groups` lacks `users` or has `experts`/`admins`",
+            FORBIDDEN,
+        ),
+    )
 
 
 def not_found(description: str) -> dict:

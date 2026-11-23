@@ -14,7 +14,7 @@ from tests.unit.fakes import FakeAiQuota
 from tests.unit.settings import make_settings
 
 USER = uuid.uuid4()
-AS_USER = {"X-User-Id": str(USER)}
+AS_USER = {"X-User-Id": str(USER), "X-User-Groups": "users"}
 QUESTIONNAIRE = {
     "drainage": "good",
     "lighting": "bright_indirect",
@@ -117,7 +117,7 @@ def test_photos_are_recorded_per_kind_and_listed(client: TestClient, journal_id)
 
 def test_another_user_sees_nothing(client: TestClient, journal_id):
     update_id = submit(client, journal_id).json()["id"]
-    stranger = {"X-User-Id": str(uuid.uuid4())}
+    stranger = {"X-User-Id": str(uuid.uuid4()), "X-User-Groups": "users"}
 
     assert client.get(f"/v1/journals/{journal_id}", headers=stranger).status_code == 404
     assert client.get(f"/v1/journals/{journal_id}/updates", headers=stranger).status_code == 404

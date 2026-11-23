@@ -12,7 +12,7 @@ from tests.unit.chat_fakes import ChatScenario, FakeChatModel, answered
 from tests.unit.scenario import USER
 
 PROBLEM_JSON = "application/problem+json"
-AS_USER = {"X-User-Id": str(USER)}
+AS_USER = {"X-User-Id": str(USER), "X-User-Groups": "users"}
 
 
 @pytest.fixture

@@ -12,7 +12,7 @@ from tests.unit.fakes import FakeUnitOfWork
 
 PROBLEM_JSON = "application/problem+json"
 USER = uuid.uuid4()
-AS_USER = {"X-User-Id": str(USER)}
+AS_USER = {"X-User-Id": str(USER), "X-User-Groups": "users"}
 
 
 @pytest.fixture
