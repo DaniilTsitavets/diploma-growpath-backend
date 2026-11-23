@@ -1,0 +1,125 @@
+{
+  "aloe-vera": [
+    "bright-light",
+    "compact",
+    "drought-tolerant",
+    "flowering",
+    "intermediate",
+    "toxic-to-pets"
+  ],
+  "boston-fern": [
+    "hanging",
+    "humidity-lover",
+    "intermediate",
+    "likes-moisture",
+    "pet-safe"
+  ],
+  "cactus": [
+    "beginner",
+    "bright-light",
+    "direct-sun",
+    "drought-tolerant",
+    "flowering",
+    "low-maintenance"
+  ],
+  "calathea-orbifolia": [
+    "flowering",
+    "humidity-lover",
+    "intermediate",
+    "likes-moisture",
+    "pet-safe"
+  ],
+  "ficus-lyrata": [
+    "advanced",
+    "large",
+    "toxic-to-pets"
+  ],
+  "golden-pothos": [
+    "air-purifying",
+    "beginner",
+    "hanging",
+    "large",
+    "low-light",
+    "low-maintenance",
+    "toxic-to-pets"
+  ],
+  "holy-basil-tulsi": [
+    "beginner",
+    "bright-light",
+    "compact",
+    "direct-sun",
+    "edible",
+    "flowering",
+    "herb",
+    "likes-moisture",
+    "pet-safe"
+  ],
+  "jade-plant": [
+    "air-purifying",
+    "beginner",
+    "bright-light",
+    "direct-sun",
+    "drought-tolerant",
+    "flowering",
+    "large",
+    "low-maintenance",
+    "succulent",
+    "toxic-to-pets"
+  ],
+  "lavender": [
+    "bright-light",
+    "direct-sun",
+    "drought-tolerant",
+    "flowering",
+    "fragrant",
+    "herb",
+    "intermediate",
+    "pollinator-friendly",
+    "toxic-to-pets"
+  ],
+  "maranta-prayer-plant": [
+    "compact",
+    "flowering",
+    "humidity-lover",
+    "intermediate",
+    "likes-moisture",
+    "pet-safe"
+  ],
+  "monstera-deliciosa": [
+    "beginner",
+    "large",
+    "low-maintenance",
+    "toxic-to-pets"
+  ],
+  "peace-lily": [
+    "air-purifying",
+    "beginner",
+    "flowering",
+    "likes-moisture",
+    "low-light",
+    "toxic-to-pets"
+  ],
+  "snake-plant": [
+    "beginner",
+    "drought-tolerant",
+    "flowering",
+    "low-light",
+    "low-maintenance",
+    "toxic-to-pets"
+  ],
+  "spider-plant": [
+    "beginner",
+    "compact",
+    "flowering",
+    "hanging",
+    "low-maintenance",
+    "pet-safe"
+  ],
+  "zz-plant": [
+    "beginner",
+    "drought-tolerant",
+    "low-light",
+    "low-maintenance",
+    "toxic-to-pets"
+  ]
+}

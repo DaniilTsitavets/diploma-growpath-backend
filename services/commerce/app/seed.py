@@ -2,15 +2,17 @@ import uuid
 from dataclasses import dataclass
 
 from growpath_observability import configure_logging
-from sqlalchemy import select, update
+from sqlalchemy import delete, select, update
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.orm import Session
 
+from app.catalog_labels import LabelTable, load_label_table
 from app.config import Settings
 from app.db import create_db_engine
 from app.models import CatalogItem, CatalogItemLabel
 
 SEED_NAMESPACE = uuid.UUID("7c1e2d9a-4b3f-4a6e-8d15-3f2b9c0a1e77")
+MAX_LABELS_PER_ITEM = 10
 
 
 @dataclass(frozen=True)
@@ -24,6 +26,13 @@ class SeedItem:
     price_cents: int
     labels: tuple[str, ...]
     first_purchase_discount_pct: int | None = None
+
+    def wanted_labels(self, derived: LabelTable) -> frozenset[str]:
+        """The hand-set labels plus the ones derived from the plant's profile."""
+        wanted = frozenset(self.labels) | frozenset(derived.get(self.plant_slug or "", ()))
+        if len(wanted) > MAX_LABELS_PER_ITEM:
+            raise ValueError(f"{self.slug}: more than {MAX_LABELS_PER_ITEM} labels")
+        return wanted
 
     @property
     def id(self) -> uuid.UUID:
@@ -55,26 +64,26 @@ def sensor(slug: str, name: str, price_cents: int) -> SeedItem:
     return SeedItem(slug, name, "sensor", None, None, None, price_cents, ())
 
 
-BEGINNER = ("beginner",)
-EASY_CARE = ("beginner", "low-maintenance")
+# Only the labels PlantSolve cannot tell are set here; the rest come from catalog_labels.json.
+RARE = ("rare",)
 
 # Species are spelled as in the plant-care knowledge base, whose plant key is the pack slug.
 CATALOG = (
-    pack("lavender", "Lavender", 2400, 6, ("low-maintenance",)),
-    pack("holy-basil-tulsi", "Holy Basil (Tulsi)", 1800, 10, BEGINNER),
-    pack("golden-pothos", "Golden Pothos", 1500, 3, EASY_CARE, first_purchase_discount_pct=20),
-    pack("snake-plant", "Snake Plant", 2200, 3, EASY_CARE),
-    pack("zz-plant", "ZZ Plant", 2600, 3, EASY_CARE),
-    pack("jade-plant", "Jade Plant", 2000, 4, EASY_CARE),
-    pack("peace-lily", "Peace Lily", 2800, 3, BEGINNER),
-    pack("aloe-vera", "Aloe Vera", 1900, 3, EASY_CARE),
-    pack("spider-plant", "Spider Plant", 1400, 4, BEGINNER),
-    pack("monstera-deliciosa", "Monstera Deliciosa", 3600, 3, ("rare",)),
-    pack("ficus-lyrata", "Fiddle Leaf Fig", 4200, 2, ("rare",)),
+    pack("lavender", "Lavender", 2400, 6),
+    pack("holy-basil-tulsi", "Holy Basil (Tulsi)", 1800, 10),
+    pack("golden-pothos", "Golden Pothos", 1500, 3, first_purchase_discount_pct=20),
+    pack("snake-plant", "Snake Plant", 2200, 3),
+    pack("zz-plant", "ZZ Plant", 2600, 3),
+    pack("jade-plant", "Jade Plant", 2000, 4),
+    pack("peace-lily", "Peace Lily", 2800, 3),
+    pack("aloe-vera", "Aloe Vera", 1900, 3),
+    pack("spider-plant", "Spider Plant", 1400, 4),
+    pack("monstera-deliciosa", "Monstera Deliciosa", 3600, 3, RARE),
+    pack("ficus-lyrata", "Fiddle Leaf Fig", 4200, 2, RARE),
     pack("boston-fern", "Boston Fern", 2300, 3),
-    pack("calathea-orbifolia", "Calathea Orbifolia", 3200, 3, ("rare",)),
-    pack("cactus", "Cactus", 1600, 5, ("low-maintenance",)),
-    pack("maranta-prayer-plant", "Maranta Prayer Plant", 2700, 3, ("rare",)),
+    pack("calathea-orbifolia", "Calathea Orbifolia", 3200, 3, RARE),
+    pack("cactus", "Cactus", 1600, 5),
+    pack("maranta-prayer-plant", "Maranta Prayer Plant", 2700, 3, RARE),
     sensor("soil-moisture-sensor", "Soil Moisture Sensor", 1500),
     sensor("thermo-hygrometer", "Thermo-Hygrometer", 1800),
 )
@@ -84,11 +93,14 @@ LEGACY_ID_KEYS = {"soil-moisture-sensor": "Soil Moisture Sensor"}
 LEGACY_PACK_NAMES = ("Beginner's Kit", "Mint Pack", "Chili Pepper Pack", "Lavender Pack")
 
 
-def seed_catalog(session: Session) -> None:
-    """Insert the missing catalog items and labels and deactivate the legacy packs.
+def seed_catalog(session: Session, derived: LabelTable | None = None) -> None:
+    """Insert the missing catalog items, deactivate the legacy packs and sync the item labels.
 
-    Existing rows are left as they are: a conflict on id, name or slug means "already there".
+    Existing items are left as they are: a conflict on id, name or slug means "already there".
+    The labels of a catalog item are owned by the seed: those that are neither hand-set nor in
+    the derived table (`derived` defaults to catalog_labels.json) are removed.
     """
+    derived = load_label_table() if derived is None else derived
     for item in CATALOG:
         session.execute(
             insert(CatalogItem)
@@ -108,15 +120,22 @@ def seed_catalog(session: Session) -> None:
         stored_id = session.scalars(
             select(CatalogItem.id).where(CatalogItem.slug == item.slug)
         ).one()
-        for label in item.labels:
-            session.execute(
-                insert(CatalogItemLabel)
-                .values(item_id=stored_id, label=label)
-                .on_conflict_do_nothing()
-            )
+        sync_labels(session, stored_id, item.wanted_labels(derived))
     session.execute(
         update(CatalogItem).where(CatalogItem.name.in_(LEGACY_PACK_NAMES)).values(is_active=False)
     )
+
+
+def sync_labels(session: Session, item_id: uuid.UUID, wanted: frozenset[str]) -> None:
+    session.execute(
+        delete(CatalogItemLabel).where(
+            CatalogItemLabel.item_id == item_id, CatalogItemLabel.label.not_in(wanted)
+        )
+    )
+    for label in sorted(wanted):
+        session.execute(
+            insert(CatalogItemLabel).values(item_id=item_id, label=label).on_conflict_do_nothing()
+        )
 
 
 def main() -> None:

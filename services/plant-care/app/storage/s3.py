@@ -4,7 +4,9 @@ from botocore.exceptions import BotoCoreError, ClientError
 
 from app.config import Settings
 from app.service.diagnosis_model import Image, PhotoUnreadable
-from app.service.photos import PhotoStorageUnavailable
+from app.service.photos import PhotoStorageUnavailable, StoredObject
+
+MISSING_OBJECT_CODES = {"404", "NoSuchKey", "NotFound"}
 
 
 def create_s3_client(settings: Settings, presigning: bool = True):
@@ -69,17 +71,36 @@ class S3PhotoStorage:
         self._bucket = bucket
         self._url_ttl_seconds = url_ttl_seconds
 
-    def upload_url(self, storage_key: str) -> str:
-        return self._presign("put_object", storage_key)
+    def upload_url(self, storage_key: str, content_type: str, size_bytes: int) -> str:
+        return self._presign(
+            "put_object", storage_key, ContentType=content_type, ContentLength=size_bytes
+        )
 
     def download_url(self, storage_key: str) -> str:
         return self._presign("get_object", storage_key)
 
-    def _presign(self, operation: str, storage_key: str) -> str:
+    def head(self, storage_key: str) -> StoredObject | None:
+        try:
+            response = self._client.head_object(Bucket=self._bucket, Key=storage_key)
+        except ClientError as error:
+            if error.response.get("Error", {}).get("Code") in MISSING_OBJECT_CODES:
+                return None
+            raise PhotoStorageUnavailable from error
+        except BotoCoreError as error:
+            raise PhotoStorageUnavailable from error
+        return StoredObject(response["ContentLength"], response.get("ContentType"))
+
+    def delete(self, storage_key: str) -> None:
+        try:
+            self._client.delete_object(Bucket=self._bucket, Key=storage_key)
+        except (BotoCoreError, ClientError) as error:
+            raise PhotoStorageUnavailable from error
+
+    def _presign(self, operation: str, storage_key: str, **params: str | int) -> str:
         try:
             return self._client.generate_presigned_url(
                 operation,
-                Params={"Bucket": self._bucket, "Key": storage_key},
+                Params={"Bucket": self._bucket, "Key": storage_key, **params},
                 ExpiresIn=self._url_ttl_seconds,
             )
         except (BotoCoreError, ClientError) as error:

@@ -250,7 +250,10 @@ paths:
       tags:
       - journals
       summary: Record Planting
-      description: Record the planting date; the checkpoint windows are computed from it.
+      description: 'Record the planting date once; the checkpoint windows are computed from it.
+
+
+        Repeating the same date is a no-op; another date is refused once one is recorded.'
       operationId: record_planting_v1_journals__journal_id__planting_put
       parameters:
       - name: journal_id
@@ -323,7 +326,7 @@ paths:
                       enum:
                       - not-found
         '422':
-          description: A path or body parameter is invalid
+          description: The body is invalid, or the planting date is in the future (UTC today)
           content:
             application/problem+json:
               schema:
@@ -333,6 +336,17 @@ paths:
                     code:
                       enum:
                       - validation-error
+        '409':
+          description: A different planting date is already recorded for the journal
+          content:
+            application/problem+json:
+              schema:
+                allOf:
+                - $ref: '#/components/schemas/Problem'
+                - properties:
+                    code:
+                      enum:
+                      - planting-already-recorded
         default:
           description: Problem details
           content:
@@ -565,13 +579,16 @@ paths:
       tags:
       - photos
       summary: Request Upload
-      description: 'A presigned PUT URL for one photo of the update; repeating the request issues a new
-        URL.
+      description: 'A presigned PUT URL for one photo of the update; nothing is stored until it is confirmed.
 
 
-        A `roots_drainage` photo is accepted only while the diagnosis awaits a clarification in which
+        The URL signs the declared type and size: the upload must send exactly `required_headers`.
 
-        the AI asked for it (409 otherwise).'
+        Repeating the request issues a new URL; for a confirmed kind the photo is replaced by the
+
+        next confirmation. A `roots_drainage` photo is accepted only while the diagnosis awaits a
+
+        clarification in which the AI asked for it (409 otherwise).'
       operationId: request_upload_v1_updates__update_id__photos_post
       parameters:
       - name: update_id
@@ -644,7 +661,7 @@ paths:
                       enum:
                       - not-found
         '422':
-          description: A path or body parameter is invalid
+          description: A path or body parameter is invalid, or the type or size is not allowed
           content:
             application/problem+json:
               schema:
@@ -654,6 +671,8 @@ paths:
                     code:
                       enum:
                       - validation-error
+                      - photo-too-large
+                      - photo-type-not-allowed
         '409':
           description: No roots photo was asked for
           content:
@@ -753,6 +772,119 @@ paths:
                     code:
                       enum:
                       - validation-error
+        default:
+          description: Problem details
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+      x-gateway: public
+  /v1/updates/{update_id}/photos/{kind}/confirm:
+    post:
+      tags:
+      - photos
+      summary: Confirm Upload
+      description: 'Check the uploaded object and record the photo; confirming again changes nothing.
+
+
+        The object must exist (409 `photo-not-uploaded` otherwise) and be within the size and type
+
+        limits; an object that is not is deleted (422).'
+      operationId: confirm_upload_v1_updates__update_id__photos__kind__confirm_post
+      parameters:
+      - name: update_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+          title: Update Id
+      - name: kind
+        in: path
+        required: true
+        schema:
+          $ref: '#/components/schemas/PhotoKind'
+      - name: x-user-id
+        in: header
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: X-User-Id
+      - name: x-user-groups
+        in: header
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: X-User-Groups
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PhotoResponse'
+        '401':
+          description: '`X-User-Id` is missing or not a user id'
+          content:
+            application/problem+json:
+              schema:
+                allOf:
+                - $ref: '#/components/schemas/Problem'
+                - properties:
+                    code:
+                      enum:
+                      - unauthorized
+        '403':
+          description: 'The caller is not a customer: `X-User-Groups` lacks `users` or has `experts`/`admins`'
+          content:
+            application/problem+json:
+              schema:
+                allOf:
+                - $ref: '#/components/schemas/Problem'
+                - properties:
+                    code:
+                      enum:
+                      - forbidden
+        '404':
+          description: The user has no such update
+          content:
+            application/problem+json:
+              schema:
+                allOf:
+                - $ref: '#/components/schemas/Problem'
+                - properties:
+                    code:
+                      enum:
+                      - not-found
+        '422':
+          description: The uploaded object is too large or of a type that is not allowed; it was deleted
+          content:
+            application/problem+json:
+              schema:
+                allOf:
+                - $ref: '#/components/schemas/Problem'
+                - properties:
+                    code:
+                      enum:
+                      - validation-error
+                      - photo-too-large
+                      - photo-type-not-allowed
+        '409':
+          description: No roots photo was asked for, or the object was not uploaded
+          content:
+            application/problem+json:
+              schema:
+                allOf:
+                - $ref: '#/components/schemas/Problem'
+                - properties:
+                    code:
+                      enum:
+                      - roots-photo-not-requested
+                      - photo-not-uploaded
         default:
           description: Problem details
           content:
@@ -2101,6 +2233,19 @@ components:
       - answered
       - cancelled
       title: EscalationStatus
+    FaqEntryResponse:
+      properties:
+        question:
+          type: string
+          title: Question
+        answer:
+          type: string
+          title: Answer
+      type: object
+      required:
+      - question
+      - answer
+      title: FaqEntryResponse
     FeedResponse:
       properties:
         items:
@@ -2341,6 +2486,20 @@ components:
           - type: string
           - type: 'null'
           title: Toxicity
+        labels:
+          anyOf:
+          - items:
+              type: string
+            type: array
+          - type: 'null'
+          title: Labels
+        faq:
+          anyOf:
+          - items:
+              $ref: '#/components/schemas/FaqEntryResponse'
+            type: array
+          - type: 'null'
+          title: Faq
       type: object
       required:
       - slug
@@ -2348,7 +2507,8 @@ components:
       - sources
       - updated_at
       title: PlantProfileResponse
-      description: Absent facts are left out of the JSON, not sent as null.
+      description: Absent facts, an absent FAQ and empty labels are left out of the JSON, not sent as
+        null.
     PlantSourceResponse:
       properties:
         name:
@@ -2433,6 +2593,14 @@ components:
         source_url:
           type: string
           title: Source Url
+        source_name:
+          type: string
+          title: Source Name
+        license:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: License
         body:
           type: string
           title: Body
@@ -2442,6 +2610,8 @@ components:
       - document_title
       - section_heading
       - source_url
+      - source_name
+      - license
       - body
       title: RelatedSectionResponse
     Reliability:
@@ -2475,6 +2645,14 @@ components:
         source_url:
           type: string
           title: Source Url
+        source_name:
+          type: string
+          title: Source Name
+        license:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: License
       type: object
       required:
       - rank
@@ -2482,6 +2660,8 @@ components:
       - document_title
       - section_heading
       - source_url
+      - source_name
+      - license
       title: SourceResponse
     Status:
       type: string
@@ -2747,10 +2927,19 @@ components:
       properties:
         kind:
           $ref: '#/components/schemas/PhotoKind'
+        content_type:
+          type: string
+          title: Content Type
+        size_bytes:
+          type: integer
+          minimum: 1.0
+          title: Size Bytes
       additionalProperties: false
       type: object
       required:
       - kind
+      - content_type
+      - size_bytes
       title: UploadRequest
     UploadResponse:
       properties:
@@ -2762,11 +2951,17 @@ components:
         expires_in_seconds:
           type: integer
           title: Expires In Seconds
+        required_headers:
+          additionalProperties:
+            type: string
+          type: object
+          title: Required Headers
       type: object
       required:
       - kind
       - upload_url
       - expires_in_seconds
+      - required_headers
       title: UploadResponse
     WateringMethod:
       type: string

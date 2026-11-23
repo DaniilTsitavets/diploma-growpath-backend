@@ -1,7 +1,7 @@
 import uuid
 from datetime import date
 
-from sqlalchemy import select, tuple_, update
+from sqlalchemy import or_, select, tuple_, update
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.orm import Session
 
@@ -54,9 +54,14 @@ class SqlAlchemyJournalRepository:
     def set_planted_on(
         self, journal_id: uuid.UUID, user_id: uuid.UUID, planted_on: date
     ) -> Journal | None:
+        """Returns None when the journal is not the user's or has another planting date."""
         row = self._session.execute(
             update(JournalModel)
-            .where(JournalModel.id == journal_id, JournalModel.user_id == user_id)
+            .where(
+                JournalModel.id == journal_id,
+                JournalModel.user_id == user_id,
+                or_(JournalModel.planted_on.is_(None), JournalModel.planted_on == planted_on),
+            )
             .values(planted_on=planted_on)
             .returning(*COLUMNS)
             .execution_options(synchronize_session=False)

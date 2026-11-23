@@ -1,3 +1,4 @@
+import dataclasses
 from collections.abc import Collection
 
 from sqlalchemy import func, select, update
@@ -9,7 +10,7 @@ from sqlalchemy.orm import Session
 from app.models import PlantProfileModel
 from app.service.errors import Unavailable
 from app.service.knowledge_model import SyncResult
-from app.service.plant_profile_model import PlantProfile
+from app.service.plant_profile_model import FaqEntry, PlantProfile
 
 READ_COLUMNS = (
     "slug",
@@ -45,6 +46,8 @@ READ_COLUMNS = (
     "rh_min_pct",
     "rh_max_pct",
     "light_need",
+    "faq",
+    "labels",
 )
 
 
@@ -57,6 +60,9 @@ class SqlAlchemyPlantProfileRepository:
         values = {name: getattr(profile, name) for name in READ_COLUMNS}
         if values["key_takeaways"] is not None:
             values["key_takeaways"] = list(values["key_takeaways"])
+        if values["faq"] is not None:
+            values["faq"] = [dataclasses.asdict(entry) for entry in values["faq"]]
+        values["labels"] = list(values["labels"])
         inserted = self._session.execute(
             insert(PlantProfileModel)
             .values(**values)
@@ -111,4 +117,7 @@ class SqlAlchemyPlantProfileRepository:
         values = dict(row._mapping)
         if values["key_takeaways"] is not None:
             values["key_takeaways"] = tuple(values["key_takeaways"])
+        if values["faq"] is not None:
+            values["faq"] = tuple(FaqEntry(**entry) for entry in values["faq"])
+        values["labels"] = tuple(values["labels"])
         return PlantProfile(**values)

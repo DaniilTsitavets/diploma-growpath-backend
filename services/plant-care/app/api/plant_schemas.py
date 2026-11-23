@@ -11,8 +11,13 @@ class PlantSourceResponse(BaseModel):
     license: str
 
 
+class FaqEntryResponse(BaseModel):
+    question: str
+    answer: str
+
+
 class PlantProfileResponse(BaseModel):
-    """Absent facts are left out of the JSON, not sent as null."""
+    """Absent facts, an absent FAQ and empty labels are left out of the JSON, not sent as null."""
 
     slug: str
     species: str
@@ -34,17 +39,23 @@ class PlantProfileResponse(BaseModel):
     temperature: str | None = None
     pruning: str | None = None
     toxicity: str | None = None
+    labels: list[str] | None = None
+    faq: list[FaqEntryResponse] | None = None
 
     @classmethod
     def of(cls, profile: PlantProfile) -> "PlantProfileResponse":
-        facts = {
-            name: getattr(profile, name)
-            for name in cls.model_fields
-            if name not in {"sources", "updated_at"}
-        }
-        if profile.key_takeaways is not None:
-            facts["key_takeaways"] = list(profile.key_takeaways)
+        converted = {"sources", "updated_at", "key_takeaways", "labels", "faq"}
+        facts = {name: getattr(profile, name) for name in cls.model_fields if name not in converted}
         source = PlantSourceResponse(
             name=profile.source_name, url=profile.source_url, license=profile.license
         )
-        return cls(**facts, sources=[source], updated_at=profile.imported_on)
+        return cls(
+            **facts,
+            sources=[source],
+            updated_at=profile.imported_on,
+            key_takeaways=None if profile.key_takeaways is None else list(profile.key_takeaways),
+            labels=list(profile.labels) or None,
+            faq=None
+            if profile.faq is None
+            else [FaqEntryResponse(question=e.question, answer=e.answer) for e in profile.faq],
+        )

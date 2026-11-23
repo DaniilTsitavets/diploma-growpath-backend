@@ -32,6 +32,18 @@ class JournalNotFound(NotFound):
         super().__init__("the journal does not exist")
 
 
+class PlantingDateInFuture(InvalidRequest):
+    def __init__(self) -> None:
+        super().__init__("the planting date cannot be in the future")
+
+
+class PlantingAlreadyRecorded(Conflict):
+    code = "planting-already-recorded"
+
+    def __init__(self) -> None:
+        super().__init__("the planting date is already recorded and cannot be changed")
+
+
 class UpdateNotFound(NotFound):
     def __init__(self) -> None:
         super().__init__("the update does not exist")
@@ -107,6 +119,27 @@ class RootsPhotoNotRequested(Conflict):
 
     def __init__(self) -> None:
         super().__init__("a roots photo is accepted only after the AI asked for one")
+
+
+class PhotoNotUploaded(Conflict):
+    code = "photo-not-uploaded"
+
+    def __init__(self) -> None:
+        super().__init__("no object was uploaded for this photo")
+
+
+class PhotoTooLarge(InvalidRequest):
+    code = "photo-too-large"
+
+    def __init__(self, max_bytes: int) -> None:
+        super().__init__(f"a photo must be between 1 and {max_bytes} bytes")
+
+
+class PhotoTypeNotAllowed(InvalidRequest):
+    code = "photo-type-not-allowed"
+
+    def __init__(self, allowed: tuple[str, ...]) -> None:
+        super().__init__(f"a photo must be one of: {', '.join(allowed)}")
 
 
 class ReservationUnusable(Exception):

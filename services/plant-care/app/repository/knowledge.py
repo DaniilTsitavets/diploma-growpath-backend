@@ -25,6 +25,9 @@ SECTION_COLUMNS = (
     KbSectionModel.id,
     KbDocumentModel.title.label("document_title"),
     KbDocumentModel.source_url,
+    # `source_title` is "<source name>: <species>".
+    func.btrim(func.split_part(KbDocumentModel.source_title, ":", 1)).label("source_name"),
+    KbDocumentModel.license,
     KbSectionModel.heading,
     KbSectionModel.body,
 )

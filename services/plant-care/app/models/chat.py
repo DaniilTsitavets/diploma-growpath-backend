@@ -45,6 +45,11 @@ class ChatTurnSourceModel(Base):
             " AND char_length(source_url) <= 1000",
             name="lengths",
         ),
+        CheckConstraint(
+            "btrim(source_name) <> '' AND char_length(source_name) <= 300"
+            " AND (license IS NULL OR (btrim(license) <> '' AND char_length(license) <= 100))",
+            name="attribution",
+        ),
     )
 
     turn_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("chat_turns.id"), primary_key=True)
@@ -53,3 +58,5 @@ class ChatTurnSourceModel(Base):
     document_title: Mapped[str]
     section_heading: Mapped[str]
     source_url: Mapped[str]
+    source_name: Mapped[str]
+    license: Mapped[str | None]

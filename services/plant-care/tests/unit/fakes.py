@@ -69,7 +69,7 @@ class FakeJournals:
         self, journal_id: uuid.UUID, user_id: uuid.UUID, planted_on: date
     ) -> Journal | None:
         journal = self.get_owned(journal_id, user_id)
-        if journal is None:
+        if journal is None or journal.planted_on not in (None, planted_on):
             return None
         planted = Journal(**{**vars(journal), "planted_on": planted_on})
         self.rows[journal_id] = planted
@@ -322,6 +322,9 @@ class FakePhotos:
             return False
         self.rows.append(Photo(update_id, kind, storage_key))
         return True
+
+    def remove(self, update_id: uuid.UUID, kind: PhotoKind) -> None:
+        self.rows = [row for row in self.rows if (row.update_id, row.kind) != (update_id, kind)]
 
     def list_for_update(self, update_id: uuid.UUID) -> list[Photo]:
         return [row for row in self.rows if row.update_id == update_id]

@@ -78,16 +78,28 @@ def test_a_journal_page_continues_strictly_after_the_cursor(session: Session):
     assert [journal.id for journal in rest] == [old["id"]]
 
 
-def test_planting_sets_the_date_and_can_be_changed(session: Session):
+def test_planting_sets_the_date_once_and_repeating_it_is_idempotent(session: Session):
     repository = SqlAlchemyJournalRepository(session)
     values = add_journal(session)
     args = (values["id"], values["user_id"])
 
     first = repository.set_planted_on(*args, date(2026, 11, 1))
-    second = repository.set_planted_on(*args, date(2026, 11, 3))
+    repeated = repository.set_planted_on(*args, date(2026, 11, 1))
 
-    assert (first.planted_on, second.planted_on) == (date(2026, 11, 1), date(2026, 11, 3))
+    assert (first.planted_on, repeated.planted_on) == (date(2026, 11, 1), date(2026, 11, 1))
     assert session.scalar(select(func.count()).select_from(JournalModel)) == 1
+
+
+def test_planting_another_date_changes_nothing(session: Session):
+    repository = SqlAlchemyJournalRepository(session)
+    values = add_journal(session)
+    args = (values["id"], values["user_id"])
+    repository.set_planted_on(*args, date(2026, 11, 1))
+
+    result = repository.set_planted_on(*args, date(2026, 11, 3))
+
+    assert result is None
+    assert session.scalar(select(JournalModel.planted_on)) == date(2026, 11, 1)
 
 
 def test_planting_a_journal_of_another_user_changes_nothing(session: Session):

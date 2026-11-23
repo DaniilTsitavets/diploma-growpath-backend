@@ -30,7 +30,15 @@ def new_turn(journal_id: uuid.UUID, sources: list[Citation] | None = None, **fie
 
 
 def citation(rank: int, heading: str = "Watering") -> Citation:
-    return Citation(rank, uuid.uuid4(), "Basil guide", heading, "https://example.test/basil")
+    return Citation(
+        rank,
+        uuid.uuid4(),
+        "Basil guide",
+        heading,
+        "https://example.test/basil",
+        "PlantSolve",
+        "CC BY 4.0",
+    )
 
 
 @pytest.fixture
@@ -55,6 +63,10 @@ def test_a_new_turn_is_stored_with_its_citations_in_rank_order(
     assert [(s.rank, s.section_heading) for s in stored.sources] == [(1, "Watering"), (2, "Light")]
     assert stored.sources[0].document_title == "Basil guide"
     assert stored.sources[0].source_url == "https://example.test/basil"
+    assert (stored.sources[0].source_name, stored.sources[0].license) == (
+        "PlantSolve",
+        "CC BY 4.0",
+    )
 
 
 def test_a_turn_without_citations_is_stored(session: Session, journal_id: uuid.UUID):

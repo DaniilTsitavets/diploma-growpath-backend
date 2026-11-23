@@ -154,6 +154,33 @@ def test_planting_records_the_date_and_returns_the_checkpoints(
     assert body["checkpoints"][0]["opens_on"] == "2026-11-14"
 
 
+def test_a_future_planting_date_is_422_validation_error(client: TestClient, uow: FakeUnitOfWork):
+    journal = uow.journals.seed(USER)
+
+    response = client.put(
+        f"/v1/journals/{journal.id}/planting", json={"planted_on": "2026-11-12"}, headers=AS_USER
+    )
+
+    assert response.status_code == 422
+    assert response.json()["code"] == "validation-error"
+    assert response.json()["detail"] == "the planting date cannot be in the future"
+
+
+def test_replanting_on_another_date_is_409_and_on_the_same_date_is_200(
+    client: TestClient, uow: FakeUnitOfWork
+):
+    journal = uow.journals.seed(USER, planted_on=date(2026, 11, 9))
+    url = f"/v1/journals/{journal.id}/planting"
+
+    same = client.put(url, json={"planted_on": "2026-11-09"}, headers=AS_USER)
+    other = client.put(url, json={"planted_on": "2026-11-10"}, headers=AS_USER)
+
+    assert same.status_code == 200
+    assert other.status_code == 409
+    assert other.json()["code"] == "planting-already-recorded"
+    assert uow.journals.rows[journal.id].planted_on == date(2026, 11, 9)
+
+
 @pytest.mark.parametrize(
     "body", [{}, {"planted_on": "yesterday"}, {"planted_on": "2026-11-09", "x": 1}]
 )

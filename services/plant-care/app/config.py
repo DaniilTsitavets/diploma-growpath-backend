@@ -89,6 +89,7 @@ class Settings(BaseSettings):
     # that differs from the one the service itself uses to reach the object store.
     photos_public_endpoint_url: str | None = None
     photo_url_ttl_seconds: int = 900
+    photo_allowed_content_types: tuple[str, ...] = ("image/jpeg", "image/png", "image/webp")
 
     journals_default_page_size: int = 50
     journals_max_page_size: int = 100

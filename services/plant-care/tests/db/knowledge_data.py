@@ -25,7 +25,7 @@ def make_document(
         slug=slug,
         title=title or slug.title(),
         species=species,
-        source_title="Notes",
+        source_title="PlantSolve: Test plant",
         source_url=f"https://example.test/{slug}",
         content_sha256=hashlib.sha256(content.encode("utf-8")).hexdigest(),
         sections=[
@@ -65,4 +65,5 @@ def basil_guide() -> DocumentDraft:
             "Harvesting": "Harvest basil leaves often so that it does not flower.",
         },
         title="Basil guide",
+        license="CC BY 4.0",
     )

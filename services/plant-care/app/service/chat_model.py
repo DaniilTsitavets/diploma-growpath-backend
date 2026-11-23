@@ -23,6 +23,8 @@ class Citation:
     document_title: str
     section_heading: str
     source_url: str
+    source_name: str
+    license: str | None
 
 
 @dataclass(frozen=True)

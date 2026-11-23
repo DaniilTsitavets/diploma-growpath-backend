@@ -454,3 +454,44 @@ def test_profile_text_has_no_angle_brackets():
     result = profile(quickAnswer="<script>x</script> a < b > c")
 
     assert "<" not in result.quick_answer and ">" not in result.quick_answer
+
+
+def test_the_faq_of_the_record_becomes_question_and_answer_pairs():
+    result = profile()
+
+    assert [entry.question for entry in result.faq] == [
+        "Is lavender toxic to dogs or cats?",
+        "How often should I water my outdoor lavender?",
+    ]
+    assert all(entry.answer for entry in result.faq)
+
+
+def test_the_faq_keeps_ten_entries_bounds_the_texts_and_skips_incomplete_ones():
+    entries = [{"question": f"Question {n}?", "answer": f"Answer {n}."} for n in range(15)]
+    entries[0] = {"question": "<b>Wet</b> soil?", "answer": "  "}
+    entries[1] = {"question": "q " * 300, "answer": "a " * 3000}
+
+    result = profile(faq=entries)
+
+    assert len(result.faq) == 10
+    assert result.faq[0].question != "Wet soil?"
+    assert len(result.faq[0].question) <= 200 and result.faq[0].question.endswith("...")
+    assert len(result.faq[0].answer) <= 2000 and result.faq[0].answer.endswith("...")
+
+
+@pytest.mark.parametrize("faq", [None, [], "text", [{"question": "Q?"}, {"answer": "A."}, 5]])
+def test_a_profile_without_a_usable_faq_has_none(faq):
+    assert profile(faq=faq).faq is None
+
+
+def test_the_profile_hash_follows_the_faq_and_the_labels():
+    base = profile()
+
+    assert profile(faq=[{"question": "Q?", "answer": "A."}]).content_sha256 != base.content_sha256
+    assert profile(taxonomyTags=["fragrant"]).content_sha256 != base.content_sha256
+    assert profile(faq=list(plant_record()["faq"])).content_sha256 == base.content_sha256
+
+
+def test_the_profile_carries_the_labels_derived_from_the_record():
+    assert "toxic-to-pets" in profile().labels
+    assert profile(plantHero={}, taxonomyTags=[], petSafe={}).labels == ()

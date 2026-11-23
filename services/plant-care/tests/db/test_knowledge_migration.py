@@ -38,6 +38,7 @@ CONSTRAINTS = {
     "fk_chat_turn_sources_turn_id_chat_turns",
     "ck_chat_turn_sources_rank",
     "ck_chat_turn_sources_lengths",
+    "ck_chat_turn_sources_attribution",
 }
 
 

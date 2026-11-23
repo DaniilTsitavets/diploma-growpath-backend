@@ -4,14 +4,13 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 from app.knowledge_import.source import FetchPolicy
 
 
-class ImportSettings(BaseSettings):
-    """Only what the import needs: the database and the polite-fetching limits."""
+class FetchSettings(BaseSettings):
+    """The polite-fetching limits, all a command that only reads PlantSolve needs."""
 
     model_config = SettingsConfigDict(env_prefix="PLANT_CARE_")
 
     service_name: str = "plant-care-kb-import"
     log_level: str = "INFO"
-    database_url: SecretStr
 
     kb_import_pause_seconds: float = Field(default=2.0, ge=0)
     kb_import_timeout_seconds: float = Field(default=10.0, gt=0)
@@ -29,3 +28,9 @@ class ImportSettings(BaseSettings):
             retry_base_delay_seconds=self.kb_import_retry_base_delay_seconds,
             retry_max_delay_seconds=self.kb_import_retry_max_delay_seconds,
         )
+
+
+class ImportSettings(FetchSettings):
+    """What the import needs: the fetching limits and the database."""
+
+    database_url: SecretStr

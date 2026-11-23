@@ -1,7 +1,7 @@
 from datetime import date, datetime
 
-from sqlalchemy import CheckConstraint, DateTime, Numeric, SmallInteger, func
-from sqlalchemy.dialects.postgresql import JSONB
+from sqlalchemy import CheckConstraint, DateTime, Numeric, SmallInteger, Text, func, text
+from sqlalchemy.dialects.postgresql import ARRAY, JSONB
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.models.base import Base
@@ -42,6 +42,18 @@ class PlantProfileModel(Base):
             "key_takeaways IS NULL OR (jsonb_typeof(key_takeaways) = 'array'"
             " AND jsonb_array_length(key_takeaways) <= 12)",
             name="key_takeaways",
+        ),
+        CheckConstraint(
+            "faq IS NULL OR (jsonb_typeof(faq) = 'array'"
+            " AND jsonb_array_length(faq) BETWEEN 1 AND 10)",
+            name="faq",
+        ),
+        CheckConstraint(
+            "cardinality(labels) <= 20"
+            " AND array_position(labels, NULL) IS NULL AND array_position(labels, '') IS NULL"
+            " AND array_to_string(labels, ',')"
+            " ~ '^([a-z0-9]+(-[a-z0-9]+)*(,[a-z0-9]+(-[a-z0-9]+)*)*)?$'",
+            name="labels",
         ),
         CheckConstraint(
             "source_url LIKE 'https://%' AND char_length(source_url) <= 1000", name="source_url"
@@ -95,6 +107,8 @@ class PlantProfileModel(Base):
     rh_min_pct: Mapped[int | None] = mapped_column(SmallInteger)
     rh_max_pct: Mapped[int | None] = mapped_column(SmallInteger)
     light_need: Mapped[str | None]
+    faq: Mapped[list[dict[str, str]] | None] = mapped_column(JSONB(none_as_null=True))
+    labels: Mapped[list[str]] = mapped_column(ARRAY(Text), server_default=text("ARRAY[]::text[]"))
     source_name: Mapped[str]
     source_url: Mapped[str]
     license: Mapped[str]

@@ -56,6 +56,8 @@ def test_a_new_turn_is_201_with_the_answer_and_its_citations(scenario: ChatScena
             "document_title": "Document 1",
             "section_heading": "Heading 1",
             "source_url": "https://example.test/1",
+            "source_name": "PlantSolve",
+            "license": "CC BY 4.0",
         }
     ]
     assert turn["related"] == []
@@ -92,6 +94,10 @@ def test_a_model_failure_is_200_with_the_sections_and_no_answer(
         "Heading 2",
     ]
     assert turn["related"][0]["body"] == "Body of section 1."
+    assert all(
+        (section["source_name"], section["license"]) == ("PlantSolve", "CC BY 4.0")
+        for section in turn["related"]
+    )
     assert scenario.uow.chat_turns.turns == {}
 
 

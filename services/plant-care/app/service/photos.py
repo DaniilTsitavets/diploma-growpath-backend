@@ -3,7 +3,14 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Protocol
 
-from app.service.errors import RootsPhotoNotRequested, Unavailable, UpdateNotFound
+from app.service.errors import (
+    PhotoNotUploaded,
+    PhotoTooLarge,
+    PhotoTypeNotAllowed,
+    RootsPhotoNotRequested,
+    Unavailable,
+    UpdateNotFound,
+)
 from app.service.model import DiagnosisStatus, Photo, PhotoKind
 from app.service.ports import UnitOfWork
 
@@ -13,17 +20,47 @@ REQUIRED_KINDS = (PhotoKind.OVERVIEW, PhotoKind.SOIL)
 
 class PhotoStorageUnavailable(Unavailable):
     def __init__(self) -> None:
-        super().__init__("the photo storage could not issue a URL")
+        super().__init__("the photo storage did not answer")
+
+
+@dataclass(frozen=True)
+class StoredObject:
+    size_bytes: int
+    content_type: str | None
 
 
 class PhotoStorage(Protocol):
-    def upload_url(self, storage_key: str) -> str:
-        """A presigned PUT URL for the object. Raises PhotoStorageUnavailable."""
+    def upload_url(self, storage_key: str, content_type: str, size_bytes: int) -> str:
+        """A presigned PUT URL signing type and length. Raises PhotoStorageUnavailable."""
         ...
 
     def download_url(self, storage_key: str) -> str:
         """A presigned GET URL for the object. Raises PhotoStorageUnavailable."""
         ...
+
+    def head(self, storage_key: str) -> StoredObject | None:
+        """The object's metadata, None when it does not exist. Raises PhotoStorageUnavailable."""
+        ...
+
+    def delete(self, storage_key: str) -> None:
+        """Remove the object; a missing one is not an error. Raises PhotoStorageUnavailable."""
+        ...
+
+
+@dataclass(frozen=True)
+class PhotoPolicy:
+    allowed_content_types: tuple[str, ...]
+    max_bytes: int
+    url_ttl_seconds: int
+
+    def check_declared(self, content_type: str, size_bytes: int) -> None:
+        if content_type not in self.allowed_content_types:
+            raise PhotoTypeNotAllowed(self.allowed_content_types)
+        if not 1 <= size_bytes <= self.max_bytes:
+            raise PhotoTooLarge(self.max_bytes)
+
+    def check_stored(self, stored: StoredObject) -> None:
+        self.check_declared(stored.content_type or "", stored.size_bytes)
 
 
 @dataclass(frozen=True)
@@ -31,6 +68,8 @@ class PhotoUpload:
     kind: PhotoKind
     url: str
     expires_in_seconds: int
+    content_type: str
+    size_bytes: int
 
 
 @dataclass(frozen=True)
@@ -59,27 +98,58 @@ class PhotoService:
         self,
         unit_of_work: Callable[[], UnitOfWork],
         storage: PhotoStorage,
-        url_ttl_seconds: int,
+        policy: PhotoPolicy,
     ) -> None:
         self._unit_of_work = unit_of_work
         self._storage = storage
-        self._url_ttl_seconds = url_ttl_seconds
+        self._policy = policy
 
     def request_upload(
-        self, update_id: uuid.UUID, user_id: uuid.UUID, kind: PhotoKind
+        self,
+        update_id: uuid.UUID,
+        user_id: uuid.UUID,
+        kind: PhotoKind,
+        content_type: str,
+        size_bytes: int,
     ) -> PhotoUpload:
-        """Record the object key of the photo and sign an upload URL; repeating it re-signs."""
+        """Sign an upload URL bound to the declared type and size; nothing is stored yet."""
         with self._unit_of_work() as uow:
             update = uow.updates.get_owned(update_id, user_id)
             if update is None:
                 raise UpdateNotFound
-            if kind is PhotoKind.ROOTS_DRAINAGE and not self._roots_photo_requested(uow, update_id):
-                raise RootsPhotoNotRequested
+            self._check_kind_allowed(uow, update_id, kind)
+            self._policy.check_declared(content_type, size_bytes)
             key = storage_key_for(update.journal_id, update_id, kind)
-            url = self._storage.upload_url(key)
+            url = self._storage.upload_url(key, content_type, size_bytes)
+        return PhotoUpload(kind, url, self._policy.url_ttl_seconds, content_type, size_bytes)
+
+    def confirm_upload(
+        self, update_id: uuid.UUID, user_id: uuid.UUID, kind: PhotoKind
+    ) -> PhotoLink:
+        """Record the photo once the object is within the limits; otherwise delete it."""
+        with self._unit_of_work() as uow:
+            update = uow.updates.get_owned(update_id, user_id)
+            if update is None:
+                raise UpdateNotFound
+            self._check_kind_allowed(uow, update_id, kind)
+            key = storage_key_for(update.journal_id, update_id, kind)
+            stored = self._storage.head(key)
+            if stored is None:
+                raise PhotoNotUploaded
+            try:
+                self._policy.check_stored(stored)
+            except (PhotoTooLarge, PhotoTypeNotAllowed):
+                self._storage.delete(key)
+                uow.photos.remove(update_id, kind)
+                uow.commit()
+                raise
             uow.photos.add(update_id, kind, key)
             uow.commit()
-        return PhotoUpload(kind, url, self._url_ttl_seconds)
+        return PhotoLink(kind, self._storage.download_url(key))
+
+    def _check_kind_allowed(self, uow: UnitOfWork, update_id: uuid.UUID, kind: PhotoKind) -> None:
+        if kind is PhotoKind.ROOTS_DRAINAGE and not self._roots_photo_requested(uow, update_id):
+            raise RootsPhotoNotRequested
 
     @staticmethod
     def _roots_photo_requested(uow: UnitOfWork, update_id: uuid.UUID) -> bool:

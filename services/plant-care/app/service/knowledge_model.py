@@ -40,5 +40,7 @@ class RetrievedSection:
     id: uuid.UUID
     document_title: str
     source_url: str
+    source_name: str
+    license: str | None
     heading: str
     body: str

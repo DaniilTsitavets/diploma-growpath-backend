@@ -10,7 +10,7 @@ from app.models import PlantProfileModel
 from app.repository.plant_profiles import SqlAlchemyPlantProfileRepository
 from app.service.errors import Unavailable
 from app.service.knowledge_model import SyncResult
-from app.service.plant_profile_model import PlantProfile
+from app.service.plant_profile_model import FaqEntry, PlantProfile
 from tests.db.factories import violated
 
 DAY = date(2026, 11, 22)
@@ -144,6 +144,47 @@ def test_sync_creates_a_missing_profile_and_reads_it_back(session: Session):
     assert repo.sync_profile(new) is SyncResult.CREATED
 
     assert repo.get("lavender") == new
+
+
+def test_the_faq_and_the_labels_round_trip_and_a_changed_one_updates_the_row(session: Session):
+    repo = SqlAlchemyPlantProfileRepository(session)
+    faq = (FaqEntry("Q1?", "A1."), FaqEntry("Q2?", "A2."))
+    repo.sync_profile(profile(faq=faq, labels=("beginner", "pet-safe")))
+
+    stored = repo.get("lavender")
+    assert (stored.faq, stored.labels) == (faq, ("beginner", "pet-safe"))
+
+    changed = profile(sha="b", faq=None, labels=("advanced",))
+    assert repo.sync_profile(changed) is SyncResult.UPDATED
+    assert repo.get("lavender") == changed
+
+
+def test_a_profile_without_faq_and_labels_reads_back_as_none_and_empty(session: Session):
+    repo = SqlAlchemyPlantProfileRepository(session)
+    repo.sync_profile(profile())
+
+    stored = repo.get("lavender")
+
+    assert (stored.faq, stored.labels) == (None, ())
+
+
+def test_the_faq_is_an_array_of_one_to_ten_entries(session: Session):
+    entry = {"question": "Q?", "answer": "A."}
+    add_row(session, slug="ten", source_slug="ten-care", faq=[entry] * 10)
+
+    rejected_by(session, "ck_plant_profiles_faq", faq=[entry] * 11)
+    rejected_by(session, "ck_plant_profiles_faq", faq=[])
+    rejected_by(session, "ck_plant_profiles_faq", faq={"question": "Q?"})
+
+
+@pytest.mark.parametrize(
+    "labels",
+    [["Beginner"], ["low maintenance"], ["a_b"], ["-a"], ["a--b"], [""], ["a"] * 21],
+)
+def test_the_labels_are_at_most_twenty_lowercase_kebab_words(session: Session, labels: list[str]):
+    add_row(session, slug="fine", source_slug="fine-care", labels=["low-light", "pet-safe"])
+
+    rejected_by(session, "ck_plant_profiles_labels", labels=labels)
 
 
 def test_sync_with_the_same_hash_changes_nothing_even_on_another_day(session: Session):

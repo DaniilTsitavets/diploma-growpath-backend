@@ -54,6 +54,8 @@ class SqlAlchemyChatTurnRepository:
                         "document_title": source.document_title,
                         "section_heading": source.section_heading,
                         "source_url": source.source_url,
+                        "source_name": source.source_name,
+                        "license": source.license,
                     }
                     for source in turn.sources
                 ],
@@ -96,6 +98,8 @@ class SqlAlchemyChatTurnRepository:
                     source.document_title,
                     source.section_heading,
                     source.source_url,
+                    source.source_name,
+                    source.license,
                 )
             )
         return [
