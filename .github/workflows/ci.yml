@@ -8,6 +8,10 @@ on:
 permissions:
   contents: read
 
+env:
+  # The images use Python 3.12; newer interpreters change the HTTP status phrases that end up in the OpenAPI files.
+  UV_PYTHON: "3.12"
+
 concurrency:
   group: ci-${{ github.ref }}
   cancel-in-progress: true
