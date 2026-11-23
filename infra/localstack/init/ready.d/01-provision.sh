@@ -53,15 +53,21 @@ awslocal cognito-idp admin-add-user-to-group --user-pool-id "$pool_id" --usernam
   --group-name "$USER_GROUP"
 awslocal cognito-idp admin-add-user-to-group --user-pool-id "$pool_id" --username "$EXPERT_USER" \
   --group-name "$EXPERT_GROUP"
-if [ -n "$ADMIN_PASSWORD" ]; then
+create_admin() {
   awslocal cognito-idp admin-create-user --user-pool-id "$pool_id" --username "$ADMIN_USER" \
     --message-action SUPPRESS >/dev/null
   awslocal cognito-idp admin-set-user-password --user-pool-id "$pool_id" --username "$ADMIN_USER" \
     --password "$ADMIN_PASSWORD" --permanent
   awslocal cognito-idp admin-add-user-to-group --user-pool-id "$pool_id" --username "$ADMIN_USER" \
     --group-name "$ADMIN_GROUP"
-else
+}
+# A bad password must not stop the rest of the stack from being provisioned.
+if [ -z "$ADMIN_PASSWORD" ]; then
   echo "ROOT_ADMIN_PASSWORD is empty: the admin user ${ADMIN_USER} is not created"
+elif ! create_admin; then
+  echo "WARNING: the admin user ${ADMIN_USER} was not created; ROOT_ADMIN_PASSWORD must satisfy the pool" \
+    "password policy (8+ characters with upper and lower case letters, a digit and a symbol)"
+  awslocal cognito-idp admin-delete-user --user-pool-id "$pool_id" --username "$ADMIN_USER" 2>/dev/null || true
 fi
 
 api_id=$(awslocal apigateway create-rest-api --name growpath-gateway --tags "_custom_id_=${API_ID}" --query id --output text)
