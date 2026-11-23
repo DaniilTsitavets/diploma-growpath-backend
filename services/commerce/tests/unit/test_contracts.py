@@ -105,7 +105,7 @@ def place(client: TestClient, item_id: uuid.UUID):
     return client.post(
         "/v1/orders",
         json={"item_id": str(item_id)},
-        headers={"Idempotency-Key": "key-1", "X-User-Id": USER},
+        headers={"Idempotency-Key": "key-1", "X-User-Id": USER, "X-User-Groups": "users"},
     )
 
 
@@ -165,7 +165,20 @@ def test_the_conformance_check_rejects_a_body_that_breaks_the_schema():
 
 
 def test_a_validation_error_conforms_to_the_problem_schema(client):
-    response = client().post("/v1/orders", json={}, headers={"X-User-Id": USER})
+    response = client().post(
+        "/v1/orders", json={}, headers={"X-User-Id": USER, "X-User-Groups": "users"}
+    )
 
     assert response.status_code == 422
+    assert_conforms(load_openapi(SERVICE), "/v1/orders", "POST", response)
+
+
+def test_a_forbidden_role_conforms_to_the_problem_schema(client):
+    response = client().post(
+        "/v1/orders",
+        json={"item_id": str(uuid.uuid4())},
+        headers={"Idempotency-Key": "key-1", "X-User-Id": USER, "X-User-Groups": "experts"},
+    )
+
+    assert response.status_code == 403
     assert_conforms(load_openapi(SERVICE), "/v1/orders", "POST", response)

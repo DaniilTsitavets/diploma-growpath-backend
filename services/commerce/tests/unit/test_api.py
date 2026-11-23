@@ -40,10 +40,14 @@ def make_client() -> Callable[..., TestClient]:
     return build
 
 
-def order_headers(key: str = "key-1", user: str | None = USER) -> dict[str, str]:
+def order_headers(
+    key: str = "key-1", user: str | None = USER, groups: str | None = "users"
+) -> dict[str, str]:
     headers = {"Idempotency-Key": key}
     if user is not None:
         headers["X-User-Id"] = user
+    if groups is not None:
+        headers["X-User-Groups"] = groups
     return headers
 
 
@@ -90,10 +94,51 @@ def test_order_requires_an_identified_user(make_client, user):
     assert response.json()["code"] == "unauthorized"
 
 
+@pytest.mark.parametrize("groups", ["users", "[users]", "[users, ]", "a,users", "users "])
+def test_a_customer_may_order(make_client, groups):
+    item = make_item()
+
+    response = make_client(item).post(
+        "/v1/orders", json={"item_id": str(item.id)}, headers=order_headers(groups=groups)
+    )
+
+    assert response.status_code == 201
+
+
+@pytest.mark.parametrize(
+    "groups",
+    [None, "", "experts", "admins", "users,experts", "[users, admins]", "users,experts,admins"],
+    ids=["no header", "empty", "expert", "admin", "users+experts", "users+admins", "all three"],
+)
+def test_other_roles_cannot_order(make_client, groups):
+    item = make_item()
+
+    response = make_client(item).post(
+        "/v1/orders", json={"item_id": str(item.id)}, headers=order_headers(groups=groups)
+    )
+
+    assert response.status_code == 403
+    assert response.headers["content-type"] == PROBLEM_JSON
+    assert response.json()["code"] == "forbidden"
+    assert response.json()["detail"] == "this role cannot use this endpoint"
+
+
+def test_a_missing_identity_is_401_before_the_role_check(make_client):
+    response = make_client().post(
+        "/v1/orders", json={}, headers=order_headers(user=None, groups="experts")
+    )
+
+    assert response.status_code == 401
+
+
+def test_the_catalog_is_open_without_identity(make_client):
+    assert make_client(make_item()).get("/v1/items").status_code == 200
+
+
 @pytest.mark.parametrize(
     ("headers", "body"),
     [
-        ({"X-User-Id": USER}, {"item_id": str(uuid.uuid4())}),
+        ({"X-User-Id": USER, "X-User-Groups": "users"}, {"item_id": str(uuid.uuid4())}),
         (order_headers(key="k" * 129), {"item_id": str(uuid.uuid4())}),
         (order_headers(key=""), {"item_id": str(uuid.uuid4())}),
         (order_headers(), {"item_id": "not-a-uuid"}),

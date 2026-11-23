@@ -31,6 +31,7 @@ DEFAULT_CODES = {
 RESPONSE_DESCRIPTIONS = {
     401: "The X-User-Id header is missing or malformed",
     402: "Payment was declined",
+    403: "The role of the caller cannot use this endpoint",
     404: "The resource does not exist",
     422: "The request does not match the contract",
     503: "A dependency is unreachable",

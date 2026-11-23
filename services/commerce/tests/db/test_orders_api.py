@@ -22,7 +22,7 @@ def post_order(client: TestClient, item_id: uuid.UUID, user_id: uuid.UUID, key: 
     return client.post(
         "/v1/orders",
         json={"item_id": str(item_id)},
-        headers={"Idempotency-Key": key, "X-User-Id": str(user_id)},
+        headers={"Idempotency-Key": key, "X-User-Id": str(user_id), "X-User-Groups": "users"},
     )
 
 
