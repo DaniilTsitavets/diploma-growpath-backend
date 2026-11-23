@@ -331,14 +331,20 @@ new_update() {
 }
 
 upload_photo() {
-  local url put_code
-  gwj POST "updates/$UPDATE_ID/photos" "$TOKEN" "{\"kind\":\"$1\"}"
+  local url put_code size
+  size=$(wc -c <"$TMP/sample.png" | tr -d ' ')
+  gwj POST "updates/$UPDATE_ID/photos" "$TOKEN" \
+    "{\"kind\":\"$1\",\"content_type\":\"image/png\",\"size_bytes\":$size}"
   expect "POST /updates/{id}/photos ($1)" "200 201" "$CODE"
   url=$(jq -r .upload_url <<<"$BODY")
   printf '    presigned PUT to %s?<signature>\n' "${url%%\?*}"
-  put_code=$(curl -s -o /dev/null -m 30 -w '%{http_code}' -X PUT -H 'Content-Type: image/png' \
+  put_code=$(curl -s -o /dev/null -m 30 -w '%{http_code}' -X PUT \
+    -H "Content-Type: $(jq -r '.required_headers["Content-Type"]' <<<"$BODY")" \
+    -H "Content-Length: $(jq -r '.required_headers["Content-Length"]' <<<"$BODY")" \
     --data-binary @"$TMP/sample.png" "$url")
   expect "PUT photo straight to S3 ($1)" 200 "$put_code"
+  gw POST "updates/$UPDATE_ID/photos/$1/confirm" "$TOKEN"
+  expect "POST /updates/{id}/photos/$1/confirm" 200 "$CODE"
 }
 
 diagnosis_summary() {
@@ -482,7 +488,7 @@ act_diagnosis() {
   expect "PUT /journals/{id}/planting" 200 "$CODE"
   jq -r '"    planted_on=\(.planted_on)  checkpoints=\(.checkpoints | length)"' <<<"$BODY"
 
-  step "New update with the questionnaire, then the two required photos by presigned PUT to S3"
+  step "New update with the questionnaire, then the two required photos: presign, PUT to S3, confirm"
   new_update
   gw GET "updates/$UPDATE_ID/photos" "$TOKEN"
   jq -r '"    photos=\(.photos | length)  missing_required=\(.missing_required)"' <<<"$BODY"

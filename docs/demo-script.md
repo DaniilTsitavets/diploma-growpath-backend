@@ -119,7 +119,8 @@ make demo ACT=diagnosis
 What to point at:
 
 - Photos go straight to S3 by a presigned URL issued by plant-care (the URL is printed without its
-  signature); the database stores only object keys.
+  signature; it signs the content type and length). The client then confirms the upload and plant-care checks
+  size and type on the stored object before it records the key; the database stores only object keys.
 - `tier=starter ai_quota_today=1/3` before the diagnosis: creating the update already reserved one AI unit.
 - The diagnosis call: `status`, `model_effort`, candidates, `has_dominant_candidate`, `escalation_offered`
   with the mock provider. After it, the quota is `1/3` (committed) with a result, or `0/3` when the model

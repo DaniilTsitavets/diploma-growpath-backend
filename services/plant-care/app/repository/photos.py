@@ -1,6 +1,6 @@
 import uuid
 
-from sqlalchemy import select
+from sqlalchemy import delete, select
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.orm import Session
 
@@ -22,6 +22,13 @@ class SqlAlchemyPhotoRepository:
             .returning(UpdatePhotoModel.update_id)
         )
         return result.scalar_one_or_none() is not None
+
+    def remove(self, update_id: uuid.UUID, kind: PhotoKind) -> None:
+        self._session.execute(
+            delete(UpdatePhotoModel).where(
+                UpdatePhotoModel.update_id == update_id, UpdatePhotoModel.kind == kind.value
+            )
+        )
 
     def list_for_update(self, update_id: uuid.UUID) -> list[Photo]:
         rows = self._session.scalars(
