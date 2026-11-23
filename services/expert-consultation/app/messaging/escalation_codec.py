@@ -9,7 +9,8 @@ from app.service.queue import InvalidMessage, Route
 from app.service.tickets import TicketService
 
 CONTEXT_LIMIT_BYTES = 64 * 1024
-SUPPORTED_SCHEMA_VERSIONS = frozenset({1})
+# Version 1 only drains messages queued before plant-care moved to 2; the contract allows 2 alone.
+SUPPORTED_SCHEMA_VERSIONS = frozenset({1, 2})
 
 
 def context_size(context: dict[str, Any]) -> int:

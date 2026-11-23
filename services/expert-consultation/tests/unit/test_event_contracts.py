@@ -88,13 +88,69 @@ def test_the_codec_rejects_every_payload_that_lacks_a_required_field():
         assert not accepted(broken), f"the codec accepts a payload without {field}"
 
 
-@pytest.mark.parametrize("version", [2, "1", None], ids=repr)
+@pytest.mark.parametrize("version", [3, "2", None], ids=repr)
 def test_a_context_of_another_version_breaks_the_contract_and_the_codec(version: object):
     payload = example_payloads(ESCALATION)["after a diagnosis"]
     payload["context"]["schema_version"] = version
 
     assert payload_errors(ESCALATION, payload)
     assert not accepted(payload)
+
+
+def test_a_version_1_context_is_still_decoded_though_the_contract_no_longer_allows_it():
+    payload = example_payloads(ESCALATION)["after a diagnosis"]
+    payload["context"]["schema_version"] = 1
+
+    assert payload_errors(ESCALATION, payload)
+    assert accepted(payload)
+
+
+@pytest.mark.parametrize(
+    ("key", "value"),
+    [
+        ("watering_method", "sprinkled"),
+        ("pot_diameter_class", "huge"),
+        ("drainage_holes", "maybe"),
+        ("standing_water_over_1h", True),
+        ("dry_depth", "damp"),
+        ("pot_weight_relative", "heavier"),
+        ("repotted_or_moved", "unknown"),
+        ("sensor_unit", "percent"),
+        ("pot_weight_now_g", "heavy"),
+        ("air_temp_c", None),
+        ("lighting", None),
+    ],
+)
+def test_an_invalid_update_value_breaks_the_contract(key: str, value: object):
+    payload = example_payloads(ESCALATION)["after a diagnosis"]
+    payload["context"]["update"][key] = value
+
+    assert payload_errors(ESCALATION, payload)
+
+
+@pytest.mark.parametrize("key", ["finger_test", "drainage", "pot_weight", "watering_interval_days"])
+def test_a_retired_questionnaire_key_breaks_the_contract(key: str):
+    payload = example_payloads(ESCALATION)["after a diagnosis"]
+    payload["context"]["update"][key] = "dry"
+
+    assert payload_errors(ESCALATION, payload)
+
+
+def test_a_version_2_update_without_optional_keys_satisfies_the_contract():
+    payload = example_payloads(ESCALATION)["without a diagnosis"]
+
+    assert set(payload["context"]["update"]) == {
+        "id",
+        "created_at",
+        "lighting",
+        "watering_method",
+        "pot_diameter_class",
+        "drainage_holes",
+        "standing_water_over_1h",
+        "dry_depth",
+        "pot_weight_relative",
+    }
+    assert payload_errors(ESCALATION, payload) == []
 
 
 def test_a_malformed_user_id_breaks_the_contract_and_the_codec():
@@ -114,7 +170,7 @@ def test_the_codec_enforces_the_size_limit_the_contract_only_describes():
 
 def test_the_codec_reads_only_the_version_of_the_context():
     payload = example_payloads(ESCALATION)["after a diagnosis"]
-    payload["context"] = {"schema_version": 1, "added_later": True}
+    payload["context"] = {"schema_version": 2, "added_later": True}
 
     assert payload_errors(ESCALATION, payload)
     assert accepted(payload)

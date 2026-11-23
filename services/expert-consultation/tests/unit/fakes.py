@@ -66,7 +66,7 @@ def escalation_request(**overrides: Any) -> EscalationRequested:
         "journal_id": uuid.uuid4(),
         "update_id": uuid.uuid4(),
         "accept_until": NOW + 23 * HOUR,
-        "context": {"schema_version": 1, "species": "Basil", "user_question": "Why spots?"},
+        "context": {"schema_version": 2, "species": "Basil", "user_question": "Why spots?"},
     }
     return EscalationRequested(**{**fields, **overrides})
 
