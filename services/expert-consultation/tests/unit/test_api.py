@@ -10,6 +10,7 @@ from app.api.errors import register_error_handlers
 from app.service.expert_tickets import ExpertTicketService
 from app.service.ticket_publisher import TerminalEventPublisher
 from app.service.tickets import TicketService
+from tests.unit.event_contracts import example_payloads
 from tests.unit.fake_storage import FakePhotoStorage
 from tests.unit.fakes import (
     HOUR,
@@ -230,6 +231,18 @@ def test_a_ticket_is_shown_with_its_context_and_presigned_photo_urls(
     ]
     assert body["answer_text"] is None
     assert "user_id" not in body
+
+
+def test_the_watering_assessment_of_the_context_is_shown_untouched(
+    harness: Harness, client: TestClient
+):
+    context = example_payloads("EscalationRequested")["after a diagnosis"]["context"]
+    assert context["watering"]["I_rec_bounds"]["text"] == "between 7.1 and 14 days"
+    ticket = harness.add(make_ticket(context=context))
+
+    body = client.get(f"/v1/expert/tickets/{ticket.id}", headers=AS_EXPERT).json()
+
+    assert body["context"] == context
 
 
 def test_an_answered_ticket_shows_its_answer(harness: Harness, client: TestClient):

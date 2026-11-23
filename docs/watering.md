@@ -238,8 +238,12 @@ fact with its basis instead of the raw questionnaire alone. The code is `app/ser
 
 - `today` is the UTC date of the attempt (`DiagnosisService` takes a clock, so tests fix it).
 - The update's questionnaire enums are mapped to the module enums by value; `Decimal` measurements become floats and a
-  missing value stays `None`. `season_changed` and `reset_reason` are not set: the service does not decide when a
-  season changed.
+  missing value stays `None`. `reset_reason` is not set. `season_changed` is true when the meteorological season of
+  the newest earlier update of the journal (its `created_at` in UTC) differs from the season of `today`; it is false
+  for the first update of a journal and the module applies it only to species with `dormancy_shift = true`.
+  **Hemisphere assumption (author's, unverified):** the journal stores no location, so the Northern Hemisphere is
+  assumed: December-February winter, March-May spring, June-August summer, September-November autumn
+  (`season_of` in `watering_input.py`). A plant kept in the Southern Hemisphere gets the reset a half year off.
 - The species profile is found by the journal's `species` with `PlantProfileRepository.get_by_species`, a
   case-insensitive match of `plant_profiles.species` (the lowest slug when two profiles share a species). No profile
   gives `profile = None`, which is not an error: `p` is the default 0.5 and the species flags do not fire.
@@ -254,7 +258,9 @@ fact with its basis instead of the raw questionnaire alone. The code is `app/ser
   `last_watered_on`, or with no usable signal, gives no observation.
 - Reset rules: an update that answers `repotted_or_moved = yes` marks the observation just before it as a reset
   (`reset = true`), so the module cuts everything up to and including it; the repotting update keeps its own
-  observation. The same answer on the update being assessed is applied by the module (`reset_reason`). A change of
+  observation. The same answer on the update being assessed is applied by the module (`reset_reason`). For a species
+  with `dormancy_shift = true` an earlier update made in another season than the update before it also marks the
+  observation just before it as a reset, so an interval learned in autumn does not carry into winter. A change of
   `pot_diameter_class` between known classes is cut by the module through the observation's pot class.
 
 ### Prompt and storage
@@ -284,4 +290,6 @@ or a lost reservation is a new attempt and computes a fresh assessment.
 or when it could not be computed. Keys: `status`, `reliability`, `depletion_D`, `D_source`, `target_p`, `p_source`,
 `I_rec_days`, `I_rec_bounds {lower_days, upper_days, text}`, `I_fact_days`, `ratio_r`, `Ks`, `flags[]`,
 `air {T, RH, VPD_kPa}`, `calibration {n_observations, reset_reason}`, `assumptions[]`.
-The escalation context sent to the expert (snapshot v2) does not include it.
+The escalation context sent to the expert (snapshot v2) carries the stored dictionary, untouched, as the optional
+top-level `watering` object (typed in `EscalationContext` of the AsyncAPI contract; omitted when the diagnosis has
+none). It is small, so when the context is over 64 KB the oldest history entries are dropped and `watering` stays.

@@ -1,8 +1,9 @@
-from datetime import UTC, date, datetime, timedelta
+from datetime import UTC, date, datetime, timedelta, timezone
 from decimal import Decimal
 
 import pytest
 
+from app.service import watering_input as wi
 from app.service import watering_types as wt
 from app.service.model import (
     Answer,
@@ -289,3 +290,171 @@ def test_the_history_calibrates_the_interval():
     )
 
     assert assessment.calibration.n_observations == 3
+
+
+@pytest.mark.parametrize(
+    ("month", "season"),
+    [
+        (12, wi.Season.WINTER),
+        (1, wi.Season.WINTER),
+        (2, wi.Season.WINTER),
+        (3, wi.Season.SPRING),
+        (4, wi.Season.SPRING),
+        (5, wi.Season.SPRING),
+        (6, wi.Season.SUMMER),
+        (7, wi.Season.SUMMER),
+        (8, wi.Season.SUMMER),
+        (9, wi.Season.AUTUMN),
+        (10, wi.Season.AUTUMN),
+        (11, wi.Season.AUTUMN),
+    ],
+)
+def test_the_season_follows_the_northern_meteorological_calendar(month: int, season: wi.Season):
+    assert wi.season_of(date(2026, month, 15)) is season
+
+
+@pytest.mark.parametrize(
+    ("last_day", "first_day"),
+    [
+        (date(2026, 2, 28), date(2026, 3, 1)),
+        (date(2026, 5, 31), date(2026, 6, 1)),
+        (date(2026, 8, 31), date(2026, 9, 1)),
+        (date(2026, 11, 30), date(2026, 12, 1)),
+    ],
+)
+def test_the_season_changes_exactly_on_the_first_of_the_month(last_day: date, first_day: date):
+    earlier = datetime.combine(last_day, datetime.min.time(), tzinfo=UTC)
+
+    assert wi.crossed_season(earlier, last_day) is False
+    assert wi.crossed_season(earlier, first_day) is True
+
+
+def test_a_year_boundary_inside_the_winter_is_not_a_season_change():
+    earlier = datetime(2026, 12, 20, tzinfo=UTC)
+
+    assert wi.crossed_season(earlier, date(2027, 1, 20)) is False
+
+
+def test_the_day_of_an_earlier_update_is_taken_in_utc():
+    earlier = datetime(2026, 3, 1, 1, tzinfo=timezone(timedelta(hours=3)))
+
+    assert wi.crossed_season(earlier, date(2026, 2, 28)) is False
+
+
+def test_the_inputs_carry_the_season_flag():
+    assert watering_inputs(make_update(), TODAY).season_changed is False
+    assert watering_inputs(make_update(), TODAY, season_changed=True).season_changed is True
+
+
+def seasonal_profiles(dormancy_shift: bool) -> FakePlantProfiles:
+    profiles = FakePlantProfiles()
+    profiles.seed("basil", species="Basil", dryness_threshold_pct=50, dormancy_shift=dormancy_shift)
+    return profiles
+
+
+def autumn_updates() -> list[UpdateRecord]:
+    kwargs = {
+        "pot_diameter_class": PotDiameterClass.FROM_10_TO_15,
+        "dry_depth": DryDepth.ABOUT_2_3_CM,
+    }
+    return [
+        update_on(day, last_watered_on=date(2026, 11, day) - timedelta(days=7), **kwargs)
+        for day in (3, 6)
+    ]
+
+
+def current_update(last_watered_on: date) -> UpdateRecord:
+    return make_update(
+        journal_id=JOURNAL,
+        last_watered_on=last_watered_on,
+        pot_diameter_class=PotDiameterClass.FROM_10_TO_15,
+        dry_depth=DryDepth.ABOUT_2_3_CM,
+    )
+
+
+def test_a_new_season_resets_the_calibration_of_a_dormant_species():
+    assessment = assess_update(
+        seasonal_profiles(True),
+        FakeUpdatesOf(autumn_updates()),
+        current_update(date(2026, 12, 1)),
+        "Basil",
+        date(2026, 12, 4),
+        6,
+    )
+
+    assert assessment.calibration.reset_reason == "season_change"
+    assert assessment.calibration.n_observations == 1
+
+
+def test_a_new_season_keeps_the_calibration_of_a_species_without_dormancy():
+    assessment = assess_update(
+        seasonal_profiles(False),
+        FakeUpdatesOf(autumn_updates()),
+        current_update(date(2026, 12, 1)),
+        "Basil",
+        date(2026, 12, 4),
+        6,
+    )
+
+    assert assessment.calibration.reset_reason is None
+    assert assessment.calibration.n_observations == 3
+
+
+def test_the_same_season_keeps_the_calibration():
+    assessment = assess_update(
+        seasonal_profiles(True),
+        FakeUpdatesOf(autumn_updates()),
+        current_update(date(2026, 11, 18)),
+        "Basil",
+        date(2026, 11, 20),
+        6,
+    )
+
+    assert assessment.calibration.reset_reason is None
+    assert assessment.calibration.n_observations == 3
+
+
+def test_the_first_update_of_a_journal_has_no_season_to_change_from():
+    assessment = assess_update(
+        seasonal_profiles(True),
+        FakeUpdatesOf([]),
+        current_update(date(2026, 12, 1)),
+        "Basil",
+        date(2026, 12, 4),
+        6,
+    )
+
+    assert assessment.calibration.reset_reason is None
+
+
+def test_a_season_change_between_earlier_updates_resets_the_observation_before_it():
+    kwargs = {"pot_diameter_class": PotDiameterClass.LT_10, "dry_depth": DryDepth.NOT_DRY}
+    autumn = update_on(2, last_watered_on=date(2026, 11, 1), **kwargs)
+    winter = make_update(
+        journal_id=JOURNAL,
+        created_at=datetime(2026, 12, 2, 12, tzinfo=UTC),
+        last_watered_on=date(2026, 12, 1),
+        **kwargs,
+    )
+    later = make_update(
+        journal_id=JOURNAL,
+        created_at=datetime(2026, 12, 9, 12, tzinfo=UTC),
+        last_watered_on=date(2026, 12, 8),
+        **kwargs,
+    )
+    newest_first = [later, winter, autumn]
+
+    assert [o.reset for o in watering_history(newest_first, reset_on_season_change=True)] == [
+        True,
+        False,
+        False,
+    ]
+    assert [o.reset for o in watering_history(newest_first)] == [False, False, False]
+
+
+def test_the_first_update_has_nothing_to_reset_on_a_season_change():
+    only = update_on(2, last_watered_on=date(2026, 11, 1), dry_depth=DryDepth.NOT_DRY)
+
+    (observation,) = watering_history([only], reset_on_season_change=True)
+
+    assert observation.reset is False

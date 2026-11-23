@@ -23,6 +23,7 @@ from tests.unit.event_contracts import (
 )
 from tests.unit.fakes import NOW
 from tests.unit.settings import ESCALATION_TOPIC_ARN
+from tests.unit.test_escalation_events import WATERING
 
 ORDER_FIELDS_READ = {"order_id", "user_id", "item_type"}
 TICKET_FIELDS_READ = {"ticket_id", "escalation_id"}
@@ -69,9 +70,13 @@ def published_escalations() -> dict[str, str]:
         HistoryEntry(NOW - timedelta(days=1), None, None),
     ]
     later.publisher.publish(later.escalate())
+    assessed = DeliveryScenario()
+    assessed.uow.diagnoses.seed(assessed.update.id, watering=WATERING)
+    assessed.publisher.publish(assessed.escalate())
+    scenarios = {"plain": plain, "asked": asked, "later": later, "assessed": assessed}
     return {
         name: encode_escalation_requested(scenario.events.published[-1])
-        for name, scenario in {"plain": plain, "asked": asked, "later": later}.items()
+        for name, scenario in scenarios.items()
     }
 
 
@@ -104,6 +109,22 @@ def test_the_published_attributes_satisfy_the_contract():
 @pytest.mark.parametrize("name", example_payloads(ESCALATION))
 def test_the_escalation_examples_satisfy_the_contract(name: str):
     assert payload_errors(ESCALATION, example_payloads(ESCALATION)[name]) == []
+
+
+def test_the_published_assessment_is_in_the_context_and_a_plain_one_has_none():
+    assert json.loads(PUBLISHED["assessed"])["context"]["watering"] == WATERING
+    assert "watering" not in json.loads(PUBLISHED["plain"])["context"]
+
+
+@pytest.mark.parametrize(
+    ("key", "value"),
+    [("status", "thirsty"), ("reliability", None), ("flags", ["unknown_flag"]), ("target_p", "x")],
+)
+def test_the_contract_rejects_an_invalid_watering_assessment(key: str, value: object):
+    payload = example_payloads(ESCALATION)["after a diagnosis"]
+    payload["context"]["watering"][key] = value
+
+    assert payload_errors(ESCALATION, payload)
 
 
 def test_the_contract_rejects_a_context_of_another_version():

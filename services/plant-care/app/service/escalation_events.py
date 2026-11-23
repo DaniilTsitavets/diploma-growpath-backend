@@ -150,6 +150,8 @@ def _diagnosis(diagnosis: Diagnosis) -> dict[str, object]:
         result["clarifying_question"] = summary.clarifying_question
     if summary.clarifying_answer is not None:
         result["clarifying_answer"] = summary.clarifying_answer
+    if summary.watering is not None:
+        result["watering"] = summary.watering
     return result
 
 

@@ -28,6 +28,24 @@ from app.service.model import (
 from tests.unit.delivery_scenario import ACK_MARGIN, TTL, DeliveryScenario
 from tests.unit.fakes import NOW
 
+WATERING = {
+    "depletion_D": 0.15,
+    "D_source": "sensor",
+    "target_p": 0.5,
+    "p_source": "profile",
+    "I_rec_days": 9.3,
+    "I_rec_bounds": {"lower_days": 7.1, "upper_days": 14.0, "text": "between 7.1 and 14 days"},
+    "I_fact_days": 2,
+    "ratio_r": 0.22,
+    "Ks": 1.0,
+    "status": "overwatering",
+    "flags": ["drainage_none"],
+    "air": {"T": 22.4, "RH": 48.0, "VPD_kPa": 1.38},
+    "calibration": {"n_observations": 2, "reset_reason": None},
+    "assumptions": ["The target depletion equals the species dryness threshold."],
+    "reliability": "medium",
+}
+
 
 def source(scenario: DeliveryScenario, history=(), **escalation) -> ContextSource:
     return ContextSource(
@@ -143,6 +161,28 @@ def test_optional_parts_are_left_out_when_absent():
     assert "user_question" not in context
     assert "clarifying_question" not in context
     assert "clarifying_answer" not in context
+    assert "watering" not in context
+
+
+def test_the_stored_watering_assessment_is_carried_untouched():
+    scenario = DeliveryScenario()
+    scenario.uow.diagnoses.seed(scenario.update.id, watering=WATERING)
+
+    context = build_context(source(scenario))
+
+    assert context["watering"] == WATERING
+
+
+def test_the_watering_assessment_survives_when_the_history_is_cut():
+    scenario = DeliveryScenario()
+    scenario.uow.diagnoses.seed(scenario.update.id, watering=WATERING)
+    history = [entry(day, "н" * 200) for day in range(300, 0, -1)]
+
+    context = build_context(source(scenario, history=history))
+
+    assert len(context["history"]) < len(history)
+    assert context["watering"] == WATERING
+    assert context_size(context) <= CONTEXT_LIMIT_BYTES
 
 
 def test_without_a_diagnosis_the_context_has_no_diagnosis():
