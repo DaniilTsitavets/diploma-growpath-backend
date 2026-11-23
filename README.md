@@ -81,8 +81,9 @@ The care chat in plant-care answers from a knowledge base held in the plant-care
 15 plants (the list is `services/plant-care/app/knowledge_import/plantsolve_plants.txt`) and 5 problem
 records, fetched from the static JSON API `https://www.plantsolve.com/api/v1/`. The same import fills the plant
 profiles served by the public `GET /v1/plants/{slug}`; the plants file maps the PlantSolve slug, our slug and the
-species, and the species must match `plant_species` of the catalog pack. Until `make import-kb` has run, the
-endpoint answers `404`.
+species, and the species must match `plant_species` of the catalog pack. `make up` runs the import (and the image
+upload) after the stack is healthy; if it could not (no internet, no `uv`), run `make import-kb` yourself. Until it
+has run, the endpoint answers `404`.
 
 **Licence and attribution.** PlantSolve `/api/v1/*` is licensed
 [CC BY 4.0](https://www.plantsolve.com/terms/) (section 4), which requires visible attribution and a link
@@ -219,8 +220,8 @@ not revoke tokens already issued; they expire within the hour.
   `http://localhost:4566/restapis/growpath/v1/_user_request_/v1/<path>`), user pool
   `us-east-1_growpath`, app client `growpathclient`, CloudFront `growpathspa`
   (`http://growpathspa.cloudfront.localhost.localstack.cloud:4566/`). The stored data is not:
-  uploaded images and the frontend build must be uploaded again (`make catalog-images`,
-  `make deploy-frontend`), and the Cognito users are created again by the init script.
+  uploaded images and the frontend build must be uploaded again (`make up` does the images; run
+  `make deploy-frontend` yourself), and the Cognito users are created again by the init script.
 - **Expiry is not live-demonstrable:** a ticket expires 72 hours after creation (an author's assumption);
   `ticket.cancelled` and the quota release are covered by tests (`services/expert-consultation/tests`).
 - **Care chat** over the knowledge base exists in plant-care (`/journals/{id}/chat/turns`) but is outside the

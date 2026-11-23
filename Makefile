@@ -9,8 +9,11 @@ COVERAGE_GATE := --cov-fail-under=70
 	cp .env.example .env
 	@echo "Created .env from .env.example; set LOCALSTACK_AUTH_TOKEN in it."
 
+# The seeds are best effort: they need uv and, for the import, the internet; a failure does not fail `make up`.
 up: .env
 	$(COMPOSE) up -d --build --wait
+	-$(MAKE) --no-print-directory catalog-images
+	-$(MAKE) --no-print-directory import-kb
 
 down:
 	$(COMPOSE) down
