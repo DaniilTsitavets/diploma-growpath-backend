@@ -11,6 +11,10 @@ class ItemSlugNotFound(Exception):
     """No active item has this slug."""
 
 
+class InvalidCursor(Exception):
+    """The pagination cursor was not issued by this service."""
+
+
 class CatalogUnavailable(Exception):
     """The catalog database cannot be reached; raised by the catalog repository."""
 

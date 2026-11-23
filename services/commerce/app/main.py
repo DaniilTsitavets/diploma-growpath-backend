@@ -47,7 +47,11 @@ def create_app(
     app.state.engine = create_db_engine(settings)
     unit_of_work = partial(SqlAlchemyUnitOfWork, sessionmaker(app.state.engine))
     app.state.purchase_service = PurchaseService(unit_of_work, MockPaymentGateway(), order_events)
-    app.state.catalog_service = CatalogService(unit_of_work)
+    app.state.catalog_service = CatalogService(
+        unit_of_work,
+        default_page_size=settings.catalog_default_page_size,
+        max_page_size=settings.catalog_max_page_size,
+    )
     app.state.republisher = OrderRepublisher(
         unit_of_work,
         order_events,

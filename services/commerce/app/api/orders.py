@@ -4,6 +4,7 @@ from typing import Annotated
 from fastapi import APIRouter, Depends, Header, Response
 
 from app.api.dependencies import current_user_id, get_purchase_service
+from app.api.errors import problem_responses
 from app.api.schemas import CreateOrderRequest, OrderResponse
 from app.service.model import PlaceOrder
 from app.service.purchase import PurchaseService
@@ -11,7 +12,11 @@ from app.service.purchase import PurchaseService
 router = APIRouter(prefix="/v1/orders", tags=["orders"])
 
 
-@router.post("", status_code=201, responses={200: {"model": OrderResponse}})
+@router.post(
+    "",
+    status_code=201,
+    responses={200: {"model": OrderResponse}, **problem_responses(401, 402, 404, 422)},
+)
 def create_order(
     body: CreateOrderRequest,
     response: Response,

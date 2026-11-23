@@ -60,8 +60,14 @@ class SqlAlchemyCatalogRepository:
                 return None
             return CatalogEntry(**row._mapping, labels=self._labels_of([row.id])[row.id])
 
-    def list_active(self, label: str | None = None) -> list[CatalogEntry]:
-        query = select(*ITEM_COLUMNS).where(CatalogItem.is_active).order_by(CatalogItem.name)
+    def list_active(
+        self, label: str | None = None, *, limit: int | None = None, after_slug: str | None = None
+    ) -> list[CatalogEntry]:
+        query = select(*ITEM_COLUMNS).where(CatalogItem.is_active).order_by(CatalogItem.slug)
+        if after_slug is not None:
+            query = query.where(CatalogItem.slug > after_slug)
+        if limit is not None:
+            query = query.limit(limit)
         if label is not None:
             query = query.where(
                 exists().where(

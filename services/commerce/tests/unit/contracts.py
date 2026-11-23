@@ -17,21 +17,6 @@ PROBLEM_JSON = "application/problem+json"
 HTTP_METHODS = frozenset({"get", "put", "post", "delete", "patch"})
 DOCUMENT_URI = "urn:growpath:openapi"
 PROBLEM_REF = "#/components/schemas/Problem"
-PROBLEM_SCHEMA = {
-    "type": "object",
-    "title": "Problem",
-    "description": "Problem details (RFC 7807); members such as `code` or `errors` may follow.",
-    "required": ["type", "title", "status"],
-    "properties": {
-        "type": {"type": "string"},
-        "title": {"type": "string"},
-        "status": {"type": "integer"},
-        "detail": {"anyOf": [{"type": "string"}, {"type": "null"}]},
-        "correlation_id": {"anyOf": [{"type": "string"}, {"type": "null"}]},
-        "code": {"type": "string"},
-        "errors": {"type": "array", "items": {"type": "object"}},
-    },
-}
 VALIDATION_SCHEMAS = ("HTTPValidationError", "ValidationError")
 
 
@@ -46,7 +31,6 @@ def build_openapi(app: FastAPI, description: str, public_prefixes: tuple[str, ..
     schemas = document.setdefault("components", {}).setdefault("schemas", {})
     for name in VALIDATION_SCHEMAS:
         schemas.pop(name, None)
-    schemas["Problem"] = PROBLEM_SCHEMA
     problem = {
         "description": "Problem details",
         "content": {PROBLEM_JSON: {"schema": {"$ref": PROBLEM_REF}}},
@@ -60,11 +44,11 @@ def build_openapi(app: FastAPI, description: str, public_prefixes: tuple[str, ..
                 operation.setdefault("tags", []).append("internal")
             operation["x-gateway"] = exposure
             responses = operation["responses"]
-            if "422" in responses:
-                responses["422"] = copy.deepcopy(problem)
+            if responses.get("422", {}).get("description") == "Validation Error":
+                del responses["422"]
             for status, response in responses.items():
                 if status.isdigit() and int(status) >= 400:
-                    response.setdefault("content", copy.deepcopy(problem["content"]))
+                    response["content"] = {PROBLEM_JSON: response["content"]["application/json"]}
             responses["default"] = copy.deepcopy(problem)
     return document
 

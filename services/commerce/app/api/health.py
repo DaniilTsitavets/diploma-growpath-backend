@@ -6,6 +6,7 @@ from pydantic import BaseModel
 from sqlalchemy import Engine, text
 from sqlalchemy.exc import SQLAlchemyError
 
+from app.api.errors import problem_responses
 from app.db import get_engine
 
 router = APIRouter(prefix="/health", tags=["health"])
@@ -21,7 +22,7 @@ def live() -> HealthStatus:
     return HealthStatus()
 
 
-@router.get("/ready")
+@router.get("/ready", responses=problem_responses(503))
 def ready(engine: Annotated[Engine, Depends(get_engine)]) -> HealthStatus:
     try:
         with engine.connect() as connection:

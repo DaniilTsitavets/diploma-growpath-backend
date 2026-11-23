@@ -115,7 +115,9 @@ class FakeCatalog:
             raise CatalogUnavailable
         return next((entry for entry in self.list_active() if entry.slug == slug), None)
 
-    def list_active(self, label: str | None = None) -> list[CatalogEntry]:
+    def list_active(
+        self, label: str | None = None, *, limit: int | None = None, after_slug: str | None = None
+    ) -> list[CatalogEntry]:
         if self.unavailable:
             raise CatalogUnavailable
         entries = [
@@ -123,10 +125,16 @@ class FakeCatalog:
             for item in self._items.values()
             if item.is_active
         ]
-        return sorted(
-            (entry for entry in entries if label is None or label in entry.labels),
-            key=lambda entry: entry.name,
+        matching = sorted(
+            (
+                entry
+                for entry in entries
+                if (label is None or label in entry.labels)
+                and (after_slug is None or entry.slug > after_slug)
+            ),
+            key=lambda entry: entry.slug,
         )
+        return matching[:limit]
 
 
 class FakeUnitOfWork:

@@ -38,6 +38,7 @@ def test_ready_reports_problem_when_database_down(client):
     assert response.headers["content-type"] == PROBLEM_JSON
     assert body["title"] == "Service Unavailable"
     assert body["detail"] == "database unavailable"
+    assert body["code"] == "service-unavailable"
 
 
 def test_unknown_route_is_problem_json_with_correlation_id(client):
@@ -46,6 +47,7 @@ def test_unknown_route_is_problem_json_with_correlation_id(client):
     assert response.status_code == 404
     assert response.headers["content-type"] == PROBLEM_JSON
     assert response.json()["correlation_id"] == "corr-9"
+    assert response.json()["code"] == "not-found"
     assert response.headers[CORRELATION_HEADER] == "corr-9"
 
 
@@ -63,6 +65,7 @@ def test_invalid_request_is_422_problem_json(app, client):
     assert response.status_code == 422
     assert response.headers["content-type"] == PROBLEM_JSON
     assert body["errors"][0]["loc"] == ["body", "quantity"]
+    assert body["code"] == "validation-error"
 
 
 def test_unexpected_error_is_500_problem_json(app, client):
@@ -74,6 +77,7 @@ def test_unexpected_error_is_500_problem_json(app, client):
 
     assert response.status_code == 500
     assert response.json()["title"] == "Internal Server Error"
+    assert response.json()["code"] == "internal-error"
     assert "secret internals" not in response.text
 
 

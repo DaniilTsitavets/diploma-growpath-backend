@@ -15,3 +15,5 @@ class Settings(BaseSettings):
     republish_grace_seconds: float = 30.0
     republish_batch_size: int = 50
     unavailable_retry_after_seconds: int = 5
+    catalog_default_page_size: int = 50
+    catalog_max_page_size: int = 100
