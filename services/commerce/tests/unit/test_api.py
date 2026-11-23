@@ -32,7 +32,9 @@ def make_client() -> Callable[..., TestClient]:
         app.state.purchase_service = PurchaseService(
             lambda: uow, RecordingPayments(declines), RecordingEvents()
         )
-        app.state.catalog_service = CatalogService(lambda: uow)
+        app.state.catalog_service = CatalogService(
+            lambda: uow, default_page_size=3, max_page_size=5
+        )
         return TestClient(app, raise_server_exceptions=False)
 
     return build
@@ -85,6 +87,7 @@ def test_order_requires_an_identified_user(make_client, user):
 
     assert response.status_code == 401
     assert response.headers["content-type"] == PROBLEM_JSON
+    assert response.json()["code"] == "unauthorized"
 
 
 @pytest.mark.parametrize(
@@ -112,6 +115,7 @@ def test_unknown_item_is_404(make_client):
 
     assert response.status_code == 404
     assert response.json()["title"] == "Not Found"
+    assert response.json()["code"] == "item-not-found"
 
 
 def test_key_reused_for_another_item_is_422(make_client):
@@ -123,6 +127,7 @@ def test_key_reused_for_another_item_is_422(make_client):
 
     assert response.status_code == 422
     assert "different item" in response.json()["detail"]
+    assert response.json()["code"] == "idempotency-key-reused"
 
 
 def test_declined_payment_is_402(make_client):
@@ -134,6 +139,7 @@ def test_declined_payment_is_402(make_client):
 
     assert response.status_code == 402
     assert response.headers["content-type"] == PROBLEM_JSON
+    assert response.json()["code"] == "payment-declined"
 
 
 def test_catalog_lists_active_items_with_labels(make_client):
@@ -142,12 +148,14 @@ def test_catalog_lists_active_items_with_labels(make_client):
 
     response = make_client(kit, hidden).get("/v1/items")
 
-    (item,) = response.json()
+    (item,) = response.json()["items"]
     assert response.status_code == 200
-    assert (item["name"], item["labels"], item["price_cents"]) == (
+    assert response.json()["next_cursor"] is None
+    assert (item["name"], item["labels"], item["price_cents"], item["currency"]) == (
         "Beginner's Kit",
         ["beginner", "low-maintenance"],
         2500,
+        "EUR",
     )
 
 
@@ -157,7 +165,7 @@ def test_catalog_can_be_filtered_by_label(make_client):
 
     response = make_client(rare, common).get("/v1/items", params={"label": "rare"})
 
-    assert [item["name"] for item in response.json()] == ["Chili Pack"]
+    assert [item["name"] for item in response.json()["items"]] == ["Chili Pack"]
 
 
 def test_catalog_label_filter_is_validated(make_client):
@@ -171,9 +179,80 @@ def test_catalog_list_carries_slugs_and_is_cacheable(make_client):
         "/v1/items"
     )
 
-    (item,) = response.json()
+    (item,) = response.json()["items"]
     assert (item["slug"], item["plant_slug"]) == ("golden-pothos", "golden-pothos")
     assert response.headers["cache-control"] == "public, max-age=60"
+
+
+def entries(count: int):
+    return [make_entry(slug=f"plant-{n:02d}", name=f"Plant {n}") for n in range(count)]
+
+
+def slugs(response) -> list[str]:
+    return [item["slug"] for item in response.json()["items"]]
+
+
+def test_catalog_pages_use_the_configured_default_size_and_a_cursor(make_client):
+    response = make_client(*entries(4)).get("/v1/items")
+
+    assert slugs(response) == ["plant-00", "plant-01", "plant-02"]
+    assert response.json()["next_cursor"] is not None
+
+
+def test_catalog_cursor_round_trip_walks_every_item_once(make_client):
+    client = make_client(*entries(7))
+    seen: list[str] = []
+    params: dict[str, object] = {"limit": 3}
+
+    while True:
+        body = client.get("/v1/items", params=params).json()
+        seen += [item["slug"] for item in body["items"]]
+        if body["next_cursor"] is None:
+            break
+        params["cursor"] = body["next_cursor"]
+
+    assert seen == [f"plant-{n:02d}" for n in range(7)]
+
+
+def test_catalog_last_full_page_has_no_cursor(make_client):
+    response = make_client(*entries(3)).get("/v1/items")
+
+    assert len(slugs(response)) == 3
+    assert response.json()["next_cursor"] is None
+
+
+def test_catalog_limit_above_the_maximum_is_clamped(make_client):
+    response = make_client(*entries(8)).get("/v1/items", params={"limit": 100})
+
+    assert len(slugs(response)) == 5
+
+
+@pytest.mark.parametrize("limit", [0, -1, "many"])
+def test_catalog_limit_below_one_or_not_a_number_is_422(make_client, limit):
+    response = make_client(*entries(2)).get("/v1/items", params={"limit": limit})
+
+    assert response.status_code == 422
+    assert response.json()["code"] == "validation-error"
+
+
+@pytest.mark.parametrize("cursor", ["!!!", "bm90IGEgc2x1Zw%3D%3D", "Tm9wZQ", "X19f"])
+def test_catalog_bad_cursor_is_422_invalid_cursor(make_client, cursor):
+    response = make_client(*entries(2)).get("/v1/items", params={"cursor": cursor})
+
+    assert response.status_code == 422
+    assert response.headers["content-type"] == PROBLEM_JSON
+    assert response.json()["code"] == "invalid-cursor"
+    assert "cache-control" not in response.headers
+
+
+def test_amounts_are_in_euro(make_client):
+    item = make_item()
+    client = make_client(item)
+
+    order = client.post("/v1/orders", json={"item_id": str(item.id)}, headers=order_headers())
+
+    assert order.json()["currency"] == "EUR"
+    assert client.get("/v1/items/beginners-kit").json()["currency"] == "EUR"
 
 
 def test_item_is_found_by_slug(make_client):
@@ -213,6 +292,7 @@ def test_unknown_or_malformed_slug_is_404_problem(make_client, slug):
     assert response.status_code == 404
     assert response.headers["content-type"] == PROBLEM_JSON
     assert response.json()["title"] == "Item not found"
+    assert response.json()["code"] == "item-not-found"
     assert "cache-control" not in response.headers
 
 
@@ -229,6 +309,7 @@ def test_catalog_answers_503_with_retry_after_when_the_database_is_down(make_cli
     assert response.status_code == 503
     assert response.headers["content-type"] == PROBLEM_JSON
     assert response.headers["retry-after"] == "5"
+    assert response.json()["code"] == "catalog-unavailable"
     assert "cache-control" not in response.headers
 
 

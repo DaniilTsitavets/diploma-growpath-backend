@@ -4,7 +4,7 @@ from datetime import date
 import pytest
 
 from app.service.checkpoints import CheckpointState
-from app.service.errors import JournalNotFound
+from app.service.errors import InvalidCursor, JournalNotFound
 from app.service.journals import JournalService
 from tests.unit.fakes import TODAY, FakeUnitOfWork
 
@@ -18,7 +18,7 @@ def uow() -> FakeUnitOfWork:
 
 @pytest.fixture
 def service(uow: FakeUnitOfWork) -> JournalService:
-    return JournalService(lambda: uow, lambda: TODAY)
+    return JournalService(lambda: uow, 2, 3, lambda: TODAY)
 
 
 def test_journals_of_the_user_come_newest_first(service: JournalService, uow: FakeUnitOfWork):
@@ -26,9 +26,36 @@ def test_journals_of_the_user_come_newest_first(service: JournalService, uow: Fa
     new = uow.journals.seed(USER)
     uow.journals.seed(uuid.uuid4())
 
-    views = service.list_for_user(USER)
+    page = service.page_for_user(USER, None, None)
 
-    assert [view.journal.id for view in views] == [new.id, old.id]
+    assert [view.journal.id for view in page.items] == [new.id, old.id]
+    assert page.next_cursor is None
+
+
+def test_a_page_ends_with_a_cursor_that_continues_after_it(
+    service: JournalService, uow: FakeUnitOfWork
+):
+    seeded = [uow.journals.seed(USER) for _ in range(3)]
+
+    first = service.page_for_user(USER, 2, None)
+    second = service.page_for_user(USER, 2, first.next_cursor)
+
+    assert [view.journal.id for view in first.items] == [seeded[2].id, seeded[1].id]
+    assert first.next_cursor is not None
+    assert [view.journal.id for view in second.items] == [seeded[0].id]
+    assert second.next_cursor is None
+
+
+def test_the_page_size_is_clamped_to_the_maximum(service: JournalService, uow: FakeUnitOfWork):
+    for _ in range(5):
+        uow.journals.seed(USER)
+
+    assert len(service.page_for_user(USER, 100, None).items) == 3
+
+
+def test_a_malformed_cursor_is_rejected(service: JournalService):
+    with pytest.raises(InvalidCursor):
+        service.page_for_user(USER, None, "garbage")
 
 
 def test_an_unplanted_journal_has_no_checkpoints(service: JournalService, uow: FakeUnitOfWork):

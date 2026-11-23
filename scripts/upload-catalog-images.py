@@ -47,7 +47,7 @@ SLUG = re.compile(r"^[a-z0-9]+(-[a-z0-9]+)*$")
 # domain, CC BY, CC BY-SA, and the free licences of the stock sites we take photos from.
 ALLOWED_LICENSE = re.compile(
     r"^(CC0|Public domain|CC BY \d\.\d|CC BY-SA \d\.\d"
-    r"|Pixabay Content License|Pexels License|Unsplash License|Magnific Free License)",
+    r"|Pixabay Content License|Pexels License|Unsplash License)",
     re.IGNORECASE,
 )
 BACKGROUND = (246, 246, 243)  # light neutral, used under transparent areas
@@ -119,7 +119,7 @@ def read_entries(path: Path) -> list[Entry]:
         if not ALLOWED_LICENSE.match(entry.license):
             raise ValueError(
                 f"{entry.slug}: licence {entry.license!r} is not CC0, public domain, CC BY, "
-                "CC BY-SA or the free licence of Pixabay, Pexels, Unsplash or Magnific"
+                "CC BY-SA or the free licence of Pixabay, Pexels or Unsplash"
             )
     if not entries:
         raise ValueError(f"{path}: no images listed")

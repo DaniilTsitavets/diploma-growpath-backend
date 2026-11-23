@@ -59,9 +59,14 @@ class FakeJournals:
         journal = self.rows.get(journal_id)
         return journal if journal is not None and journal.user_id == user_id else None
 
-    def list_for_user(self, user_id: uuid.UUID) -> list[Journal]:
+    def page_for_user(
+        self, user_id: uuid.UUID, limit: int, before: FeedCursor | None
+    ) -> list[Journal]:
         owned = [row for row in self.rows.values() if row.user_id == user_id]
-        return sorted(owned, key=lambda row: row.created_at, reverse=True)
+        if before is not None:
+            position = (before.created_at, before.id)
+            owned = [row for row in owned if (row.created_at, row.id) < position]
+        return sorted(owned, key=lambda row: (row.created_at, row.id), reverse=True)[:limit]
 
     def set_planted_on(
         self, journal_id: uuid.UUID, user_id: uuid.UUID, planted_on: date

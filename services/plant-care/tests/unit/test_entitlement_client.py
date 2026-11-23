@@ -74,7 +74,7 @@ def test_a_replayed_reservation_answering_200_is_a_success():
 
 
 def test_reserve_maps_an_exhausted_quota_to_the_domain_error():
-    client, upstream, _ = build(problem(409, "quota_exhausted"))
+    client, upstream, _ = build(problem(409, "quota-exhausted"))
 
     with pytest.raises(AiQuotaExhausted):
         client.reserve(RESERVATION, USER)
@@ -82,7 +82,7 @@ def test_reserve_maps_an_exhausted_quota_to_the_domain_error():
     assert len(upstream.requests) == 1
 
 
-@pytest.mark.parametrize("code", ["reservation_unusable", "reservation_id_in_use"])
+@pytest.mark.parametrize("code", ["reservation-unusable", "reservation-id-in-use"])
 def test_reserve_maps_an_unusable_reservation_id(code: str):
     client, _, _ = build(problem(409, code))
 
@@ -100,7 +100,7 @@ def test_commit_posts_to_the_commit_path():
 
 @pytest.mark.parametrize("status", [404, 409])
 def test_commit_of_an_expired_or_released_reservation_is_unusable(status: int):
-    client, _, _ = build(problem(status, "reservation_unusable"))
+    client, _, _ = build(problem(status, "reservation-unusable"))
 
     with pytest.raises(ReservationUnusable):
         client.commit(RESERVATION, USER)
@@ -116,7 +116,7 @@ def test_release_succeeds_for_a_released_or_unknown_reservation(status: int):
 
 
 def test_releasing_a_committed_reservation_is_unusable():
-    client, _, _ = build(problem(409, "reservation_unusable"))
+    client, _, _ = build(problem(409, "reservation-unusable"))
 
     with pytest.raises(ReservationUnusable):
         client.release(RESERVATION, USER)
@@ -170,7 +170,7 @@ def test_the_open_breaker_rejects_calls_without_reaching_entitlement():
 
 
 def test_business_answers_do_not_open_the_breaker():
-    client, upstream, _ = build(problem(409, "quota_exhausted"), threshold=2)
+    client, upstream, _ = build(problem(409, "quota-exhausted"), threshold=2)
     for _ in range(4):
         with pytest.raises(AiQuotaExhausted):
             client.reserve(RESERVATION, USER)

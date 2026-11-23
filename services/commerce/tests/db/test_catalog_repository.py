@@ -63,7 +63,7 @@ def catalog(session: Session) -> SqlAlchemyCatalogRepository:
     return SqlAlchemyCatalogRepository(session)
 
 
-def test_list_returns_active_items_by_name_with_sorted_labels(
+def test_list_returns_active_items_by_slug_with_sorted_labels(
     catalog: SqlAlchemyCatalogRepository,
 ):
     entries = catalog.list_active()
@@ -73,6 +73,25 @@ def test_list_returns_active_items_by_name_with_sorted_labels(
         ("Mint Pack", ("beginner", "rare")),
         ("Soil Sensor", ()),
     ]
+
+
+def test_list_pages_by_slug_with_limit_and_after_slug(catalog: SqlAlchemyCatalogRepository):
+    everything = [e.slug for e in catalog.list_active()]
+
+    first = catalog.list_active(limit=2)
+    second = catalog.list_active(limit=2, after_slug=first[-1].slug)
+
+    assert everything == sorted(everything)
+    assert [e.slug for e in first + second] == everything
+    assert (len(first), len(second)) == (2, 1)
+
+
+def test_list_page_respects_the_label_filter(catalog: SqlAlchemyCatalogRepository):
+    page = catalog.list_active("beginner", limit=1)
+    rest = catalog.list_active("beginner", limit=1, after_slug=page[0].slug)
+
+    assert [e.name for e in page + rest] == ["Basil Kit", "Mint Pack"]
+    assert catalog.list_active("beginner", after_slug=rest[0].slug) == []
 
 
 def test_list_can_be_filtered_by_label(catalog: SqlAlchemyCatalogRepository):

@@ -93,7 +93,9 @@ def client():
         app.state.purchase_service = PurchaseService(
             lambda: uow, RecordingPayments(declines), RecordingEvents()
         )
-        app.state.catalog_service = CatalogService(lambda: uow)
+        app.state.catalog_service = CatalogService(
+            lambda: uow, default_page_size=50, max_page_size=100
+        )
         return TestClient(app, raise_server_exceptions=False)
 
     return build

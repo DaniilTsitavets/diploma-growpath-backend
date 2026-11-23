@@ -1,5 +1,6 @@
 import logging
 from http import HTTPStatus
+from typing import Any
 
 from fastapi import FastAPI, Request
 from fastapi.encoders import jsonable_encoder
@@ -14,10 +15,36 @@ PROBLEM_JSON = "application/problem+json"
 logger = logging.getLogger(__name__)
 
 
+DEFAULT_CODES = {
+    401: "unauthorized",
+    403: "forbidden",
+    404: "not-found",
+    422: "validation-error",
+    500: "internal-error",
+    503: "service-unavailable",
+}
+
+
+def default_code(status: int) -> str:
+    return DEFAULT_CODES.get(status) or HTTPStatus(status).phrase.lower().replace(" ", "-")
+
+
+def problem_responses(*statuses: int) -> dict[int | str, dict[str, Any]]:
+    """OpenAPI `responses` entries for problem+json answers; `Problem` is added by the contract."""
+    return {
+        status: {
+            "description": HTTPStatus(status).phrase,
+            "content": {PROBLEM_JSON: {"schema": {"$ref": "#/components/schemas/Problem"}}},
+        }
+        for status in statuses
+    }
+
+
 def problem_response(
     status: int,
     detail: str | None = None,
     headers: dict[str, str] | None = None,
+    code: str | None = None,
     **extra: object,
 ) -> JSONResponse:
     body = {
@@ -26,6 +53,7 @@ def problem_response(
         "status": status,
         "detail": detail,
         "correlation_id": get_correlation_id(),
+        "code": code or default_code(status),
         **extra,
     }
     return JSONResponse(body, status_code=status, media_type=PROBLEM_JSON, headers=headers)
@@ -61,7 +89,7 @@ async def handle_conflict(_: Request, exc: Exception) -> JSONResponse:
 
 
 async def handle_invalid_request(_: Request, exc: Exception) -> JSONResponse:
-    return problem_response(422, str(exc))
+    return problem_response(422, str(exc), code=getattr(exc, "code", None))
 
 
 def unavailable_handler(retry_after_seconds: int | None):

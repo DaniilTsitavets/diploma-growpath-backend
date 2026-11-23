@@ -6,7 +6,7 @@ from typing import Annotated
 from pydantic import BaseModel, ConfigDict, Field
 
 from app.service.checkpoints import Checkpoint, CheckpointState
-from app.service.journals import JournalView
+from app.service.journals import JournalPage, JournalView
 from app.service.model import (
     Diagnosis,
     DiagnosisStatus,
@@ -55,6 +55,17 @@ class JournalResponse(BaseModel):
             planted_on=journal.planted_on,
             created_at=journal.created_at,
             checkpoints=[CheckpointResponse.of(checkpoint) for checkpoint in view.checkpoints],
+        )
+
+
+class JournalListResponse(BaseModel):
+    items: list[JournalResponse]
+    next_cursor: str | None
+
+    @classmethod
+    def of(cls, page: JournalPage) -> "JournalListResponse":
+        return cls(
+            items=[JournalResponse.of(view) for view in page.items], next_cursor=page.next_cursor
         )
 
 

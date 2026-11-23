@@ -23,7 +23,7 @@ logger = logging.getLogger(__name__)
 
 AI_RESERVATIONS = "/v1/quotas/ai/reservations"
 EXPERT_RESERVATIONS = "/v1/quotas/expert/reservations"
-QUOTA_EXHAUSTED = "quota_exhausted"
+QUOTA_EXHAUSTED = "quota-exhausted"
 _EXPERT = ExpertQuotaUnavailable
 
 

@@ -41,13 +41,13 @@ def test_a_replayed_reservation_answering_200_is_a_success():
 
 
 def test_an_exhausted_quota_maps_to_the_domain_error():
-    client, _, _ = build(problem(409, "quota_exhausted"))
+    client, _, _ = build(problem(409, "quota-exhausted"))
 
     with pytest.raises(ExpertQuotaExhausted):
         client.reserve_expert(ESCALATION, USER)
 
 
-@pytest.mark.parametrize("code", ["reservation_unusable", "reservation_id_in_use"])
+@pytest.mark.parametrize("code", ["reservation-unusable", "reservation-id-in-use"])
 def test_another_conflict_on_reserve_is_not_a_quota_answer(code: str):
     client, upstream, _ = build(problem(409, code))
 
@@ -77,7 +77,7 @@ def test_release_succeeds_for_a_released_or_unknown_reservation(status: int):
 
 
 def test_a_conflict_on_release_means_the_reservation_is_committed():
-    client, _, _ = build(problem(409, "reservation_unusable"))
+    client, _, _ = build(problem(409, "reservation-unusable"))
 
     with pytest.raises(ExpertReservationCommitted):
         client.release_expert(ESCALATION, USER)

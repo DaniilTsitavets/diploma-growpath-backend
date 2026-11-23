@@ -139,6 +139,73 @@ def test_a_caller_outside_the_experts_group_conforms_to_the_problem_schema(clien
     assert_conforms(load_openapi(SERVICE), "/v1/expert/tickets", "GET", response)
 
 
+def test_a_missing_user_conforms_to_the_problem_schema(client: TestClient):
+    response = client.get("/v1/expert/tickets")
+
+    assert response.status_code == 401
+    assert_conforms(load_openapi(SERVICE), "/v1/expert/tickets", "GET", response)
+
+
+def test_an_invalid_cursor_conforms_to_the_problem_schema(client: TestClient):
+    response = client.get("/v1/expert/tickets", params={"cursor": "garbage"}, headers=AS_EXPERT)
+
+    assert response.status_code == 422 and response.json()["code"] == "invalid-cursor"
+    assert_conforms(load_openapi(SERVICE), "/v1/expert/tickets", "GET", response)
+
+
+def test_a_missing_ticket_conforms_to_the_problem_schema(client: TestClient):
+    response = client.get(f"/v1/expert/tickets/{uuid.uuid4()}", headers=AS_EXPERT)
+
+    assert response.status_code == 404
+    assert_conforms(load_openapi(SERVICE), "/v1/expert/tickets/{ticket_id}", "GET", response)
+
+
+def test_an_answer_conflict_conforms_to_the_problem_schema(client: TestClient, uow: FakeUnitOfWork):
+    ticket = uow.tickets.add(make_ticket())
+    path = f"/v1/expert/tickets/{ticket.id}/answer"
+    client.post(path, json={"body": "Water less."}, headers=AS_EXPERT)
+
+    response = client.post(
+        path, json={"body": "Water less."}, headers={**AS_EXPERT, "X-User-Id": str(uuid.uuid4())}
+    )
+
+    assert response.status_code == 409
+    assert_conforms(
+        load_openapi(SERVICE), "/v1/expert/tickets/{ticket_id}/answer", "POST", response
+    )
+
+
+def test_every_error_response_of_a_route_is_declared_as_a_problem():
+    document = load_openapi(SERVICE)
+
+    declared = {
+        (path, method): sorted(code for code in operation["responses"] if code.isdigit())
+        for path, item in document["paths"].items()
+        for method, operation in item.items()
+    }
+
+    assert declared[("/v1/expert/tickets", "get")] == ["200", "401", "403", "422"]
+    assert declared[("/v1/expert/tickets/{ticket_id}", "get")] == [
+        "200",
+        "401",
+        "403",
+        "404",
+        "422",
+        "503",
+    ]
+    assert declared[("/v1/expert/tickets/{ticket_id}/answer", "post")] == [
+        "200",
+        "201",
+        "401",
+        "403",
+        "404",
+        "409",
+        "422",
+    ]
+    assert declared[("/health/ready", "get")] == ["200", "503"]
+    assert "code" in document["components"]["schemas"]["Problem"]["required"]
+
+
 def test_the_conformance_check_rejects_a_body_that_breaks_the_schema():
     response = Response(200, json={"items": "none"})
 

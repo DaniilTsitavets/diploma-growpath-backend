@@ -72,7 +72,7 @@ def test_the_queue_lists_open_tickets_by_deadline_and_pages_with_a_cursor(api: A
 
     first = api.client.get("/v1/expert/tickets", headers=AS_EXPERT).json()
     second = api.client.get(
-        "/v1/expert/tickets", params={"after": first["next_cursor"]}, headers=AS_EXPERT
+        "/v1/expert/tickets", params={"cursor": first["next_cursor"]}, headers=AS_EXPERT
     ).json()
 
     assert [item["id"] for item in first["items"]] == [str(tickets[1]), str(tickets[2])]

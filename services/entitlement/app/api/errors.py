@@ -1,5 +1,6 @@
 import logging
 from http import HTTPStatus
+from typing import Any
 
 from fastapi import FastAPI, Request
 from fastapi.encoders import jsonable_encoder
@@ -11,7 +12,37 @@ from starlette.exceptions import HTTPException as StarletteHTTPException
 from app.service.errors import LockTimeout, ReservationConflict, ReservationNotFound
 
 PROBLEM_JSON = "application/problem+json"
+PROBLEM_REF = "#/components/schemas/Problem"
+DEFAULT_CODES = {
+    401: "unauthorized",
+    403: "forbidden",
+    404: "not-found",
+    422: "validation-error",
+    500: "internal-error",
+    503: "service-unavailable",
+}
 logger = logging.getLogger(__name__)
+
+
+def problem_responses(
+    *statuses: int, retry_after_on: tuple[int, ...] = ()
+) -> dict[int | str, dict[str, Any]]:
+    """The `responses=` entries that declare problem+json answers on a route."""
+    declared: dict[int | str, dict[str, Any]] = {}
+    for status in statuses:
+        entry: dict[str, Any] = {
+            "description": HTTPStatus(status).phrase,
+            "content": {PROBLEM_JSON: {"schema": {"$ref": PROBLEM_REF}}},
+        }
+        if status in retry_after_on:
+            entry["headers"] = {
+                "Retry-After": {
+                    "description": "Seconds to wait before repeating the request",
+                    "schema": {"type": "integer"},
+                }
+            }
+        declared[status] = entry
+    return declared
 
 
 def problem_response(
@@ -26,6 +57,7 @@ def problem_response(
         "status": status,
         "detail": detail,
         "correlation_id": get_correlation_id(),
+        "code": DEFAULT_CODES.get(status, "error"),
         **extra,
     }
     return JSONResponse(body, status_code=status, media_type=PROBLEM_JSON, headers=headers)

@@ -5,14 +5,14 @@ class ReservationConflict(Exception):
 
 
 class QuotaExhausted(ReservationConflict):
-    code = "quota_exhausted"
+    code = "quota-exhausted"
 
     def __init__(self) -> None:
         super().__init__("the quota of the current period is used up")
 
 
 class ReservationUnusable(ReservationConflict):
-    code = "reservation_unusable"
+    code = "reservation-unusable"
 
     def __init__(self, status: str, expired: bool) -> None:
         reason = "expired" if expired else status
@@ -21,7 +21,7 @@ class ReservationUnusable(ReservationConflict):
 
 
 class ReservationIdInUse(ReservationConflict):
-    code = "reservation_id_in_use"
+    code = "reservation-id-in-use"
 
     def __init__(self) -> None:
         super().__init__("the reservation id is already in use")

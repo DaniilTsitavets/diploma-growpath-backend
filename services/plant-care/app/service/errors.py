@@ -13,6 +13,8 @@ class Conflict(Exception):
 class InvalidRequest(Exception):
     """The request is well formed but its content cannot be used (HTTP 422)."""
 
+    code = "validation-error"
+
 
 class Unavailable(Exception):
     """A dependency of the service did not answer (HTTP 503)."""
@@ -120,5 +122,7 @@ class ContextTooLarge(Exception):
 
 
 class InvalidCursor(InvalidRequest):
+    code = "invalid-cursor"
+
     def __init__(self) -> None:
         super().__init__("the cursor is not valid")

@@ -265,7 +265,7 @@ sequenceDiagram
     alt entitlement unavailable after retries or breaker open
         P-->>U: 503 problem+json with Retry-After
     else quota exhausted
-        P-->>U: 409 quota_exhausted
+        P-->>U: 409 quota-exhausted
     else reserved
         P->>M: diagnose through bulkhead, breaker and one retry
         alt model answered

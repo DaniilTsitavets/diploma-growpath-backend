@@ -280,17 +280,17 @@ buy() {
 journal_for_order() {
   gw GET journals "$TOKEN"
   [ "$CODE" = 200 ] || return 1
-  JOURNAL_ID=$(jq -r --arg order "$ORDER_ID" '[.[] | select(.order_id == $order)][0].id // empty' <<<"$BODY")
+  JOURNAL_ID=$(jq -r --arg order "$ORDER_ID" '[.items[] | select(.order_id == $order)][0].id // empty' <<<"$BODY")
   [ -n "$JOURNAL_ID" ]
 }
 
 load_catalog() {
   gw GET items "$TOKEN"
   expect "GET /items" 200 "$CODE"
-  KIT_ID=$(jq -r '[.[] | select(.slug == "golden-pothos")][0].id // empty' <<<"$BODY")
+  KIT_ID=$(jq -r '[.items[] | select(.slug == "golden-pothos")][0].id // empty' <<<"$BODY")
   [ -n "$KIT_ID" ] || die "the golden-pothos pack is not in the catalog: run the commerce seed"
-  PRICIEST_ID=$(jq -r '[.[] | select(.item_type == "pack")] | max_by(.price_cents) | .id' <<<"$BODY")
-  jq -r '.[] | "    \(.name): \(.price_cents / 100)" + (if .first_purchase_discount_pct then " (first purchase -\(.first_purchase_discount_pct)%)" else "" end)' <<<"$BODY"
+  PRICIEST_ID=$(jq -r '[.items[] | select(.item_type == "pack")] | max_by(.price_cents) | .id' <<<"$BODY")
+  jq -r '.items[] | "    \(.name): \(.price_cents / 100)" + (if .first_purchase_discount_pct then " (first purchase -\(.first_purchase_discount_pct)%)" else "" end)' <<<"$BODY"
 }
 
 ensure_journal() {
@@ -350,7 +350,7 @@ diagnosis_summary() {
 ticket_for_update() {
   local after=${1:-} page ids id
   while :; do
-    gw GET "expert/tickets?limit=100${after:+&after=$(jq -rn --arg c "$after" '$c|@uri')}" "$EXPERT_TOKEN"
+    gw GET "expert/tickets?limit=100${after:+&cursor=$(jq -rn --arg c "$after" '$c|@uri')}" "$EXPERT_TOKEN"
     [ "$CODE" = 200 ] || return 1
     page=$BODY
     ids=$(jq -r --arg since "$ESCALATED_AT" '.items[] | select(.created_at[0:19] >= $since) | .id' <<<"$page")

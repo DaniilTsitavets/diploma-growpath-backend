@@ -4,6 +4,7 @@ from typing import Annotated
 from fastapi import APIRouter, Depends
 
 from app.api.dependencies import current_user_id, get_diagnosis_service
+from app.api.problems import identity_required, invalid_request, not_found, problem, responses
 from app.api.schemas import ClarificationRequest, DiagnosisDetailResponse
 from app.service.diagnosis import DiagnosisService
 
@@ -12,8 +13,33 @@ router = APIRouter(prefix="/v1/updates/{update_id}/diagnosis", tags=["diagnosis"
 UserId = Annotated[uuid.UUID, Depends(current_user_id)]
 Diagnoses = Annotated[DiagnosisService, Depends(get_diagnosis_service)]
 
+READ_ERRORS = responses(
+    identity_required(),
+    not_found("The user has no such update, or the update has no diagnosis"),
+    invalid_request("A path parameter is invalid"),
+)
+RUN_ERRORS = responses(
+    READ_ERRORS,
+    problem(
+        409,
+        "Another attempt is running, or the AI quota of the current period is used up",
+        "diagnosis-conflict",
+        "ai-quota-exhausted",
+    ),
+    invalid_request("A path parameter is invalid, or the required photos are missing"),
+)
+CLARIFICATION_ERRORS = responses(
+    READ_ERRORS,
+    problem(409, "The diagnosis is not waiting for a clarification", "diagnosis-conflict"),
+    invalid_request("The body is invalid, or the answer is unusable"),
+)
+DECLINE_ERRORS = responses(
+    READ_ERRORS,
+    problem(409, "No expert escalation is on offer", "diagnosis-conflict"),
+)
 
-@router.get("")
+
+@router.get("", responses=READ_ERRORS)
 def get_diagnosis(
     update_id: uuid.UUID, user_id: UserId, service: Diagnoses
 ) -> DiagnosisDetailResponse:
@@ -21,7 +47,7 @@ def get_diagnosis(
     return DiagnosisDetailResponse.of_diagnosis(service.get(user_id, update_id))
 
 
-@router.post("")
+@router.post("", responses=RUN_ERRORS)
 def run_diagnosis(
     update_id: uuid.UUID, user_id: UserId, service: Diagnoses
 ) -> DiagnosisDetailResponse:
@@ -29,7 +55,7 @@ def run_diagnosis(
     return DiagnosisDetailResponse.of_diagnosis(service.run(user_id, update_id))
 
 
-@router.post("/clarification")
+@router.post("/clarification", responses=CLARIFICATION_ERRORS)
 def answer_clarification(
     update_id: uuid.UUID, body: ClarificationRequest, user_id: UserId, service: Diagnoses
 ) -> DiagnosisDetailResponse:
@@ -39,7 +65,7 @@ def answer_clarification(
     )
 
 
-@router.post("/escalation-decline")
+@router.post("/escalation-decline", responses=DECLINE_ERRORS)
 def decline_escalation(
     update_id: uuid.UUID, user_id: UserId, service: Diagnoses
 ) -> DiagnosisDetailResponse:

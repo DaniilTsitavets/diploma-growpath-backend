@@ -23,6 +23,12 @@ class CatalogEntry(Item):
 
 
 @dataclass(frozen=True)
+class CatalogPage:
+    items: list[CatalogEntry]
+    next_cursor: str | None
+
+
+@dataclass(frozen=True)
 class NewOrder:
     id: uuid.UUID
     user_id: uuid.UUID

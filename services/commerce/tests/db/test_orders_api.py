@@ -2,10 +2,13 @@ import uuid
 
 import pytest
 from fastapi.testclient import TestClient
+from sqlalchemy import Engine, delete
 from sqlalchemy.engine import URL
+from sqlalchemy.orm import Session
 
 from app.main import create_app
 from app.models import CatalogItem
+from tests.db.factories import make_item
 from tests.unit.fakes import RecordingEvents, make_settings
 
 
@@ -42,6 +45,30 @@ def test_unknown_item_is_404_from_the_database(client: TestClient):
 
 
 def test_catalog_endpoint_reads_the_database(client: TestClient, committed_item: CatalogItem):
-    names = [item["name"] for item in client.get("/v1/items").json()]
+    body = client.get("/v1/items").json()
 
-    assert committed_item.name in names
+    assert committed_item.name in [item["name"] for item in body["items"]]
+    assert {item["currency"] for item in body["items"]} == {"EUR"}
+
+
+def test_catalog_pages_through_the_database_by_cursor(client: TestClient, engine: Engine):
+    slugs = [f"page-test-{n}" for n in range(2)]
+    with Session(engine) as session:
+        session.add_all(make_item(name=f"Page {n}", slug=slug) for n, slug in enumerate(slugs))
+        session.commit()
+    try:
+        first = client.get("/v1/items", params={"limit": 1}).json()
+        second = client.get("/v1/items", params={"limit": 1, "cursor": first["next_cursor"]}).json()
+    finally:
+        with Session(engine) as session:
+            session.execute(delete(CatalogItem).where(CatalogItem.slug.in_(slugs)))
+            session.commit()
+
+    assert [item["slug"] for item in first["items"] + second["items"]] == slugs
+    assert second["next_cursor"] is None
+
+
+def test_catalog_rejects_a_foreign_cursor(client: TestClient):
+    response = client.get("/v1/items", params={"cursor": "!!!"})
+
+    assert (response.status_code, response.json()["code"]) == (422, "invalid-cursor")

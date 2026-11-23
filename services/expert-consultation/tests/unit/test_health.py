@@ -123,6 +123,7 @@ def test_unhandled_error_is_500_problem_json_without_details(app: FastAPI, clien
     assert response.status_code == 500
     assert response.headers["content-type"] == PROBLEM_JSON
     assert response.json()["detail"] is None
+    assert response.json()["code"] == "internal-error"
     assert "secret internals" not in response.text
     assert response.headers[CORRELATION_HEADER] == "corr-1"
 
@@ -130,10 +131,10 @@ def test_unhandled_error_is_500_problem_json_without_details(app: FastAPI, clien
 @pytest.mark.parametrize(
     ("error", "status", "code"),
     [
-        (NotFound("gone"), 404, None),
+        (NotFound("gone"), 404, "not-found"),
         (Taken("taken"), 409, "taken"),
-        (InvalidRequest("bad"), 422, None),
-        (Unavailable("storage"), 503, None),
+        (InvalidRequest("bad"), 422, "validation-error"),
+        (Unavailable("storage"), 503, "service-unavailable"),
     ],
     ids=["not found", "conflict", "invalid request", "unavailable"],
 )

@@ -20,8 +20,11 @@ PROBLEM_REF = "#/components/schemas/Problem"
 PROBLEM_SCHEMA = {
     "type": "object",
     "title": "Problem",
-    "description": "Problem details (RFC 7807); members such as `code` or `errors` may follow.",
-    "required": ["type", "title", "status"],
+    "description": (
+        "Problem details (RFC 7807) with a stable kebab-case `code`; "
+        "validation problems also carry `errors`."
+    ),
+    "required": ["type", "title", "status", "code"],
     "properties": {
         "type": {"type": "string"},
         "title": {"type": "string"},
@@ -60,8 +63,6 @@ def build_openapi(app: FastAPI, description: str, public_prefixes: tuple[str, ..
                 operation.setdefault("tags", []).append("internal")
             operation["x-gateway"] = exposure
             responses = operation["responses"]
-            if "422" in responses:
-                responses["422"] = copy.deepcopy(problem)
             responses["default"] = copy.deepcopy(problem)
     return document
 

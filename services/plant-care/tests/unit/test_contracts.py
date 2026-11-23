@@ -97,7 +97,7 @@ def uow() -> FakeUnitOfWork:
 @pytest.fixture
 def journal_client(uow: FakeUnitOfWork) -> TestClient:
     app = build_app()
-    app.state.journal_service = JournalService(lambda: uow, lambda: TODAY)
+    app.state.journal_service = JournalService(lambda: uow, 2, 3, lambda: TODAY)
     app.state.update_service = UpdateService(lambda: uow, FakeAiQuota(), 2, 3)
     return TestClient(app, raise_server_exceptions=False)
 
@@ -109,6 +109,49 @@ def test_the_journal_list_conforms(journal_client: TestClient, uow: FakeUnitOfWo
 
     assert response.status_code == 200 and response.json()
     assert_conforms(load_openapi(SERVICE), "/v1/journals", "GET", response)
+
+
+def test_the_journal_list_is_an_envelope_with_a_cursor(
+    journal_client: TestClient, uow: FakeUnitOfWork
+):
+    for _ in range(3):
+        uow.journals.seed(USER)
+
+    body = journal_client.get("/v1/journals", headers=AS_USER).json()
+
+    assert set(body) == {"items", "next_cursor"}
+    assert body["next_cursor"] is not None
+    assert "before" not in {
+        parameter["name"]
+        for parameter in load_openapi(SERVICE)["paths"]["/v1/journals"]["get"]["parameters"]
+    }
+
+
+def test_a_bad_cursor_and_a_missing_user_conform_to_the_problem_schema(journal_client: TestClient):
+    document = load_openapi(SERVICE)
+
+    bad_cursor = journal_client.get("/v1/journals", params={"cursor": "x"}, headers=AS_USER)
+    anonymous = journal_client.get("/v1/journals")
+
+    assert bad_cursor.json()["code"] == "invalid-cursor"
+    assert anonymous.json()["code"] == "unauthorized"
+    assert_conforms(document, "/v1/journals", "GET", bad_cursor)
+    assert_conforms(document, "/v1/journals", "GET", anonymous)
+
+
+def test_every_business_operation_declares_the_problem_responses_it_can_return():
+    document = load_openapi(SERVICE)
+
+    for path, item in document["paths"].items():
+        for method, operation in item.items():
+            if operation["x-gateway"] == "internal":
+                continue
+            declared = set(operation["responses"])
+            expected = {"401"} if path != "/v1/plants/{slug}" else {"404", "503"}
+            assert expected <= declared, (method, path)
+            for status in declared & {"401", "404", "409", "422", "503"}:
+                schema = operation["responses"][status]["content"]["application/problem+json"]
+                assert "Problem" in str(schema), (method, path, status)
 
 
 def test_a_missing_journal_conforms_to_the_problem_schema(journal_client: TestClient):

@@ -5,6 +5,7 @@ from fastapi import APIRouter, Depends, Request
 from pydantic import BaseModel, ConfigDict
 
 from app.api.dependencies import current_user_id
+from app.api.problems import identity_required, invalid_request, not_found, problem, responses
 from app.service.model import PhotoKind
 from app.service.photos import PhotoService, UpdatePhotos
 
@@ -17,6 +18,18 @@ def get_photo_service(request: Request) -> PhotoService:
 
 UserId = Annotated[uuid.UUID, Depends(current_user_id)]
 Photos = Annotated[PhotoService, Depends(get_photo_service)]
+
+
+LIST_ERRORS = responses(
+    identity_required(),
+    not_found("The user has no such update"),
+    invalid_request("A path parameter is invalid"),
+)
+UPLOAD_ERRORS = responses(
+    LIST_ERRORS,
+    problem(409, "No roots photo was asked for", "roots-photo-not-requested"),
+    invalid_request("A path or body parameter is invalid"),
+)
 
 
 class UploadRequest(BaseModel):
@@ -48,7 +61,7 @@ class PhotosResponse(BaseModel):
         )
 
 
-@router.post("")
+@router.post("", responses=UPLOAD_ERRORS)
 def request_upload(
     update_id: uuid.UUID, body: UploadRequest, user_id: UserId, service: Photos
 ) -> UploadResponse:
@@ -63,7 +76,7 @@ def request_upload(
     )
 
 
-@router.get("")
+@router.get("", responses=LIST_ERRORS)
 def list_photos(update_id: uuid.UUID, user_id: UserId, service: Photos) -> PhotosResponse:
     """The photos of the update with presigned GET URLs and the required kinds still missing."""
     return PhotosResponse.of(service.list_photos(update_id, user_id))

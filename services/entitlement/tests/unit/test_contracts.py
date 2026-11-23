@@ -9,6 +9,7 @@ from httpx import Response
 from app.main import create_app
 from app.service.entitlements import EntitlementService
 from tests.unit.contracts import (
+    PROBLEM_JSON,
     assert_conforms,
     build_openapi,
     load_openapi,
@@ -31,8 +32,9 @@ from tests.unit.fakes import (
 SERVICE = "entitlement"
 DESCRIPTION = (
     "Tier and quotas. The tier is computed from the paid orders of the last 30 days and is not "
-    "stored; AI and expert quotas are reserved, committed or released through the internal "
-    "`/v1/quotas/**` operations that plant-care calls. The gateway route `GET /v1/me/entitlement` "
+    "stored (amounts are euro cents, EUR); AI and expert quotas are reserved, committed or "
+    "released through the internal `/v1/quotas/**` operations that plant-care calls. The "
+    "gateway route `GET /v1/me/entitlement` "
     "maps to `GET /v1/entitlements/{user_id}`, with the user id taken from the token and never "
     "from the URL. Identity arrives in the `X-User-Id` and `X-User-Groups` headers, which the "
     "API gateway sets from the verified JWT; the internal operations take the user id in the "
@@ -85,6 +87,24 @@ def test_only_the_entitlement_read_is_exposed_by_the_gateway():
     assert "internal" in document["paths"]["/v1/quotas/ai/reservations"]["post"]["tags"]
 
 
+def test_every_error_response_is_a_problem_and_the_quota_routes_declare_their_statuses():
+    document = load_openapi(SERVICE)
+
+    for item in document["paths"].values():
+        for operation in item.values():
+            for status, response in operation["responses"].items():
+                if status.startswith(("4", "5")) or status == "default":
+                    schema = response["content"][PROBLEM_JSON]["schema"]
+                    assert schema == {"$ref": "#/components/schemas/Problem"}
+    for kind in ("ai", "expert"):
+        base = document["paths"][f"/v1/quotas/{kind}/reservations"]
+        assert {"409", "422", "503"} <= base["post"]["responses"].keys()
+        assert "Retry-After" in base["post"]["responses"]["503"]["headers"]
+        for action in ("commit", "release"):
+            path = next(p for p in document["paths"] if p.endswith(f"/{action}") and kind in p)
+            assert {"404", "409", "422"} <= document["paths"][path]["post"]["responses"].keys()
+
+
 @pytest.fixture
 def uow() -> FakeUnitOfWork:
     return FakeUnitOfWork()
@@ -132,7 +152,7 @@ def test_an_exhausted_quota_conforms_to_the_problem_schema(client: TestClient, u
 
     response = client.post("/v1/quotas/expert/reservations", json=body)
 
-    assert response.status_code == 409 and response.json()["code"] == "quota_exhausted"
+    assert response.status_code == 409 and response.json()["code"] == "quota-exhausted"
     assert_conforms(load_openapi(SERVICE), "/v1/quotas/expert/reservations", "POST", response)
 
 

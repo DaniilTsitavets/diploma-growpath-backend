@@ -20,8 +20,11 @@ PROBLEM_REF = "#/components/schemas/Problem"
 PROBLEM_SCHEMA = {
     "type": "object",
     "title": "Problem",
-    "description": "Problem details (RFC 7807); members such as `code` or `errors` may follow.",
-    "required": ["type", "title", "status"],
+    "description": (
+        "Problem details (RFC 7807). `code` is a stable kebab-case identifier of the error; "
+        "`errors` lists the invalid fields of a 422."
+    ),
+    "required": ["type", "title", "status", "code"],
     "properties": {
         "type": {"type": "string"},
         "title": {"type": "string"},

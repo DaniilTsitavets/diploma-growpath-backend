@@ -4,13 +4,14 @@ from typing import Annotated
 from fastapi import APIRouter, Depends
 
 from app.api.dependencies import get_entitlement_service
+from app.api.errors import problem_responses
 from app.api.schemas import EntitlementResponse
 from app.service.entitlements import EntitlementService
 
 router = APIRouter(prefix="/v1/entitlements", tags=["entitlements"])
 
 
-@router.get("/{user_id}")
+@router.get("/{user_id}", responses=problem_responses(422))
 def get_entitlement(
     user_id: uuid.UUID,
     service: Annotated[EntitlementService, Depends(get_entitlement_service)],

@@ -39,8 +39,12 @@ class CatalogRepository(Protocol):
 
     def find_active_by_slug(self, slug: str) -> CatalogEntry | None: ...
 
-    def list_active(self, label: str | None = None) -> list[CatalogEntry]:
-        """Active items ordered by name, optionally only those carrying `label`.
+    def list_active(
+        self, label: str | None = None, *, limit: int | None = None, after_slug: str | None = None
+    ) -> list[CatalogEntry]:
+        """Active items ordered by slug, optionally only those carrying `label`.
+
+        `after_slug` keeps only slugs that sort after it; `limit` caps the number of items.
 
         Raises CatalogUnavailable (also from find_active_by_slug) when the database is unreachable.
         """
