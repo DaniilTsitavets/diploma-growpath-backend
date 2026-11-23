@@ -5,10 +5,14 @@ ESCALATION_QUEUE_URL = "http://localstack:4566/000000000000/expert-escalation-re
 TICKET_TOPIC_ARN = "arn:aws:sns:us-east-1:000000000000:ticket-events"
 
 
+USER_POOL_ID = "us-east-1_TestPool1"
+
+
 def make_settings(**overrides) -> Settings:
     fields = {
         "database_url": UNREACHABLE_DATABASE,
         "escalation_queue_url": ESCALATION_QUEUE_URL,
         "ticket_events_topic_arn": TICKET_TOPIC_ARN,
+        "cognito_user_pool_id": USER_POOL_ID,
     }
     return Settings(**{**fields, **overrides})

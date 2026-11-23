@@ -20,6 +20,18 @@ def encode_cursor(cursor: QueueCursor) -> str:
     return base64.urlsafe_b64encode(raw.encode()).decode()
 
 
+def encode_page_token(token: str) -> str:
+    """Wrap the identity provider's pagination token so clients treat it as opaque."""
+    return base64.urlsafe_b64encode(token.encode()).decode()
+
+
+def decode_page_token(cursor: str) -> str:
+    try:
+        return base64.b64decode(cursor.encode(), altchars=b"-_", validate=True).decode()
+    except ValueError as error:
+        raise InvalidCursor from error
+
+
 def decode_cursor(token: str) -> QueueCursor:
     try:
         raw = base64.urlsafe_b64decode(token.encode()).decode()

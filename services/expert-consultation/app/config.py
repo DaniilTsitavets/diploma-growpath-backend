@@ -34,6 +34,12 @@ class Settings(BaseSettings):
     photos_public_endpoint_url: str | None = None
     photo_url_ttl_seconds: int = Field(default=900, gt=0)
 
+    cognito_user_pool_id: str
+    # Falls back to `aws_endpoint_url`; on AWS both stay unset and the service's IAM role signs.
+    cognito_endpoint_url: str | None = None
+    admin_users_default_page_size: int = Field(default=50, ge=1)
+    admin_users_max_page_size: int = Field(default=100, ge=1)
+
     queue_default_page_size: int = Field(default=20, ge=1)
     queue_max_page_size: int = Field(default=100, ge=1)
     unavailable_retry_after_seconds: int = 5
