@@ -31,8 +31,10 @@ class JournalRepository(Protocol):
 
     def get_owned(self, journal_id: uuid.UUID, user_id: uuid.UUID) -> Journal | None: ...
 
-    def list_for_user(self, user_id: uuid.UUID) -> list[Journal]:
-        """Newest first."""
+    def page_for_user(
+        self, user_id: uuid.UUID, limit: int, before: FeedCursor | None
+    ) -> list[Journal]:
+        """Newest first; with `before`, only the journals strictly older than the cursor."""
         ...
 
     def set_planted_on(

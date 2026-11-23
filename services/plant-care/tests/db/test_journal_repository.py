@@ -6,7 +6,7 @@ from sqlalchemy.orm import Session
 
 from app.models import JournalModel
 from app.repository.journals import SqlAlchemyJournalRepository
-from app.service.model import NewJournal
+from app.service.model import FeedCursor, NewJournal
 from tests.db.factories import add_journal, db_now
 
 
@@ -59,9 +59,23 @@ def test_journals_of_a_user_come_newest_first(session: Session):
     new = add_journal(session, user_id=user_id, created_at=now)
     add_journal(session)
 
-    journals = SqlAlchemyJournalRepository(session).list_for_user(user_id)
+    journals = SqlAlchemyJournalRepository(session).page_for_user(user_id, 10, None)
 
     assert [journal.id for journal in journals] == [new["id"], old["id"]]
+
+
+def test_a_journal_page_continues_strictly_after_the_cursor(session: Session):
+    user_id = uuid.uuid4()
+    now = db_now(session)
+    old = add_journal(session, user_id=user_id, created_at=now - timedelta(days=2))
+    new = add_journal(session, user_id=user_id, created_at=now)
+    repository = SqlAlchemyJournalRepository(session)
+
+    first = repository.page_for_user(user_id, 1, None)
+    rest = repository.page_for_user(user_id, 10, FeedCursor(first[0].created_at, first[0].id))
+
+    assert [journal.id for journal in first] == [new["id"]]
+    assert [journal.id for journal in rest] == [old["id"]]
 
 
 def test_planting_sets_the_date_and_can_be_changed(session: Session):

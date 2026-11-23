@@ -6,6 +6,7 @@ from pydantic import BaseModel
 from sqlalchemy import Engine, text
 from sqlalchemy.exc import SQLAlchemyError
 
+from app.api.problems import unavailable
 from app.db import get_engine
 from app.service.consumer import MessageQueue, QueueUnavailable
 
@@ -26,7 +27,7 @@ def live() -> HealthStatus:
     return HealthStatus()
 
 
-@router.get("/ready")
+@router.get("/ready", responses=unavailable("The database or a message queue is unavailable"))
 def ready(
     engine: Annotated[Engine, Depends(get_engine)],
     queues: Annotated[list[MessageQueue], Depends(get_queues)],

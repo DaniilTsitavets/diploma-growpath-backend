@@ -43,6 +43,22 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/HealthStatus'
+        '503':
+          description: The database or a message queue is unavailable
+          headers:
+            Retry-After:
+              description: Seconds to wait before retrying
+              schema:
+                type: integer
+          content:
+            application/problem+json:
+              schema:
+                allOf:
+                - $ref: '#/components/schemas/Problem'
+                - properties:
+                    code:
+                      enum:
+                      - service-unavailable
         default:
           description: Problem details
           content:
@@ -55,9 +71,28 @@ paths:
       tags:
       - journals
       summary: List Journals
-      description: The journals of the user, newest first.
+      description: The journals of the user, newest first; pass `next_cursor` of a page as `cursor` for
+        more.
       operationId: list_journals_v1_journals_get
       parameters:
+      - name: limit
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - type: integer
+            minimum: 1
+          - type: 'null'
+          title: Limit
+      - name: cursor
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - type: string
+            minLength: 1
+          - type: 'null'
+          title: Cursor
       - name: x-user-id
         in: header
         required: false
@@ -72,16 +107,30 @@ paths:
           content:
             application/json:
               schema:
-                type: array
-                items:
-                  $ref: '#/components/schemas/JournalResponse'
-                title: Response List Journals V1 Journals Get
-        '422':
-          description: Problem details
+                $ref: '#/components/schemas/JournalListResponse'
+        '401':
+          description: '`X-User-Id` is missing or not a user id'
           content:
             application/problem+json:
               schema:
-                $ref: '#/components/schemas/Problem'
+                allOf:
+                - $ref: '#/components/schemas/Problem'
+                - properties:
+                    code:
+                      enum:
+                      - unauthorized
+        '422':
+          description: A query parameter is invalid, or the cursor is not valid
+          content:
+            application/problem+json:
+              schema:
+                allOf:
+                - $ref: '#/components/schemas/Problem'
+                - properties:
+                    code:
+                      enum:
+                      - validation-error
+                      - invalid-cursor
         default:
           description: Problem details
           content:
@@ -118,12 +167,39 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/JournalResponse'
-        '422':
-          description: Problem details
+        '401':
+          description: '`X-User-Id` is missing or not a user id'
           content:
             application/problem+json:
               schema:
-                $ref: '#/components/schemas/Problem'
+                allOf:
+                - $ref: '#/components/schemas/Problem'
+                - properties:
+                    code:
+                      enum:
+                      - unauthorized
+        '404':
+          description: The user has no such journal
+          content:
+            application/problem+json:
+              schema:
+                allOf:
+                - $ref: '#/components/schemas/Problem'
+                - properties:
+                    code:
+                      enum:
+                      - not-found
+        '422':
+          description: A path or body parameter is invalid
+          content:
+            application/problem+json:
+              schema:
+                allOf:
+                - $ref: '#/components/schemas/Problem'
+                - properties:
+                    code:
+                      enum:
+                      - validation-error
         default:
           description: Problem details
           content:
@@ -167,12 +243,39 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/JournalResponse'
-        '422':
-          description: Problem details
+        '401':
+          description: '`X-User-Id` is missing or not a user id'
           content:
             application/problem+json:
               schema:
-                $ref: '#/components/schemas/Problem'
+                allOf:
+                - $ref: '#/components/schemas/Problem'
+                - properties:
+                    code:
+                      enum:
+                      - unauthorized
+        '404':
+          description: The user has no such journal
+          content:
+            application/problem+json:
+              schema:
+                allOf:
+                - $ref: '#/components/schemas/Problem'
+                - properties:
+                    code:
+                      enum:
+                      - not-found
+        '422':
+          description: A path or body parameter is invalid
+          content:
+            application/problem+json:
+              schema:
+                allOf:
+                - $ref: '#/components/schemas/Problem'
+                - properties:
+                    code:
+                      enum:
+                      - validation-error
         default:
           description: Problem details
           content:
@@ -222,12 +325,50 @@ paths:
               schema:
                 $ref: '#/components/schemas/UpdateResponse'
           description: OK
-        '422':
-          description: Problem details
+        '401':
+          description: '`X-User-Id` is missing or not a user id'
           content:
             application/problem+json:
               schema:
-                $ref: '#/components/schemas/Problem'
+                allOf:
+                - $ref: '#/components/schemas/Problem'
+                - properties:
+                    code:
+                      enum:
+                      - unauthorized
+        '404':
+          description: The user has no such journal
+          content:
+            application/problem+json:
+              schema:
+                allOf:
+                - $ref: '#/components/schemas/Problem'
+                - properties:
+                    code:
+                      enum:
+                      - not-found
+        '409':
+          description: The AI quota of the current period is used up
+          content:
+            application/problem+json:
+              schema:
+                allOf:
+                - $ref: '#/components/schemas/Problem'
+                - properties:
+                    code:
+                      enum:
+                      - ai-quota-exhausted
+        '422':
+          description: A path or body parameter is invalid
+          content:
+            application/problem+json:
+              schema:
+                allOf:
+                - $ref: '#/components/schemas/Problem'
+                - properties:
+                    code:
+                      enum:
+                      - validation-error
         default:
           description: Problem details
           content:
@@ -239,7 +380,7 @@ paths:
       tags:
       - updates
       summary: List Updates
-      description: The update feed, newest first; pass `next_cursor` of a page as `before` for the next
+      description: The update feed, newest first; pass `next_cursor` of a page as `cursor` for the next
         one.
       operationId: list_updates_v1_journals__journal_id__updates_get
       parameters:
@@ -259,7 +400,7 @@ paths:
             minimum: 1
           - type: 'null'
           title: Limit
-      - name: before
+      - name: cursor
         in: query
         required: false
         schema:
@@ -267,7 +408,7 @@ paths:
           - type: string
             minLength: 1
           - type: 'null'
-          title: Before
+          title: Cursor
       - name: x-user-id
         in: header
         required: false
@@ -283,12 +424,40 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/FeedResponse'
-        '422':
-          description: Problem details
+        '401':
+          description: '`X-User-Id` is missing or not a user id'
           content:
             application/problem+json:
               schema:
-                $ref: '#/components/schemas/Problem'
+                allOf:
+                - $ref: '#/components/schemas/Problem'
+                - properties:
+                    code:
+                      enum:
+                      - unauthorized
+        '404':
+          description: The user has no such journal
+          content:
+            application/problem+json:
+              schema:
+                allOf:
+                - $ref: '#/components/schemas/Problem'
+                - properties:
+                    code:
+                      enum:
+                      - not-found
+        '422':
+          description: A query parameter is invalid, or the cursor is not valid
+          content:
+            application/problem+json:
+              schema:
+                allOf:
+                - $ref: '#/components/schemas/Problem'
+                - properties:
+                    code:
+                      enum:
+                      - validation-error
+                      - invalid-cursor
         default:
           description: Problem details
           content:
@@ -338,12 +507,50 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/UploadResponse'
-        '422':
-          description: Problem details
+        '401':
+          description: '`X-User-Id` is missing or not a user id'
           content:
             application/problem+json:
               schema:
-                $ref: '#/components/schemas/Problem'
+                allOf:
+                - $ref: '#/components/schemas/Problem'
+                - properties:
+                    code:
+                      enum:
+                      - unauthorized
+        '404':
+          description: The user has no such update
+          content:
+            application/problem+json:
+              schema:
+                allOf:
+                - $ref: '#/components/schemas/Problem'
+                - properties:
+                    code:
+                      enum:
+                      - not-found
+        '422':
+          description: A path or body parameter is invalid
+          content:
+            application/problem+json:
+              schema:
+                allOf:
+                - $ref: '#/components/schemas/Problem'
+                - properties:
+                    code:
+                      enum:
+                      - validation-error
+        '409':
+          description: No roots photo was asked for
+          content:
+            application/problem+json:
+              schema:
+                allOf:
+                - $ref: '#/components/schemas/Problem'
+                - properties:
+                    code:
+                      enum:
+                      - roots-photo-not-requested
         default:
           description: Problem details
           content:
@@ -380,12 +587,39 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/PhotosResponse'
-        '422':
-          description: Problem details
+        '401':
+          description: '`X-User-Id` is missing or not a user id'
           content:
             application/problem+json:
               schema:
-                $ref: '#/components/schemas/Problem'
+                allOf:
+                - $ref: '#/components/schemas/Problem'
+                - properties:
+                    code:
+                      enum:
+                      - unauthorized
+        '404':
+          description: The user has no such update
+          content:
+            application/problem+json:
+              schema:
+                allOf:
+                - $ref: '#/components/schemas/Problem'
+                - properties:
+                    code:
+                      enum:
+                      - not-found
+        '422':
+          description: A path parameter is invalid
+          content:
+            application/problem+json:
+              schema:
+                allOf:
+                - $ref: '#/components/schemas/Problem'
+                - properties:
+                    code:
+                      enum:
+                      - validation-error
         default:
           description: Problem details
           content:
@@ -423,12 +657,39 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/DiagnosisDetailResponse'
-        '422':
-          description: Problem details
+        '401':
+          description: '`X-User-Id` is missing or not a user id'
           content:
             application/problem+json:
               schema:
-                $ref: '#/components/schemas/Problem'
+                allOf:
+                - $ref: '#/components/schemas/Problem'
+                - properties:
+                    code:
+                      enum:
+                      - unauthorized
+        '404':
+          description: The user has no such update, or the update has no diagnosis
+          content:
+            application/problem+json:
+              schema:
+                allOf:
+                - $ref: '#/components/schemas/Problem'
+                - properties:
+                    code:
+                      enum:
+                      - not-found
+        '422':
+          description: A path parameter is invalid
+          content:
+            application/problem+json:
+              schema:
+                allOf:
+                - $ref: '#/components/schemas/Problem'
+                - properties:
+                    code:
+                      enum:
+                      - validation-error
         default:
           description: Problem details
           content:
@@ -465,12 +726,51 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/DiagnosisDetailResponse'
-        '422':
-          description: Problem details
+        '401':
+          description: '`X-User-Id` is missing or not a user id'
           content:
             application/problem+json:
               schema:
-                $ref: '#/components/schemas/Problem'
+                allOf:
+                - $ref: '#/components/schemas/Problem'
+                - properties:
+                    code:
+                      enum:
+                      - unauthorized
+        '404':
+          description: The user has no such update, or the update has no diagnosis
+          content:
+            application/problem+json:
+              schema:
+                allOf:
+                - $ref: '#/components/schemas/Problem'
+                - properties:
+                    code:
+                      enum:
+                      - not-found
+        '422':
+          description: A path parameter is invalid, or the required photos are missing
+          content:
+            application/problem+json:
+              schema:
+                allOf:
+                - $ref: '#/components/schemas/Problem'
+                - properties:
+                    code:
+                      enum:
+                      - validation-error
+        '409':
+          description: Another attempt is running, or the AI quota of the current period is used up
+          content:
+            application/problem+json:
+              schema:
+                allOf:
+                - $ref: '#/components/schemas/Problem'
+                - properties:
+                    code:
+                      enum:
+                      - diagnosis-conflict
+                      - ai-quota-exhausted
         default:
           description: Problem details
           content:
@@ -514,12 +814,50 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/DiagnosisDetailResponse'
-        '422':
-          description: Problem details
+        '401':
+          description: '`X-User-Id` is missing or not a user id'
           content:
             application/problem+json:
               schema:
-                $ref: '#/components/schemas/Problem'
+                allOf:
+                - $ref: '#/components/schemas/Problem'
+                - properties:
+                    code:
+                      enum:
+                      - unauthorized
+        '404':
+          description: The user has no such update, or the update has no diagnosis
+          content:
+            application/problem+json:
+              schema:
+                allOf:
+                - $ref: '#/components/schemas/Problem'
+                - properties:
+                    code:
+                      enum:
+                      - not-found
+        '422':
+          description: The body is invalid, or the answer is unusable
+          content:
+            application/problem+json:
+              schema:
+                allOf:
+                - $ref: '#/components/schemas/Problem'
+                - properties:
+                    code:
+                      enum:
+                      - validation-error
+        '409':
+          description: The diagnosis is not waiting for a clarification
+          content:
+            application/problem+json:
+              schema:
+                allOf:
+                - $ref: '#/components/schemas/Problem'
+                - properties:
+                    code:
+                      enum:
+                      - diagnosis-conflict
         default:
           description: Problem details
           content:
@@ -557,12 +895,50 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/DiagnosisDetailResponse'
-        '422':
-          description: Problem details
+        '401':
+          description: '`X-User-Id` is missing or not a user id'
           content:
             application/problem+json:
               schema:
-                $ref: '#/components/schemas/Problem'
+                allOf:
+                - $ref: '#/components/schemas/Problem'
+                - properties:
+                    code:
+                      enum:
+                      - unauthorized
+        '404':
+          description: The user has no such update, or the update has no diagnosis
+          content:
+            application/problem+json:
+              schema:
+                allOf:
+                - $ref: '#/components/schemas/Problem'
+                - properties:
+                    code:
+                      enum:
+                      - not-found
+        '422':
+          description: A path parameter is invalid
+          content:
+            application/problem+json:
+              schema:
+                allOf:
+                - $ref: '#/components/schemas/Problem'
+                - properties:
+                    code:
+                      enum:
+                      - validation-error
+        '409':
+          description: No expert escalation is on offer
+          content:
+            application/problem+json:
+              schema:
+                allOf:
+                - $ref: '#/components/schemas/Problem'
+                - properties:
+                    code:
+                      enum:
+                      - diagnosis-conflict
         default:
           description: Problem details
           content:
@@ -617,12 +993,67 @@ paths:
               schema:
                 $ref: '#/components/schemas/EscalationDetailResponse'
           description: OK
-        '422':
-          description: Problem details
+        '401':
+          description: '`X-User-Id` is missing or not a user id'
           content:
             application/problem+json:
               schema:
-                $ref: '#/components/schemas/Problem'
+                allOf:
+                - $ref: '#/components/schemas/Problem'
+                - properties:
+                    code:
+                      enum:
+                      - unauthorized
+        '404':
+          description: The user has no such update
+          content:
+            application/problem+json:
+              schema:
+                allOf:
+                - $ref: '#/components/schemas/Problem'
+                - properties:
+                    code:
+                      enum:
+                      - not-found
+        '409':
+          description: No expert is on offer, or the expert quota of the current period is used up
+          content:
+            application/problem+json:
+              schema:
+                allOf:
+                - $ref: '#/components/schemas/Problem'
+                - properties:
+                    code:
+                      enum:
+                      - escalation-not-offered
+                      - expert-quota-exhausted
+        '422':
+          description: A path or body parameter is invalid, or the question is unusable
+          content:
+            application/problem+json:
+              schema:
+                allOf:
+                - $ref: '#/components/schemas/Problem'
+                - properties:
+                    code:
+                      enum:
+                      - validation-error
+        '503':
+          description: The quota service did not answer
+          content:
+            application/problem+json:
+              schema:
+                allOf:
+                - $ref: '#/components/schemas/Problem'
+                - properties:
+                    code:
+                      enum:
+                      - service-unavailable
+          headers:
+            Retry-After:
+              description: Seconds to wait before retrying
+              schema:
+                type: integer
         default:
           description: Problem details
           content:
@@ -659,12 +1090,39 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/EscalationDetailResponse'
-        '422':
-          description: Problem details
+        '401':
+          description: '`X-User-Id` is missing or not a user id'
           content:
             application/problem+json:
               schema:
-                $ref: '#/components/schemas/Problem'
+                allOf:
+                - $ref: '#/components/schemas/Problem'
+                - properties:
+                    code:
+                      enum:
+                      - unauthorized
+        '404':
+          description: The user has no such update, or the update has no escalation
+          content:
+            application/problem+json:
+              schema:
+                allOf:
+                - $ref: '#/components/schemas/Problem'
+                - properties:
+                    code:
+                      enum:
+                      - not-found
+        '422':
+          description: A path parameter is invalid
+          content:
+            application/problem+json:
+              schema:
+                allOf:
+                - $ref: '#/components/schemas/Problem'
+                - properties:
+                    code:
+                      enum:
+                      - validation-error
         default:
           description: Problem details
           content:
@@ -721,12 +1179,50 @@ paths:
               schema:
                 $ref: '#/components/schemas/ChatTurnResponse'
           description: OK
-        '422':
-          description: Problem details
+        '401':
+          description: '`X-User-Id` is missing or not a user id'
           content:
             application/problem+json:
               schema:
-                $ref: '#/components/schemas/Problem'
+                allOf:
+                - $ref: '#/components/schemas/Problem'
+                - properties:
+                    code:
+                      enum:
+                      - unauthorized
+        '404':
+          description: The user has no such journal, or the turn id belongs to another journal
+          content:
+            application/problem+json:
+              schema:
+                allOf:
+                - $ref: '#/components/schemas/Problem'
+                - properties:
+                    code:
+                      enum:
+                      - not-found
+        '409':
+          description: The AI quota of the current period is used up
+          content:
+            application/problem+json:
+              schema:
+                allOf:
+                - $ref: '#/components/schemas/Problem'
+                - properties:
+                    code:
+                      enum:
+                      - ai-quota-exhausted
+        '422':
+          description: A path or body parameter is invalid, or the question is unusable
+          content:
+            application/problem+json:
+              schema:
+                allOf:
+                - $ref: '#/components/schemas/Problem'
+                - properties:
+                    code:
+                      enum:
+                      - validation-error
         default:
           description: Problem details
           content:
@@ -738,7 +1234,7 @@ paths:
       tags:
       - chat
       summary: List Turns
-      description: The chat history of the journal, newest first; pass `next_cursor` as `before` for more.
+      description: The chat history of the journal, newest first; pass `next_cursor` as `cursor` for more.
       operationId: list_turns_v1_journals__journal_id__chat_turns_get
       parameters:
       - name: journal_id
@@ -757,7 +1253,7 @@ paths:
             minimum: 1
           - type: 'null'
           title: Limit
-      - name: before
+      - name: cursor
         in: query
         required: false
         schema:
@@ -765,7 +1261,7 @@ paths:
           - type: string
             minLength: 1
           - type: 'null'
-          title: Before
+          title: Cursor
       - name: x-user-id
         in: header
         required: false
@@ -781,12 +1277,40 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ChatHistoryResponse'
-        '422':
-          description: Problem details
+        '401':
+          description: '`X-User-Id` is missing or not a user id'
           content:
             application/problem+json:
               schema:
-                $ref: '#/components/schemas/Problem'
+                allOf:
+                - $ref: '#/components/schemas/Problem'
+                - properties:
+                    code:
+                      enum:
+                      - unauthorized
+        '404':
+          description: The user has no such journal
+          content:
+            application/problem+json:
+              schema:
+                allOf:
+                - $ref: '#/components/schemas/Problem'
+                - properties:
+                    code:
+                      enum:
+                      - not-found
+        '422':
+          description: A query parameter is invalid, or the cursor is not valid
+          content:
+            application/problem+json:
+              schema:
+                allOf:
+                - $ref: '#/components/schemas/Problem'
+                - properties:
+                    code:
+                      enum:
+                      - validation-error
+                      - invalid-cursor
         default:
           description: Problem details
           content:
@@ -824,18 +1348,28 @@ paths:
           content:
             application/problem+json:
               schema:
-                $ref: '#/components/schemas/Problem'
+                allOf:
+                - $ref: '#/components/schemas/Problem'
+                - properties:
+                    code:
+                      enum:
+                      - not-found
         '503':
           description: The database is unavailable; retry after the given time
+          content:
+            application/problem+json:
+              schema:
+                allOf:
+                - $ref: '#/components/schemas/Problem'
+                - properties:
+                    code:
+                      enum:
+                      - service-unavailable
           headers:
             Retry-After:
               description: Seconds to wait before retrying
               schema:
                 type: integer
-          content:
-            application/problem+json:
-              schema:
-                $ref: '#/components/schemas/Problem'
         '422':
           description: Problem details
           content:
@@ -1249,6 +1783,23 @@ components:
           default: ok
       type: object
       title: HealthStatus
+    JournalListResponse:
+      properties:
+        items:
+          items:
+            $ref: '#/components/schemas/JournalResponse'
+          type: array
+          title: Items
+        next_cursor:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Next Cursor
+      type: object
+      required:
+      - items
+      - next_cursor
+      title: JournalListResponse
     JournalResponse:
       properties:
         id:
@@ -1657,11 +2208,13 @@ components:
     Problem:
       type: object
       title: Problem
-      description: Problem details (RFC 7807); members such as `code` or `errors` may follow.
+      description: Problem details (RFC 7807); `code` is a stable kebab-case identifier of the problem,
+        `errors` lists the invalid fields of a validation error.
       required:
       - type
       - title
       - status
+      - code
       properties:
         type:
           type: string

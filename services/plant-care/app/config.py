@@ -88,6 +88,9 @@ class Settings(BaseSettings):
     photos_public_endpoint_url: str | None = None
     photo_url_ttl_seconds: int = 900
 
+    journals_default_page_size: int = 50
+    journals_max_page_size: int = 100
+
     feed_default_page_size: int = 20
     feed_max_page_size: int = 100
 

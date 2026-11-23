@@ -14,11 +14,22 @@ PROBLEM_JSON = "application/problem+json"
 logger = logging.getLogger(__name__)
 
 
+DEFAULT_CODES = {
+    422: "validation-error",
+    500: "internal-error",
+}
+
+
+def default_code(status: int) -> str:
+    return DEFAULT_CODES.get(status) or HTTPStatus(status).phrase.lower().replace(" ", "-")
+
+
 def problem_response(
     status: int,
     detail: str | None = None,
     headers: dict[str, str] | None = None,
     title: str | None = None,
+    code: str | None = None,
     **extra: object,
 ) -> JSONResponse:
     body = {
@@ -27,6 +38,7 @@ def problem_response(
         "status": status,
         "detail": detail,
         "correlation_id": get_correlation_id(),
+        "code": code or default_code(status),
         **extra,
     }
     return JSONResponse(body, status_code=status, media_type=PROBLEM_JSON, headers=headers)
@@ -62,7 +74,7 @@ async def handle_conflict(_: Request, exc: Exception) -> JSONResponse:
 
 
 async def handle_invalid_request(_: Request, exc: Exception) -> JSONResponse:
-    return problem_response(422, str(exc))
+    return problem_response(422, str(exc), code=getattr(exc, "code", InvalidRequest.code))
 
 
 def unavailable_handler(retry_after_seconds: int | None):

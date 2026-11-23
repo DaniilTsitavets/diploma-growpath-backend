@@ -60,7 +60,8 @@ def test_planting_a_journal_computes_checkpoints_on_read(client: TestClient, jou
 
     assert put.status_code == got.status_code == listed.status_code == 200
     assert got.json()["checkpoints"][0]["opens_on"] == "2026-11-06"
-    assert listed.json()[0]["id"] == str(journal_id)
+    assert [item["id"] for item in listed.json()["items"]] == [str(journal_id)]
+    assert listed.json()["next_cursor"] is None
 
 
 def test_an_update_is_idempotent_and_reserves_quota_once(
@@ -93,7 +94,7 @@ def test_the_feed_is_paged_newest_first_without_repeats(client: TestClient, jour
 
     seen, cursor = [], None
     while True:
-        page = client.get(url, params={"before": cursor} if cursor else {}, headers=AS_USER).json()
+        page = client.get(url, params={"cursor": cursor} if cursor else {}, headers=AS_USER).json()
         seen += [item["id"] for item in page["items"]]
         cursor = page["next_cursor"]
         if cursor is None:
@@ -121,4 +122,4 @@ def test_another_user_sees_nothing(client: TestClient, journal_id):
     assert client.get(f"/v1/journals/{journal_id}", headers=stranger).status_code == 404
     assert client.get(f"/v1/journals/{journal_id}/updates", headers=stranger).status_code == 404
     assert client.get(f"/v1/updates/{update_id}/photos", headers=stranger).status_code == 404
-    assert client.get("/v1/journals", headers=stranger).json() == []
+    assert client.get("/v1/journals", headers=stranger).json() == {"items": [], "next_cursor": None}

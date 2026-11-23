@@ -36,7 +36,7 @@ def quota() -> FakeAiQuota:
 @pytest.fixture
 def client(uow: FakeUnitOfWork, quota: FakeAiQuota) -> TestClient:
     app = FastAPI()
-    app.state.journal_service = JournalService(lambda: uow, lambda: TODAY)
+    app.state.journal_service = JournalService(lambda: uow, 2, 3, lambda: TODAY)
     app.state.update_service = UpdateService(lambda: uow, quota, 2, 3)
     app.add_middleware(CorrelationIdMiddleware)
     register_error_handlers(app)
@@ -54,10 +54,39 @@ def test_the_user_header_is_required(client: TestClient):
 
     assert response.status_code == 401
     assert response.headers["content-type"] == PROBLEM_JSON
+    assert response.json()["code"] == "unauthorized"
 
 
 def test_a_malformed_user_header_is_unauthorized(client: TestClient):
     assert client.get("/v1/journals", headers={"X-User-Id": "me"}).status_code == 401
+
+
+def test_a_missing_journal_carries_the_not_found_code(client: TestClient):
+    response = client.get(f"/v1/journals/{uuid.uuid4()}", headers=AS_USER)
+
+    assert (response.status_code, response.json()["code"]) == (404, "not-found")
+
+
+def test_an_invalid_body_carries_the_validation_error_code(client: TestClient, uow: FakeUnitOfWork):
+    journal = uow.journals.seed(USER)
+
+    response = client.put(f"/v1/journals/{journal.id}/planting", json={}, headers=AS_USER)
+
+    assert (response.status_code, response.json()["code"]) == (422, "validation-error")
+
+
+def test_an_unknown_route_carries_the_not_found_code(client: TestClient):
+    assert client.get("/v1/nowhere", headers=AS_USER).json()["code"] == "not-found"
+
+
+def test_an_unexpected_error_carries_the_internal_error_code(
+    client: TestClient, uow: FakeUnitOfWork
+):
+    uow.journals.page_for_user = None
+
+    response = client.get("/v1/journals", headers=AS_USER)
+
+    assert (response.status_code, response.json()["code"]) == (500, "internal-error")
 
 
 def test_journals_are_listed_newest_first_for_the_caller_only(
@@ -71,9 +100,31 @@ def test_journals_are_listed_newest_first_for_the_caller_only(
 
     body = response.json()
     assert response.status_code == 200
-    assert [journal["id"] for journal in body] == [str(new.id), str(old.id)]
-    assert body[0]["planted_on"] == "2026-11-01"
-    assert len(body[0]["checkpoints"]) == 3 and body[1]["checkpoints"] == []
+    assert [journal["id"] for journal in body["items"]] == [str(new.id), str(old.id)]
+    assert body["items"][0]["planted_on"] == "2026-11-01"
+    assert body["next_cursor"] is None
+    assert len(body["items"][0]["checkpoints"]) == 3 and body["items"][1]["checkpoints"] == []
+
+
+def test_journals_are_paged_with_a_cursor_and_the_limit_is_clamped(
+    client: TestClient, uow: FakeUnitOfWork
+):
+    seeded = [uow.journals.seed(USER) for _ in range(5)]
+
+    first = client.get("/v1/journals", headers=AS_USER).json()
+    second = client.get(
+        "/v1/journals", params={"cursor": first["next_cursor"], "limit": 100}, headers=AS_USER
+    ).json()
+
+    assert [item["id"] for item in first["items"]] == [str(j.id) for j in reversed(seeded[3:])]
+    assert [item["id"] for item in second["items"]] == [str(j.id) for j in reversed(seeded[:3])]
+    assert second["next_cursor"] is None
+
+
+def test_a_bad_journals_cursor_is_422_with_its_code(client: TestClient):
+    response = client.get("/v1/journals", params={"cursor": "garbage"}, headers=AS_USER)
+
+    assert (response.status_code, response.json()["code"]) == (422, "invalid-cursor")
 
 
 def test_a_journal_of_another_user_is_404_problem_json(client: TestClient, uow: FakeUnitOfWork):
@@ -177,7 +228,7 @@ def test_the_feed_is_paged_with_a_cursor(client: TestClient, uow: FakeUnitOfWork
     url = f"/v1/journals/{journal.id}/updates"
 
     first = client.get(url, headers=AS_USER).json()
-    second = client.get(url, params={"before": first["next_cursor"]}, headers=AS_USER).json()
+    second = client.get(url, params={"cursor": first["next_cursor"]}, headers=AS_USER).json()
 
     assert [item["id"] for item in first["items"]] == [str(seeded[2].id), str(seeded[1].id)]
     assert [item["id"] for item in second["items"]] == [str(seeded[0].id)]
@@ -188,8 +239,11 @@ def test_a_bad_cursor_and_a_bad_limit_are_422(client: TestClient, uow: FakeUnitO
     journal = uow.journals.seed(USER)
     url = f"/v1/journals/{journal.id}/updates"
 
-    assert client.get(url, params={"before": "garbage"}, headers=AS_USER).status_code == 422
-    assert client.get(url, params={"limit": 0}, headers=AS_USER).status_code == 422
+    garbage = client.get(url, params={"cursor": "garbage"}, headers=AS_USER)
+    zero = client.get(url, params={"limit": 0}, headers=AS_USER)
+
+    assert (garbage.status_code, garbage.json()["code"]) == (422, "invalid-cursor")
+    assert (zero.status_code, zero.json()["code"]) == (422, "validation-error")
 
 
 def test_the_feed_of_another_users_journal_is_404(client: TestClient, uow: FakeUnitOfWork):

@@ -111,7 +111,9 @@ def create_app(
     chat_model = chat_model or create_chat_model(settings, model_guard)
     unit_of_work = partial(SqlAlchemyUnitOfWork, sessionmaker(app.state.engine))
     effort_policy = EffortPolicy(tier_lookup)
-    app.state.journal_service = JournalService(unit_of_work)
+    app.state.journal_service = JournalService(
+        unit_of_work, settings.journals_default_page_size, settings.journals_max_page_size
+    )
     app.state.plant_service = PlantService(unit_of_work)
     app.state.update_service = UpdateService(
         unit_of_work,

@@ -4,27 +4,18 @@ from fastapi import APIRouter, Depends, Response
 
 from app.api.dependencies import get_plant_service
 from app.api.plant_schemas import PlantProfileResponse
+from app.api.problems import not_found, responses, unavailable
 from app.service.plants import PlantService
 
 router = APIRouter(prefix="/v1/plants", tags=["plants"])
 
 Plants = Annotated[PlantService, Depends(get_plant_service)]
 CACHE_CONTROL = "public, max-age=300"
-PROBLEM_CONTENT = {"application/problem+json": {"schema": {"$ref": "#/components/schemas/Problem"}}}
-RESPONSES = {
-    200: {"headers": {"Cache-Control": {"schema": {"type": "string"}}}},
-    404: {"description": "No such plant", "content": PROBLEM_CONTENT},
-    503: {
-        "description": "The database is unavailable; retry after the given time",
-        "headers": {
-            "Retry-After": {
-                "description": "Seconds to wait before retrying",
-                "schema": {"type": "integer"},
-            }
-        },
-        "content": PROBLEM_CONTENT,
-    },
-}
+RESPONSES = responses(
+    {200: {"headers": {"Cache-Control": {"schema": {"type": "string"}}}}},
+    not_found("No such plant"),
+    unavailable("The database is unavailable; retry after the given time"),
+)
 
 
 @router.get(

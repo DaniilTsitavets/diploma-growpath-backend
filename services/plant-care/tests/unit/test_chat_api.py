@@ -201,11 +201,11 @@ def test_the_history_is_newest_first_and_paged_with_a_cursor(scenario: ChatScena
 
     first = client.get(turns_url(scenario), headers=AS_USER).json()
     second = client.get(
-        turns_url(scenario), params={"before": first["next_cursor"]}, headers=AS_USER
+        turns_url(scenario), params={"cursor": first["next_cursor"]}, headers=AS_USER
     ).json()
     last = client.get(
         turns_url(scenario),
-        params={"before": second["next_cursor"], "limit": 3},
+        params={"cursor": second["next_cursor"], "limit": 3},
         headers=AS_USER,
     ).json()
 
@@ -221,7 +221,7 @@ def test_the_history_of_an_empty_journal_is_empty(scenario: ChatScenario):
     assert response.json() == {"items": [], "next_cursor": None}
 
 
-@pytest.mark.parametrize("params", [{"limit": 0}, {"limit": "x"}, {"before": ""}])
+@pytest.mark.parametrize("params", [{"limit": 0}, {"limit": "x"}, {"cursor": ""}])
 def test_bad_history_parameters_are_422(scenario: ChatScenario, params: dict):
     response = client_for(scenario).get(turns_url(scenario), params=params, headers=AS_USER)
 
@@ -230,8 +230,9 @@ def test_bad_history_parameters_are_422(scenario: ChatScenario, params: dict):
 
 def test_a_malformed_cursor_is_422(scenario: ChatScenario):
     response = client_for(scenario).get(
-        turns_url(scenario), params={"before": "garbage"}, headers=AS_USER
+        turns_url(scenario), params={"cursor": "garbage"}, headers=AS_USER
     )
 
     assert response.status_code == 422
     assert response.headers["content-type"] == PROBLEM_JSON
+    assert response.json()["code"] == "invalid-cursor"
