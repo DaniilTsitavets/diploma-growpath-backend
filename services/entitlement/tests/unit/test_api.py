@@ -40,6 +40,54 @@ def client(uow: FakeUnitOfWork) -> TestClient:
     return TestClient(app, raise_server_exceptions=False)
 
 
+def me_headers(groups: str | None = "users", user: str | None = str(USER)) -> dict[str, str]:
+    headers = {}
+    if user is not None:
+        headers["X-User-Id"] = user
+    if groups is not None:
+        headers["X-User-Groups"] = groups
+    return headers
+
+
+@pytest.mark.parametrize("groups", ["users", "[users]", "[users, ]", "a,users"])
+def test_a_customer_reads_their_own_entitlement(
+    client: TestClient, uow: FakeUnitOfWork, groups: str
+):
+    uow.placed_orders.pay(USER, 4000)
+
+    response = client.get("/v1/me/entitlement", headers=me_headers(groups))
+
+    assert response.status_code == 200
+    assert response.json() == client.get(f"/v1/entitlements/{USER}").json()
+    assert response.json()["user_id"] == str(USER)
+
+
+@pytest.mark.parametrize(
+    "groups",
+    [None, "", "experts", "admins", "users,experts", "[users, admins]"],
+    ids=["no header", "empty", "expert", "admin", "users+experts", "users+admins"],
+)
+def test_other_roles_cannot_read_the_customer_entitlement(client: TestClient, groups: str | None):
+    response = client.get("/v1/me/entitlement", headers=me_headers(groups))
+
+    assert response.status_code == 403
+    assert response.headers["content-type"] == PROBLEM_JSON
+    assert response.json()["code"] == "forbidden"
+    assert response.json()["detail"] == "this role cannot use this endpoint"
+
+
+@pytest.mark.parametrize("user", [None, "not-a-uuid"], ids=["missing user", "malformed user"])
+def test_the_customer_route_requires_an_identified_user(client: TestClient, user: str | None):
+    response = client.get("/v1/me/entitlement", headers=me_headers(user=user))
+
+    assert response.status_code == 401
+    assert response.json()["code"] == "unauthorized"
+
+
+def test_the_internal_routes_need_no_identity(client: TestClient):
+    assert client.get(f"/v1/entitlements/{USER}").status_code == 200
+
+
 def reservations(uow: FakeUnitOfWork, kind: str):
     return uow.ai_reservations if kind == "ai" else uow.expert_reservations
 

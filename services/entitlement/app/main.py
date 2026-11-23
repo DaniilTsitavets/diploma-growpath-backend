@@ -8,7 +8,7 @@ from fastapi import FastAPI
 from growpath_observability import CorrelationIdMiddleware, configure_logging
 from sqlalchemy.orm import sessionmaker
 
-from app.api import ai_quota, entitlements, expert_quota, health
+from app.api import ai_quota, entitlements, expert_quota, health, me
 from app.api.errors import register_error_handlers
 from app.background import run_periodically
 from app.config import Settings
@@ -92,6 +92,7 @@ def create_app(
     register_error_handlers(app, settings.lock_retry_after_seconds)
     app.include_router(health.router)
     app.include_router(entitlements.router)
+    app.include_router(me.router)
     app.include_router(ai_quota.router)
     app.include_router(expert_quota.router)
     return app
