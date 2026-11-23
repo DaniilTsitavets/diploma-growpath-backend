@@ -316,7 +316,7 @@ ensure_expert_quota() {
   expert_quota_left || die "the expert quota stays 0: check queue entitlement-order-placed and its DLQ"
 }
 
-# new_update: a fresh update with the two required photos; sets UPDATE_ID.
+# new_update: a fresh update with an optional overview photo; sets UPDATE_ID.
 new_update() {
   local body kind
   ensure_journal
@@ -327,7 +327,7 @@ new_update() {
     pot_weight_relative: "about_same", sensor_reading: 82.5, sensor_unit: "vwc_pct"}')
   gwj POST "journals/$JOURNAL_ID/updates" "$TOKEN" "$body"
   expect "POST /journals/{id}/updates" 201 "$CODE"
-  for kind in overview soil; do upload_photo "$kind"; done
+  for kind in overview; do upload_photo "$kind"; done
 }
 
 upload_photo() {
@@ -488,10 +488,10 @@ act_diagnosis() {
   expect "PUT /journals/{id}/planting" 200 "$CODE"
   jq -r '"    planted_on=\(.planted_on)  checkpoints=\(.checkpoints | length)"' <<<"$BODY"
 
-  step "New update with the questionnaire, then the two required photos: presign, PUT to S3, confirm"
+  step "New update with the questionnaire, then an optional photo: presign, PUT to S3, confirm"
   new_update
   gw GET "updates/$UPDATE_ID/photos" "$TOKEN"
-  jq -r '"    photos=\(.photos | length)  missing_required=\(.missing_required)"' <<<"$BODY"
+  jq -r '"    photos=\(.photos | length)"' <<<"$BODY"
 
   step "Run the diagnosis: AI quota is reserved in entitlement, the model is called, the reservation is committed or released"
   say "Creating the update already reserved one AI quota unit (used=1 below); the diagnosis runs against that reservation."

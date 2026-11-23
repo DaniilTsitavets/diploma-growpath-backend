@@ -93,9 +93,7 @@ class UpdatePhotoModel(Base):
 
     __tablename__ = "update_photos"
     __table_args__ = (
-        CheckConstraint(
-            "kind IN ('overview', 'soil', 'symptom_closeup', 'roots_drainage')", name="kind"
-        ),
+        CheckConstraint("kind IN ('overview', 'symptom_closeup', 'roots_drainage')", name="kind"),
         CheckConstraint(
             "btrim(storage_key) <> '' AND char_length(storage_key) <= 512", name="storage_key"
         ),

@@ -18,7 +18,6 @@ from app.service.errors import (
     DiagnosisConflict,
     DiagnosisNotFound,
     InvalidRequest,
-    PhotosMissing,
     ReservationUnusable,
     Unavailable,
     UpdateNotFound,
@@ -31,7 +30,6 @@ from app.service.model import (
     Photo,
     UpdateRecord,
 )
-from app.service.photos import missing_required
 from app.service.ports import UnitOfWork
 from app.service.update_watering import assess_update
 
@@ -103,9 +101,6 @@ class DiagnosisService:
         status = context.diagnosis.summary.status
         if status in (DiagnosisStatus.COMPLETED, DiagnosisStatus.AWAITING_CLARIFICATION):
             return context.diagnosis
-        required = missing_required(context.photos)
-        if required:
-            raise PhotosMissing([kind.value for kind in required])
         summary = context.diagnosis.summary
         if status is DiagnosisStatus.PENDING and summary.clarifying_answer is not None:
             attempt = self._resume_reevaluation(context.diagnosis)

@@ -103,11 +103,6 @@ class DiagnosisNotFound(NotFound):
         super().__init__("the update has no diagnosis")
 
 
-class PhotosMissing(InvalidRequest):
-    def __init__(self, kinds: list[str]) -> None:
-        super().__init__(f"photos required for a diagnosis are missing: {', '.join(kinds)}")
-
-
 class DiagnosisConflict(Conflict):
     """The diagnosis is in a state that does not allow the request."""
 

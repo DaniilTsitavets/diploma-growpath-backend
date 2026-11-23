@@ -66,8 +66,8 @@ def test_the_photos_are_read_in_kind_order_and_sent_with_the_prompt_and_effort()
     answer = LlmDiagnosisModel(transport, guard(), photos).diagnose(make_request())
 
     ((prompt, effort),) = transport.prompts
-    assert photos.read_keys == ["key/overview", "key/soil"]
-    assert [image.data for image in prompt.images] == [b"key/overview", b"key/soil"]
+    assert photos.read_keys == ["key/overview", "key/closeup"]
+    assert [image.data for image in prompt.images] == [b"key/overview", b"key/closeup"]
     assert "<plant>Basil</plant>" in prompt.user
     assert effort is ModelEffort.HIGH
     assert answer.recommendation == "Water less."

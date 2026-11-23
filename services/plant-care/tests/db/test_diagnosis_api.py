@@ -60,7 +60,7 @@ def update_with_photos(client: TestClient, journal_id: uuid.UUID) -> str:
         headers=AS_USER,
     )
     update_id = created.json()["id"]
-    for kind in ("overview", "soil"):
+    for kind in ("overview", "symptom_closeup"):
         presign_and_confirm(client, AS_USER, update_id, kind)
     return update_id
 
@@ -171,7 +171,7 @@ def test_an_attempt_whose_reservation_was_released_is_taken_over_by_the_next_one
     assert quota.committed == [stored_reservation(engine, update_id)]
 
 
-def test_a_diagnosis_cannot_start_before_the_photos_are_confirmed(
+def test_a_diagnosis_starts_without_any_photo(
     database_url: URL, quota: FakeAiQuota, journal_id: uuid.UUID
 ):
     client = client_with(database_url, quota, FakeModel(conclusion()))
@@ -180,20 +180,10 @@ def test_a_diagnosis_cannot_start_before_the_photos_are_confirmed(
         json={"id": str(uuid.uuid4()), **QUESTIONNAIRE},
         headers=AS_USER,
     ).json()
-    photos = f"/v1/updates/{created['id']}/photos"
-    body = {"content_type": "image/png", "size_bytes": 1000}
-    diagnosis = f"/v1/updates/{created['id']}/diagnosis"
 
-    for kind in ("overview", "soil"):
-        client.post(photos, json={"kind": kind, **body}, headers=AS_USER)
-    presigned_only = client.post(diagnosis, headers=AS_USER)
-    for kind in ("overview", "soil"):
-        client.post(f"{photos}/{kind}/confirm", headers=AS_USER)
-    confirmed = client.post(diagnosis, headers=AS_USER)
+    response = client.post(f"/v1/updates/{created['id']}/diagnosis", headers=AS_USER)
 
-    assert presigned_only.status_code == 422
-    assert "overview" in presigned_only.json()["detail"]
-    assert confirmed.status_code == 200
+    assert response.status_code == 200
 
 
 def test_the_assessment_uses_the_species_profile_and_the_journal_history(
@@ -225,7 +215,7 @@ def test_the_assessment_uses_the_species_profile_and_the_journal_history(
             headers=AS_USER,
         )
         update_id = created.json()["id"]
-        for kind in ("overview", "soil"):
+        for kind in ("overview", "symptom_closeup"):
             presign_and_confirm(client, AS_USER, update_id, kind)
         return client.post(f"/v1/updates/{update_id}/diagnosis", headers=AS_USER).json()
 

@@ -695,7 +695,7 @@ paths:
       tags:
       - photos
       summary: List Photos
-      description: The photos of the update with presigned GET URLs and the required kinds still missing.
+      description: The photos of the update with presigned GET URLs; photos are optional.
       operationId: list_photos_v1_updates__update_id__photos_get
       parameters:
       - name: update_id
@@ -1052,7 +1052,7 @@ paths:
                       enum:
                       - not-found
         '422':
-          description: A path parameter is invalid, or the required photos are missing
+          description: A path parameter is invalid
           content:
             application/problem+json:
               schema:
@@ -2354,7 +2354,6 @@ components:
       type: string
       enum:
       - overview
-      - soil
       - symptom_closeup
       - roots_drainage
       title: PhotoKind
@@ -2377,15 +2376,9 @@ components:
             $ref: '#/components/schemas/PhotoResponse'
           type: array
           title: Photos
-        missing_required:
-          items:
-            $ref: '#/components/schemas/PhotoKind'
-          type: array
-          title: Missing Required
       type: object
       required:
       - photos
-      - missing_required
       title: PhotosResponse
     PlantProfileResponse:
       properties:

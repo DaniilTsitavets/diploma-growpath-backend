@@ -11,11 +11,8 @@ from app.service.errors import (
     Unavailable,
     UpdateNotFound,
 )
-from app.service.model import DiagnosisStatus, Photo, PhotoKind
+from app.service.model import DiagnosisStatus, PhotoKind
 from app.service.ports import UnitOfWork
-
-# US-3.2: two photos are required; the close-up is optional and the roots photo is asked for later.
-REQUIRED_KINDS = (PhotoKind.OVERVIEW, PhotoKind.SOIL)
 
 
 class PhotoStorageUnavailable(Unavailable):
@@ -81,16 +78,10 @@ class PhotoLink:
 @dataclass(frozen=True)
 class UpdatePhotos:
     photos: list[PhotoLink]
-    missing_required: list[PhotoKind]
 
 
 def storage_key_for(journal_id: uuid.UUID, update_id: uuid.UUID, kind: PhotoKind) -> str:
     return f"journals/{journal_id}/updates/{update_id}/{kind.value}"
-
-
-def missing_required(photos: list[Photo]) -> list[PhotoKind]:
-    present = {photo.kind for photo in photos}
-    return [kind for kind in REQUIRED_KINDS if kind not in present]
 
 
 class PhotoService:
@@ -168,4 +159,4 @@ class PhotoService:
         links = [
             PhotoLink(photo.kind, self._storage.download_url(photo.storage_key)) for photo in photos
         ]
-        return UpdatePhotos(links, missing_required(photos))
+        return UpdatePhotos(links)

@@ -30,8 +30,14 @@ def test_the_user_part_carries_the_questionnaire_and_the_photos_in_a_fixed_order
     assert "lighting: medium" in prompt.user
     assert "standing_water_over_1h: yes" in prompt.user
     assert "last_watered_on: 2026-11-09" in prompt.user
-    assert prompt.user.index("1. overview") < prompt.user.index("2. soil")
+    assert prompt.user.index("1. overview") < prompt.user.index("2. symptom_closeup")
     assert "<clarification>" not in prompt.user
+
+
+def test_the_prompt_says_none_when_no_photo_was_attached():
+    prompt = build_prompt(make_request(photos=[]))
+
+    assert "<photos>\nnone\n</photos>" in prompt.user
 
 
 def test_missing_values_are_spelled_out():
@@ -137,7 +143,7 @@ def test_photos_are_ordered_by_kind():
 
     kinds = [photo.kind for photo in ordered_photos(request.photos)]
 
-    assert kinds == [PhotoKind.OVERVIEW, PhotoKind.SOIL]
+    assert kinds == [PhotoKind.OVERVIEW, PhotoKind.SYMPTOM_CLOSEUP]
 
 
 def test_the_watering_assessment_block_follows_the_questionnaire():

@@ -751,7 +751,7 @@ components:
             properties:
               kind:
                 type: string
-                enum: [overview, soil, symptom_closeup, roots_drainage]
+                enum: [overview, symptom_closeup, roots_drainage]
               storage_key:
                 type: string
                 description: The S3 object key; the expert service presigns it.

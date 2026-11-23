@@ -152,10 +152,9 @@ def test_a_photo_is_stored_only_once_confirmed_and_confirming_again_changes_noth
 
     assert presigned.status_code == 200
     assert stored_before == []
-    assert listed_before == {"photos": [], "missing_required": ["overview", "soil"]}
+    assert listed_before == {"photos": []}
     assert again.status_code == 200
     assert [photo["kind"] for photo in listed["photos"]] == ["overview"]
-    assert listed["missing_required"] == ["soil"]
     assert stored == [f"journals/{journal_id}/updates/{update_id}/overview"]
 
 
@@ -163,10 +162,12 @@ def test_a_rejected_object_is_deleted_and_not_stored(
     client: TestClient, storage: FakePhotoStorage, journal_id, engine: Engine
 ):
     update_id = submit(client, journal_id).json()["id"]
-    key = f"journals/{journal_id}/updates/{update_id}/soil"
+    key = f"journals/{journal_id}/updates/{update_id}/symptom_closeup"
     storage.put(key, size_bytes=6_000_000)
 
-    response = client.post(f"/v1/updates/{update_id}/photos/soil/confirm", headers=AS_USER)
+    response = client.post(
+        f"/v1/updates/{update_id}/photos/symptom_closeup/confirm", headers=AS_USER
+    )
 
     with Session(engine) as session:
         stored = session.scalars(select(UpdatePhotoModel.storage_key)).all()

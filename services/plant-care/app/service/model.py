@@ -61,7 +61,6 @@ class SensorUnit(StrEnum):
 
 class PhotoKind(StrEnum):
     OVERVIEW = "overview"
-    SOIL = "soil"
     SYMPTOM_CLOSEUP = "symptom_closeup"
     ROOTS_DRAINAGE = "roots_drainage"
 

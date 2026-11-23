@@ -14,7 +14,6 @@ from app.service.errors import (
     AiQuotaUnavailable,
     DiagnosisConflict,
     InvalidRequest,
-    PhotosMissing,
     ReservationUnusable,
     Unavailable,
     UpdateNotFound,
@@ -74,7 +73,10 @@ def test_the_model_receives_the_species_photos_effort_and_no_clarification_yet(
 
     (request,) = model.requests
     assert request.species == "Basil"
-    assert {photo.kind for photo in request.photos} == {PhotoKind.OVERVIEW, PhotoKind.SOIL}
+    assert {photo.kind for photo in request.photos} == {
+        PhotoKind.OVERVIEW,
+        PhotoKind.SYMPTOM_CLOSEUP,
+    }
     assert request.effort is ModelEffort.HIGH
     assert (request.clarifying_question, request.clarifying_answer) == (None, None)
 
@@ -444,17 +446,14 @@ def test_a_failed_release_still_degrades_the_diagnosis(scenario: Scenario):
     assert diagnosis.summary.status is DEGRADED
 
 
-def test_the_required_photos_must_exist_before_anything_is_reserved(scenario: Scenario):
+def test_the_diagnosis_runs_without_any_photo(scenario: Scenario):
     scenario.uow.photos.rows.clear()
-    scenario.quota.reserved.clear()
-    scenario.uow.photos.add(scenario.update_id, PhotoKind.OVERVIEW, "key/overview")
     model = FakeModel(conclusion())
 
-    with pytest.raises(PhotosMissing, match="soil"):
-        scenario.service(model).run(USER, scenario.update_id)
+    diagnosis = scenario.service(model).run(USER, scenario.update_id)
 
-    assert scenario.quota.reserved == []
-    assert model.requests == []
+    assert diagnosis.summary.status is COMPLETED
+    assert [request.photos for request in model.requests] == [[]]
 
 
 @pytest.mark.parametrize("status", [COMPLETED, AWAITING])

@@ -47,9 +47,9 @@ def upload_and_confirm(
 
 def test_an_upload_signs_a_put_url_and_stores_nothing(service: PhotoService, uow: FakeUnitOfWork):
     update = seeded_update(uow)
-    key = storage_key_for(update.journal_id, update.id, PhotoKind.SOIL)
+    key = storage_key_for(update.journal_id, update.id, PhotoKind.SYMPTOM_CLOSEUP)
 
-    upload = service.request_upload(update.id, USER, PhotoKind.SOIL, PNG, 1234)
+    upload = service.request_upload(update.id, USER, PhotoKind.SYMPTOM_CLOSEUP, PNG, 1234)
 
     assert upload.url == f"http://storage.test/{key}?method=put"
     assert upload.expires_in_seconds == 600
@@ -62,7 +62,10 @@ def test_an_upload_signs_a_put_url_and_stores_nothing(service: PhotoService, uow
 def test_the_size_limits_are_inclusive(service: PhotoService, uow: FakeUnitOfWork, size: int):
     update = seeded_update(uow)
 
-    assert service.request_upload(update.id, USER, PhotoKind.SOIL, PNG, size).size_bytes == size
+    assert (
+        service.request_upload(update.id, USER, PhotoKind.SYMPTOM_CLOSEUP, PNG, size).size_bytes
+        == size
+    )
 
 
 @pytest.mark.parametrize("size", [0, -1, MAX_BYTES + 1])
@@ -72,7 +75,7 @@ def test_a_declared_size_outside_the_limits_is_refused(
     update = seeded_update(uow)
 
     with pytest.raises(PhotoTooLarge):
-        service.request_upload(update.id, USER, PhotoKind.SOIL, PNG, size)
+        service.request_upload(update.id, USER, PhotoKind.SYMPTOM_CLOSEUP, PNG, size)
 
 
 @pytest.mark.parametrize("content_type", ["image/gif", "application/pdf", "", "IMAGE/PNG"])
@@ -82,7 +85,7 @@ def test_a_declared_type_that_is_not_allowed_is_refused(
     update = seeded_update(uow)
 
     with pytest.raises(PhotoTypeNotAllowed):
-        service.request_upload(update.id, USER, PhotoKind.SOIL, content_type, 1000)
+        service.request_upload(update.id, USER, PhotoKind.SYMPTOM_CLOSEUP, content_type, 1000)
 
 
 def test_an_upload_for_an_update_of_another_user_is_not_found(
@@ -108,13 +111,16 @@ def test_confirming_records_the_key_and_returns_a_download_link(
     service: PhotoService, uow: FakeUnitOfWork, storage: FakePhotoStorage
 ):
     update = seeded_update(uow)
-    key = storage_key_for(update.journal_id, update.id, PhotoKind.SOIL)
+    key = storage_key_for(update.journal_id, update.id, PhotoKind.SYMPTOM_CLOSEUP)
     storage.put(key)
 
-    link = service.confirm_upload(update.id, USER, PhotoKind.SOIL)
+    link = service.confirm_upload(update.id, USER, PhotoKind.SYMPTOM_CLOSEUP)
 
-    assert (link.kind, link.url) == (PhotoKind.SOIL, f"http://storage.test/{key}?method=get")
-    assert [(p.kind, p.storage_key) for p in uow.photos.rows] == [(PhotoKind.SOIL, key)]
+    assert (link.kind, link.url) == (
+        PhotoKind.SYMPTOM_CLOSEUP,
+        f"http://storage.test/{key}?method=get",
+    )
+    assert [(p.kind, p.storage_key) for p in uow.photos.rows] == [(PhotoKind.SYMPTOM_CLOSEUP, key)]
     assert uow.commits == 1
 
 
@@ -147,11 +153,11 @@ def test_an_object_of_a_bad_size_is_deleted_and_not_recorded(
     service: PhotoService, uow: FakeUnitOfWork, storage: FakePhotoStorage, size: int
 ):
     update = seeded_update(uow)
-    key = storage_key_for(update.journal_id, update.id, PhotoKind.SOIL)
+    key = storage_key_for(update.journal_id, update.id, PhotoKind.SYMPTOM_CLOSEUP)
     storage.put(key, size_bytes=size)
 
     with pytest.raises(PhotoTooLarge):
-        service.confirm_upload(update.id, USER, PhotoKind.SOIL)
+        service.confirm_upload(update.id, USER, PhotoKind.SYMPTOM_CLOSEUP)
 
     assert storage.deleted == [key]
     assert key not in storage.objects
@@ -163,11 +169,11 @@ def test_an_object_of_another_type_is_deleted_and_not_recorded(
     service: PhotoService, uow: FakeUnitOfWork, storage: FakePhotoStorage, content_type
 ):
     update = seeded_update(uow)
-    key = storage_key_for(update.journal_id, update.id, PhotoKind.SOIL)
+    key = storage_key_for(update.journal_id, update.id, PhotoKind.SYMPTOM_CLOSEUP)
     storage.put(key, content_type=content_type)
 
     with pytest.raises(PhotoTypeNotAllowed):
-        service.confirm_upload(update.id, USER, PhotoKind.SOIL)
+        service.confirm_upload(update.id, USER, PhotoKind.SYMPTOM_CLOSEUP)
 
     assert storage.deleted == [key]
     assert uow.photos.rows == []
@@ -177,11 +183,13 @@ def test_a_rejected_replacement_removes_the_confirmed_photo_with_its_object(
     service: PhotoService, uow: FakeUnitOfWork, storage: FakePhotoStorage
 ):
     update = seeded_update(uow)
-    upload_and_confirm(service, storage, update, PhotoKind.SOIL)
-    storage.put(storage_key_for(update.journal_id, update.id, PhotoKind.SOIL), MAX_BYTES + 1)
+    upload_and_confirm(service, storage, update, PhotoKind.SYMPTOM_CLOSEUP)
+    storage.put(
+        storage_key_for(update.journal_id, update.id, PhotoKind.SYMPTOM_CLOSEUP), MAX_BYTES + 1
+    )
 
     with pytest.raises(PhotoTooLarge):
-        service.confirm_upload(update.id, USER, PhotoKind.SOIL)
+        service.confirm_upload(update.id, USER, PhotoKind.SYMPTOM_CLOSEUP)
 
     assert uow.photos.rows == []
 
@@ -190,11 +198,11 @@ def test_signing_again_keeps_the_confirmed_photo(
     service: PhotoService, uow: FakeUnitOfWork, storage: FakePhotoStorage
 ):
     update = seeded_update(uow)
-    upload_and_confirm(service, storage, update, PhotoKind.SOIL)
+    upload_and_confirm(service, storage, update, PhotoKind.SYMPTOM_CLOSEUP)
 
-    service.request_upload(update.id, USER, PhotoKind.SOIL, PNG, 2000)
+    service.request_upload(update.id, USER, PhotoKind.SYMPTOM_CLOSEUP, PNG, 2000)
 
-    assert [p.kind for p in uow.photos.rows] == [PhotoKind.SOIL]
+    assert [p.kind for p in uow.photos.rows] == [PhotoKind.SYMPTOM_CLOSEUP]
 
 
 def test_confirming_for_an_update_of_another_user_is_not_found(
@@ -224,24 +232,19 @@ def test_listing_counts_only_confirmed_photos(
 ):
     update = seeded_update(uow)
     upload_and_confirm(service, storage, update, PhotoKind.OVERVIEW)
-    service.request_upload(update.id, USER, PhotoKind.SOIL, PNG, 1000)
+    service.request_upload(update.id, USER, PhotoKind.SYMPTOM_CLOSEUP, PNG, 1000)
 
     listed = service.list_photos(update.id, USER)
 
     assert [(link.kind, link.url.endswith("method=get")) for link in listed.photos] == [
         (PhotoKind.OVERVIEW, True)
     ]
-    assert listed.missing_required == [PhotoKind.SOIL]
 
 
-def test_nothing_is_missing_once_both_required_photos_are_confirmed(
-    service: PhotoService, uow: FakeUnitOfWork, storage: FakePhotoStorage
-):
+def test_an_update_without_photos_lists_none(service: PhotoService, uow: FakeUnitOfWork):
     update = seeded_update(uow)
-    upload_and_confirm(service, storage, update, PhotoKind.SOIL)
-    upload_and_confirm(service, storage, update, PhotoKind.OVERVIEW)
 
-    assert service.list_photos(update.id, USER).missing_required == []
+    assert service.list_photos(update.id, USER).photos == []
 
 
 def test_listing_photos_of_another_users_update_is_not_found(
@@ -306,7 +309,7 @@ def test_a_roots_photo_is_accepted_while_the_ai_awaits_it(
     assert [p.kind for p in uow.photos.rows] == [PhotoKind.ROOTS_DRAINAGE]
 
 
-@pytest.mark.parametrize("kind", [PhotoKind.OVERVIEW, PhotoKind.SOIL, PhotoKind.SYMPTOM_CLOSEUP])
+@pytest.mark.parametrize("kind", [PhotoKind.OVERVIEW, PhotoKind.SYMPTOM_CLOSEUP])
 def test_the_other_kinds_need_no_request_from_the_ai(
     service: PhotoService, uow: FakeUnitOfWork, kind: PhotoKind
 ):

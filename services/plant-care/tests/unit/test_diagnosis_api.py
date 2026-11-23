@@ -123,13 +123,12 @@ def test_an_unavailable_quota_service_is_503_problem_json_with_retry_after(scena
     assert response.headers["content-type"] == PROBLEM_JSON
 
 
-def test_missing_photos_are_422(scenario: Scenario):
+def test_the_diagnosis_needs_no_photo(scenario: Scenario):
     scenario.uow.photos.rows.clear()
 
     response = client_for(scenario, FakeModel(conclusion())).post(url(scenario), headers=AS_USER)
 
-    assert response.status_code == 422
-    assert "overview" in response.json()["detail"]
+    assert response.status_code == 200
 
 
 def test_a_running_attempt_is_409(scenario: Scenario):
