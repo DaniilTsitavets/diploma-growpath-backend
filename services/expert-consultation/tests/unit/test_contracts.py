@@ -7,6 +7,7 @@ from fastapi.testclient import TestClient
 from httpx import Response
 
 from app.main import create_app
+from app.service.directory import Role
 from app.service.expert_tickets import ExpertTicketService
 from app.service.ticket_publisher import TerminalEventPublisher
 from app.service.tickets import TicketService
@@ -19,6 +20,7 @@ from tests.unit.contracts import (
     render_yaml,
     routes_of,
 )
+from tests.unit.fake_directory import FakeUserDirectory, make_user
 from tests.unit.fake_queue import FakeQueue
 from tests.unit.fake_storage import FakePhotoStorage
 from tests.unit.fakes import TTL_SECONDS, FakeUnitOfWork, RecordingEvents, make_ticket
@@ -30,16 +32,28 @@ DESCRIPTION = (
     "the context snapshot and the expert answer. Consumes `escalation.requested`, publishes "
     "`ticket.created`, `ticket.answered` and `ticket.cancelled`. Identity arrives in the "
     "`X-User-Id` and `X-User-Groups` headers, which the API gateway sets from the verified JWT; "
-    "every `/v1/expert/**` operation requires the `experts` group. The `internal` tag marks "
-    "operations the gateway does not expose."
+    "every `/v1/expert/**` operation requires the `experts` group. The service also hosts the "
+    "identity administration: `/v1/admin/users/**` requires the `admins` group and manages "
+    "Cognito users and their role (the Cognito group `users`, `experts` or `admins`; a user has "
+    "exactly one), and `/v1/me` answers any authenticated caller from the identity headers. "
+    "The `internal` tag marks operations the gateway does not expose."
 )
-PUBLIC_PREFIXES = ("/v1/expert/tickets",)
+PUBLIC_PREFIXES = ("/v1/expert/tickets", "/v1/admin/users", "/v1/me")
 EXPERT = uuid.uuid4()
+ADMIN = uuid.uuid4()
 AS_EXPERT = {"X-User-Id": str(EXPERT), "X-User-Groups": "experts"}
+AS_ADMIN = {"X-User-Id": str(ADMIN), "X-User-Groups": "admins"}
+PASSWORD = "S3cret-pass-phrase"
 
 
-def build_app() -> FastAPI:
-    return create_app(make_settings(), FakeQueue(), RecordingEvents(), FakePhotoStorage())
+def build_app(directory: FakeUserDirectory | None = None) -> FastAPI:
+    return create_app(
+        make_settings(),
+        FakeQueue(),
+        RecordingEvents(),
+        FakePhotoStorage(),
+        directory or FakeUserDirectory(),
+    )
 
 
 def test_the_committed_openapi_is_what_the_app_generates():
@@ -67,7 +81,7 @@ def test_the_openapi_document_is_valid():
     validator.validate(load_openapi(SERVICE))
 
 
-def test_the_ticket_operations_are_public_and_health_is_internal():
+def test_the_ticket_and_identity_operations_are_public_and_health_is_internal():
     document = load_openapi(SERVICE)
 
     exposure = {
@@ -79,6 +93,12 @@ def test_the_ticket_operations_are_public_and_health_is_internal():
         "/v1/expert/tickets",
         "/v1/expert/tickets/{ticket_id}",
         "/v1/expert/tickets/{ticket_id}/answer",
+        "/v1/admin/users",
+        "/v1/admin/users/{user_id}/role",
+        "/v1/admin/users/{user_id}/disable",
+        "/v1/admin/users/{user_id}/enable",
+        "/v1/admin/users/{user_id}/password",
+        "/v1/me",
     }
     assert "internal" in document["paths"]["/health/ready"]["get"]["tags"]
 
@@ -202,6 +222,36 @@ def test_every_error_response_of_a_route_is_declared_as_a_problem():
         "409",
         "422",
     ]
+    assert declared[("/v1/admin/users", "get")] == ["200", "401", "403", "422", "503"]
+    assert declared[("/v1/admin/users", "post")] == ["201", "401", "403", "409", "422", "503"]
+    assert declared[("/v1/admin/users/{user_id}/role", "put")] == [
+        "200",
+        "401",
+        "403",
+        "404",
+        "409",
+        "422",
+        "503",
+    ]
+    for action in ("disable", "enable"):
+        assert declared[(f"/v1/admin/users/{{user_id}}/{action}", "post")] == [
+            "204",
+            "401",
+            "403",
+            "404",
+            "409",
+            "422",
+            "503",
+        ]
+    assert declared[("/v1/admin/users/{user_id}/password", "post")] == [
+        "204",
+        "401",
+        "403",
+        "404",
+        "422",
+        "503",
+    ]
+    assert declared[("/v1/me", "get")] == ["200", "401", "422"]
     assert declared[("/health/ready", "get")] == ["200", "503"]
     assert "code" in document["components"]["schemas"]["Problem"]["required"]
 
@@ -211,3 +261,103 @@ def test_the_conformance_check_rejects_a_body_that_breaks_the_schema():
 
     with pytest.raises(AssertionError):
         assert_conforms(load_openapi(SERVICE), "/v1/expert/tickets", "GET", response)
+
+
+@pytest.fixture
+def directory() -> FakeUserDirectory:
+    directory = FakeUserDirectory()
+    directory.add(make_user(Role.ADMIN, user_id=ADMIN))
+    return directory
+
+
+@pytest.fixture
+def admin_client(directory: FakeUserDirectory) -> TestClient:
+    return TestClient(build_app(directory), raise_server_exceptions=False)
+
+
+def test_the_user_list_conforms(admin_client: TestClient):
+    response = admin_client.get("/v1/admin/users", headers=AS_ADMIN)
+
+    assert response.status_code == 200 and response.json()["items"][0]["role"] == "admin"
+    assert_conforms(load_openapi(SERVICE), "/v1/admin/users", "GET", response)
+
+
+def test_a_created_user_conforms(admin_client: TestClient):
+    response = admin_client.post(
+        "/v1/admin/users",
+        json={"email": "new@example.com", "password": PASSWORD, "role": "user"},
+        headers=AS_ADMIN,
+    )
+
+    assert response.status_code == 201
+    assert_conforms(load_openapi(SERVICE), "/v1/admin/users", "POST", response)
+
+
+def test_a_changed_role_conforms(admin_client: TestClient, directory: FakeUserDirectory):
+    user = directory.add(make_user(Role.USER))
+
+    response = admin_client.put(
+        f"/v1/admin/users/{user.user_id}/role", json={"role": "expert"}, headers=AS_ADMIN
+    )
+
+    assert response.status_code == 200
+    assert_conforms(load_openapi(SERVICE), "/v1/admin/users/{user_id}/role", "PUT", response)
+
+
+@pytest.mark.parametrize(
+    ("method", "path", "body", "status", "code"),
+    [
+        (
+            "POST",
+            "/v1/admin/users",
+            {"email": "a@b.co", "password": "x", "role": "user"},
+            422,
+            None,
+        ),
+        ("PUT", "/v1/admin/users/{admin}/role", {"role": "user"}, 409, "cannot-modify-self"),
+        ("POST", "/v1/admin/users/{admin}/disable", None, 409, "cannot-modify-self"),
+        ("POST", "/v1/admin/users/{other}/enable", None, 404, "user-not-found"),
+        ("POST", "/v1/admin/users/{other}/password", {"password": "x"}, 404, "user-not-found"),
+    ],
+    ids=["weak-password", "self-role", "self-disable", "unknown-enable", "unknown-password"],
+)
+def test_admin_errors_conform_to_the_problem_schema(
+    admin_client: TestClient, method: str, path: str, body, status: int, code: str | None
+):
+    template = path.replace("{admin}", str(ADMIN)).replace("{other}", str(uuid.uuid4()))
+    response = admin_client.request(method, template, json=body, headers=AS_ADMIN)
+
+    assert response.status_code == status
+    assert code is None or response.json()["code"] == code
+    contract_path = path.replace("{admin}", "{user_id}").replace("{other}", "{user_id}")
+    assert_conforms(load_openapi(SERVICE), contract_path, method, response)
+
+
+def test_an_unavailable_directory_conforms_to_the_problem_schema(
+    admin_client: TestClient, directory: FakeUserDirectory
+):
+    directory.unavailable = True
+
+    response = admin_client.get("/v1/admin/users", headers=AS_ADMIN)
+
+    assert response.status_code == 503
+    assert_conforms(load_openapi(SERVICE), "/v1/admin/users", "GET", response)
+
+
+def test_a_caller_outside_the_admins_group_conforms_to_the_problem_schema(
+    admin_client: TestClient,
+):
+    response = admin_client.get("/v1/admin/users", headers=AS_EXPERT)
+
+    assert response.status_code == 403 and response.json()["code"] == "forbidden"
+    assert_conforms(load_openapi(SERVICE), "/v1/admin/users", "GET", response)
+
+
+def test_me_conforms(admin_client: TestClient):
+    response = admin_client.get("/v1/me", headers=AS_ADMIN)
+
+    assert response.status_code == 200 and response.json()["role"] == "admin"
+    assert_conforms(load_openapi(SERVICE), "/v1/me", "GET", response)
+    unauthorized = admin_client.get("/v1/me")
+    assert unauthorized.status_code == 401
+    assert_conforms(load_openapi(SERVICE), "/v1/me", "GET", unauthorized)

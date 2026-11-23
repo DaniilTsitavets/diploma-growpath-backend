@@ -6,6 +6,7 @@ from tests.unit.settings import (
     ESCALATION_QUEUE_URL,
     TICKET_TOPIC_ARN,
     UNREACHABLE_DATABASE,
+    USER_POOL_ID,
     make_settings,
 )
 
@@ -15,9 +16,13 @@ def test_settings_read_the_prefixed_environment(monkeypatch: pytest.MonkeyPatch)
     monkeypatch.setenv("EXPERT_CONSULTATION_ESCALATION_QUEUE_URL", ESCALATION_QUEUE_URL)
     monkeypatch.setenv("EXPERT_CONSULTATION_TICKET_EVENTS_TOPIC_ARN", TICKET_TOPIC_ARN)
     monkeypatch.setenv("EXPERT_CONSULTATION_AWS_REGION", "eu-west-1")
+    monkeypatch.setenv("EXPERT_CONSULTATION_COGNITO_USER_POOL_ID", USER_POOL_ID)
+    monkeypatch.setenv("EXPERT_CONSULTATION_COGNITO_ENDPOINT_URL", "http://localstack:4566")
 
     settings = Settings()
 
+    assert settings.cognito_user_pool_id == USER_POOL_ID
+    assert settings.cognito_endpoint_url == "http://localstack:4566"
     assert settings.escalation_queue_url == ESCALATION_QUEUE_URL
     assert settings.ticket_events_topic_arn == TICKET_TOPIC_ARN
     assert settings.aws_region == "eu-west-1"

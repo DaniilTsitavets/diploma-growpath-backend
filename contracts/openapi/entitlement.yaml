@@ -5,10 +5,11 @@ info:
   description: Tier and quotas. The tier is computed from the paid orders of the last 30 days and is not
     stored (amounts are euro cents, EUR); AI and expert quotas are reserved, committed or released through
     the internal `/v1/quotas/**` operations that plant-care calls. The gateway route `GET /v1/me/entitlement`
-    maps to `GET /v1/entitlements/{user_id}`, with the user id taken from the token and never from the
-    URL. Identity arrives in the `X-User-Id` and `X-User-Groups` headers, which the API gateway sets from
-    the verified JWT; the internal operations take the user id in the body. The `internal` tag marks operations
-    the gateway does not expose.
+    serves the calling customer, with the user id taken from the token and never from the URL. Identity
+    arrives in the `X-User-Id` and `X-User-Groups` headers, which the API gateway sets from the verified
+    JWT; the customer route answers 403 unless the groups contain `users` and neither `experts` nor `admins`.
+    The internal operations take the user id in the path or body and need no identity. The `internal`
+    tag marks operations the gateway does not expose.
 paths:
   /health/live:
     get:
@@ -62,6 +63,7 @@ paths:
     get:
       tags:
       - entitlements
+      - internal
       summary: Get Entitlement
       description: The tier and the quotas of the user, computed from paid orders and reservations.
       operationId: get_entitlement_v1_entitlements__user_id__get
@@ -80,6 +82,62 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/EntitlementResponse'
+        '422':
+          description: Unprocessable Entity
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+        default:
+          description: Problem details
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+      x-gateway: internal
+  /v1/me/entitlement:
+    get:
+      tags:
+      - me
+      summary: Get My Entitlement
+      description: The tier and the quotas of the calling customer.
+      operationId: get_my_entitlement_v1_me_entitlement_get
+      parameters:
+      - name: x-user-id
+        in: header
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: X-User-Id
+      - name: x-user-groups
+        in: header
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: X-User-Groups
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EntitlementResponse'
+        '401':
+          description: Unauthorized
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+        '403':
+          description: Forbidden
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
         '422':
           description: Unprocessable Entity
           content:

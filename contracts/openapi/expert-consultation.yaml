@@ -6,7 +6,10 @@ info:
     the context snapshot and the expert answer. Consumes `escalation.requested`, publishes `ticket.created`,
     `ticket.answered` and `ticket.cancelled`. Identity arrives in the `X-User-Id` and `X-User-Groups`
     headers, which the API gateway sets from the verified JWT; every `/v1/expert/**` operation requires
-    the `experts` group. The `internal` tag marks operations the gateway does not expose.'
+    the `experts` group. The service also hosts the identity administration: `/v1/admin/users/**` requires
+    the `admins` group and manages Cognito users and their role (the Cognito group `users`, `experts`
+    or `admins`; a user has exactly one), and `/v1/me` answers any authenticated caller from the identity
+    headers. The `internal` tag marks operations the gateway does not expose.'
 paths:
   /health/live:
     get:
@@ -302,6 +305,536 @@ paths:
               schema:
                 $ref: '#/components/schemas/Problem'
       x-gateway: public
+  /v1/admin/users:
+    get:
+      tags:
+      - admin
+      summary: List Users
+      description: 'Users of the pool; pass `next_cursor` of a page as `cursor` for the next one.
+
+
+        `role` is the most privileged of the user''s groups, null when there is none. 401 without a
+
+        valid `X-User-Id`, 403 outside the admins group, 422 `invalid-cursor` for a foreign cursor.'
+      operationId: list_users_v1_admin_users_get
+      parameters:
+      - name: limit
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - type: integer
+            minimum: 1
+          - type: 'null'
+          title: Limit
+      - name: cursor
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - type: string
+            minLength: 1
+          - type: 'null'
+          title: Cursor
+      - name: x-user-id
+        in: header
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: X-User-Id
+      - name: x-user-groups
+        in: header
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: X-User-Groups
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UsersResponse'
+        '401':
+          description: Unauthorized
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+        '403':
+          description: Forbidden
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+        '422':
+          description: Problem details
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+        '503':
+          description: Service Unavailable
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+        default:
+          description: Problem details
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+      x-gateway: public
+    post:
+      tags:
+      - admin
+      summary: Create User
+      description: 'Create a confirmed user with a permanent password in the group of `role`.
+
+
+        409 `user-exists` for a known email, 422 `invalid-password` when the password policy rejects it.'
+      operationId: create_user_v1_admin_users_post
+      parameters:
+      - name: x-user-id
+        in: header
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: X-User-Id
+      - name: x-user-groups
+        in: header
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: X-User-Groups
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateUserRequest'
+      responses:
+        '201':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UserResponse'
+        '401':
+          description: Unauthorized
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+        '403':
+          description: Forbidden
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+        '409':
+          description: Conflict
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+        '422':
+          description: Problem details
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+        '503':
+          description: Service Unavailable
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+        default:
+          description: Problem details
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+      x-gateway: public
+  /v1/admin/users/{user_id}/role:
+    put:
+      tags:
+      - admin
+      summary: Change Role
+      description: Replace the user's role. 409 `cannot-modify-self` when `user_id` is the caller.
+      operationId: change_role_v1_admin_users__user_id__role_put
+      parameters:
+      - name: user_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+          title: User Id
+      - name: x-user-id
+        in: header
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: X-User-Id
+      - name: x-user-groups
+        in: header
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: X-User-Groups
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RoleRequest'
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UserResponse'
+        '401':
+          description: Unauthorized
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+        '403':
+          description: Forbidden
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+        '404':
+          description: Not Found
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+        '409':
+          description: Conflict
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+        '422':
+          description: Problem details
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+        '503':
+          description: Service Unavailable
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+        default:
+          description: Problem details
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+      x-gateway: public
+  /v1/admin/users/{user_id}/disable:
+    post:
+      tags:
+      - admin
+      summary: Disable User
+      description: Block sign-in. 409 `cannot-modify-self` when `user_id` is the caller.
+      operationId: disable_user_v1_admin_users__user_id__disable_post
+      parameters:
+      - name: user_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+          title: User Id
+      - name: x-user-id
+        in: header
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: X-User-Id
+      - name: x-user-groups
+        in: header
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: X-User-Groups
+      responses:
+        '204':
+          description: Successful Response
+        '401':
+          description: Unauthorized
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+        '403':
+          description: Forbidden
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+        '404':
+          description: Not Found
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+        '409':
+          description: Conflict
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+        '422':
+          description: Problem details
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+        '503':
+          description: Service Unavailable
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+        default:
+          description: Problem details
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+      x-gateway: public
+  /v1/admin/users/{user_id}/enable:
+    post:
+      tags:
+      - admin
+      summary: Enable User
+      description: Allow sign-in again. 409 `cannot-modify-self` when `user_id` is the caller.
+      operationId: enable_user_v1_admin_users__user_id__enable_post
+      parameters:
+      - name: user_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+          title: User Id
+      - name: x-user-id
+        in: header
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: X-User-Id
+      - name: x-user-groups
+        in: header
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: X-User-Groups
+      responses:
+        '204':
+          description: Successful Response
+        '401':
+          description: Unauthorized
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+        '403':
+          description: Forbidden
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+        '404':
+          description: Not Found
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+        '409':
+          description: Conflict
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+        '422':
+          description: Problem details
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+        '503':
+          description: Service Unavailable
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+        default:
+          description: Problem details
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+      x-gateway: public
+  /v1/admin/users/{user_id}/password:
+    post:
+      tags:
+      - admin
+      summary: Reset Password
+      description: Set a new permanent password. 422 `invalid-password` when the password policy rejects
+        it.
+      operationId: reset_password_v1_admin_users__user_id__password_post
+      parameters:
+      - name: user_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+          title: User Id
+      - name: x-user-id
+        in: header
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: X-User-Id
+      - name: x-user-groups
+        in: header
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: X-User-Groups
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PasswordRequest'
+      responses:
+        '204':
+          description: Successful Response
+        '401':
+          description: Unauthorized
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+        '403':
+          description: Forbidden
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+        '404':
+          description: Not Found
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+        '422':
+          description: Problem details
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+        '503':
+          description: Service Unavailable
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+        default:
+          description: Problem details
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+      x-gateway: public
+  /v1/me:
+    get:
+      tags:
+      - identity
+      summary: Me
+      description: Who the gateway says the caller is; answered from the headers without any lookup.
+      operationId: me_v1_me_get
+      parameters:
+      - name: x-user-id
+        in: header
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: X-User-Id
+      - name: x-user-groups
+        in: header
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: X-User-Groups
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MeResponse'
+        '401':
+          description: Unauthorized
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+        '422':
+          description: Problem details
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+        default:
+          description: Problem details
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+      x-gateway: public
 components:
   schemas:
     AnswerRequest:
@@ -341,6 +874,27 @@ components:
       - answered_at
       - answer_text
       title: AnswerResponse
+    CreateUserRequest:
+      properties:
+        email:
+          type: string
+          maxLength: 254
+          pattern: ^[^@\s]+@[^@\s]+$
+          title: Email
+        password:
+          type: string
+          format: password
+          title: Password
+          writeOnly: true
+        role:
+          $ref: '#/components/schemas/Role'
+      additionalProperties: false
+      type: object
+      required:
+      - email
+      - password
+      - role
+      title: CreateUserRequest
     HealthStatus:
       properties:
         status:
@@ -350,6 +904,39 @@ components:
           default: ok
       type: object
       title: HealthStatus
+    MeResponse:
+      properties:
+        user_id:
+          type: string
+          format: uuid
+          title: User Id
+        role:
+          anyOf:
+          - $ref: '#/components/schemas/Role'
+          - type: 'null'
+        groups:
+          items:
+            type: string
+          type: array
+          title: Groups
+      type: object
+      required:
+      - user_id
+      - role
+      - groups
+      title: MeResponse
+    PasswordRequest:
+      properties:
+        password:
+          type: string
+          format: password
+          title: Password
+          writeOnly: true
+      additionalProperties: false
+      type: object
+      required:
+      - password
+      title: PasswordRequest
     PhotoResponse:
       properties:
         kind:
@@ -380,6 +967,22 @@ components:
       - items
       - next_cursor
       title: QueueResponse
+    Role:
+      type: string
+      enum:
+      - user
+      - expert
+      - admin
+      title: Role
+    RoleRequest:
+      properties:
+        role:
+          $ref: '#/components/schemas/Role'
+      additionalProperties: false
+      type: object
+      required:
+      - role
+      title: RoleRequest
     TicketResponse:
       properties:
         id:
@@ -467,6 +1070,57 @@ components:
       - created_at
       - expires_at
       title: TicketSummaryResponse
+    UserResponse:
+      properties:
+        user_id:
+          type: string
+          format: uuid
+          title: User Id
+        username:
+          type: string
+          title: Username
+        email:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Email
+        role:
+          anyOf:
+          - $ref: '#/components/schemas/Role'
+          - type: 'null'
+        enabled:
+          type: boolean
+          title: Enabled
+        created_at:
+          type: string
+          format: date-time
+          title: Created At
+      type: object
+      required:
+      - user_id
+      - username
+      - email
+      - role
+      - enabled
+      - created_at
+      title: UserResponse
+    UsersResponse:
+      properties:
+        items:
+          items:
+            $ref: '#/components/schemas/UserResponse'
+          type: array
+          title: Items
+        next_cursor:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Next Cursor
+      type: object
+      required:
+      - items
+      - next_cursor
+      title: UsersResponse
     Problem:
       type: object
       title: Problem

@@ -11,7 +11,7 @@ from app.service.escalations import EscalationService
 from app.service.model import EscalationStatus
 from tests.unit.test_escalation_service import USER, Setup
 
-AS_USER = {"X-User-Id": str(USER)}
+AS_USER = {"X-User-Id": str(USER), "X-User-Groups": "users"}
 RETRY_AFTER_SECONDS = 7
 
 
@@ -118,7 +118,8 @@ def test_unknown_body_fields_are_rejected(setup: Setup):
 def test_a_foreign_update_and_a_missing_escalation_are_404(setup: Setup):
     client = client_for(setup)
 
-    assert client.post(url(setup), headers={"X-User-Id": str(uuid.uuid4())}).status_code == 404
+    stranger = {"X-User-Id": str(uuid.uuid4()), "X-User-Groups": "users"}
+    assert client.post(url(setup), headers=stranger).status_code == 404
     assert client.get(url(setup), headers=AS_USER).status_code == 404
 
 

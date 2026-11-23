@@ -60,7 +60,7 @@ flowchart TB
     subgraph compose["docker compose project growpath"]
         subgraph ls["localstack 4566 - image localstack/localstack:2026.10.6"]
             apigw["API Gateway REST api growpath-gateway, stage v1"]
-            cognito["Cognito user pool growpath: groups users, experts"]
+            cognito["Cognito user pool growpath: groups users, experts, admins"]
             sns["SNS: order-placed, escalation-requested, ticket-events"]
             sqs["SQS: 5 subscriber queues and 5 DLQs"]
             s3["S3 bucket growpath-photos"]
@@ -372,12 +372,15 @@ expert-consultation), that the SQS queues answer. commerce only publishes, so it
   `X-User-Id` from `sub`, `X-User-Groups` from `cognito:groups`, `X-Correlation-Id` from `$context.requestId`
   (`IDENTITY_HEADERS` in `01-provision.sh`). A mapped header replaces whatever the client sent. The demo shows a user
   forging `X-User-Groups: experts` and getting `403`, and forging `X-User-Id` and still receiving their own data.
-- **Caveat: the `users` group.** The gateway overwrites a header only when the claim has a value. A token with no
-  `cognito:groups` claim would let a forged `X-User-Groups` through, so provisioning puts every user (the expert too)
-  in the `users` group, and the demo creates its user the same way. See Known limitations in the README.
-- **Authorization in services.** Services read `X-User-Id` and `X-User-Groups`. Expert endpoints require the `experts`
-  group (`403` otherwise). The user id for entitlement is taken from the token (`/v1/me/entitlement` maps
-  `context.authorizer.claims.sub` into the path), never from the URL, because the entitlement service serves any id it is asked for.
+- **Roles: one Cognito group per user.** `users` (customer), `experts`, `admins`. The gateway overwrites a header only
+  when the claim has a value, so a token with no `cognito:groups` claim would let a forged `X-User-Groups` through.
+  Sign-up is closed and the admin API always assigns a group; provisioning and the demo do the same. See the README.
+- **Authorization in services.** Services read `X-User-Id` and `X-User-Groups`. Customer routes (orders, journals,
+  updates, photos, diagnosis, escalation, chat, `/me/entitlement`) require the `users` group and refuse `experts` and
+  `admins` (`403`). Expert endpoints require `experts`; `/v1/admin/**` requires `admins`; `GET /v1/me` is open to any
+  authenticated user. The admin API and `/v1/me` live in `expert-consultation` (a recorded decision: no fifth service) and
+  call the Cognito Admin API. The user id for entitlement comes from the token: the gateway routes `me/entitlement` to
+  `/v1/me/entitlement`, which reads `X-User-Id`; the internal `/v1/entitlements/{user_id}` has no gateway route.
 - **Services are not publicly exposed.** In production they have no public address; the gateway is the only entry. Locally their
   ports are bound to `127.0.0.1`, the databases are not published, and the internal quota API of entitlement has no gateway route
   (the gateway answers `403` for it; checked by `make verify` and demo act 1).

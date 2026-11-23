@@ -22,7 +22,7 @@ from tests.unit.scenario import StaticTiers
 from tests.unit.settings import make_settings
 
 USER = uuid.uuid4()
-AS_USER = {"X-User-Id": str(USER)}
+AS_USER = {"X-User-Id": str(USER), "X-User-Groups": "users"}
 
 
 @pytest.fixture
@@ -100,7 +100,7 @@ def test_a_journal_of_another_user_is_404(
     database_url: URL, quota: FakeAiQuota, journal_id: uuid.UUID, seeded: None
 ):
     client = TestClient(app_for(database_url, quota, FakeChatModel()))
-    stranger = {"X-User-Id": str(uuid.uuid4())}
+    stranger = {"X-User-Id": str(uuid.uuid4()), "X-User-Groups": "users"}
 
     response = client.get(f"/v1/journals/{journal_id}/chat/turns", headers=stranger)
 

@@ -34,13 +34,14 @@ DESCRIPTION = (
     "Tier and quotas. The tier is computed from the paid orders of the last 30 days and is not "
     "stored (amounts are euro cents, EUR); AI and expert quotas are reserved, committed or "
     "released through the internal `/v1/quotas/**` operations that plant-care calls. The "
-    "gateway route `GET /v1/me/entitlement` "
-    "maps to `GET /v1/entitlements/{user_id}`, with the user id taken from the token and never "
-    "from the URL. Identity arrives in the `X-User-Id` and `X-User-Groups` headers, which the "
-    "API gateway sets from the verified JWT; the internal operations take the user id in the "
-    "body. The `internal` tag marks operations the gateway does not expose."
+    "gateway route `GET /v1/me/entitlement` serves the calling customer, with the user id "
+    "taken from the token and never from the URL. Identity arrives in the `X-User-Id` and "
+    "`X-User-Groups` headers, which the API gateway sets from the verified JWT; the customer "
+    "route answers 403 unless the groups contain `users` and neither `experts` nor `admins`. "
+    "The internal operations take the user id in the path or body and need no identity. The "
+    "`internal` tag marks operations the gateway does not expose."
 )
-PUBLIC_PREFIXES = ("/v1/entitlements",)
+PUBLIC_PREFIXES = ("/v1/me",)
 USER = uuid.uuid4()
 
 
@@ -73,7 +74,7 @@ def test_the_openapi_document_is_valid():
     validator.validate(load_openapi(SERVICE))
 
 
-def test_only_the_entitlement_read_is_exposed_by_the_gateway():
+def test_only_the_customer_entitlement_read_is_exposed_by_the_gateway():
     document = load_openapi(SERVICE)
 
     exposure = {
@@ -82,7 +83,7 @@ def test_only_the_entitlement_read_is_exposed_by_the_gateway():
         for method, operation in item.items()
     }
     assert [key for key, value in exposure.items() if value == "public"] == [
-        ("GET", "/v1/entitlements/{user_id}")
+        ("GET", "/v1/me/entitlement")
     ]
     assert "internal" in document["paths"]["/v1/quotas/ai/reservations"]["post"]["tags"]
 
@@ -127,6 +128,28 @@ def test_the_entitlement_conforms(client: TestClient, uow: FakeUnitOfWork):
 
     assert response.status_code == 200 and response.json()["tier"] == "hobbyist"
     assert_conforms(load_openapi(SERVICE), "/v1/entitlements/{user_id}", "GET", response)
+
+
+def test_my_entitlement_conforms(client: TestClient, uow: FakeUnitOfWork):
+    uow.placed_orders.pay(USER, 4000)
+
+    response = client.get(
+        "/v1/me/entitlement", headers={"X-User-Id": str(USER), "X-User-Groups": "users"}
+    )
+
+    assert response.status_code == 200
+    assert_conforms(load_openapi(SERVICE), "/v1/me/entitlement", "GET", response)
+
+
+@pytest.mark.parametrize(
+    ("headers", "status"),
+    [({"X-User-Groups": "users"}, 401), ({"X-User-Id": str(USER), "X-User-Groups": "admins"}, 403)],
+)
+def test_the_customer_guard_problems_conform(client: TestClient, headers: dict, status: int):
+    response = client.get("/v1/me/entitlement", headers=headers)
+
+    assert response.status_code == status
+    assert_conforms(load_openapi(SERVICE), "/v1/me/entitlement", "GET", response)
 
 
 def test_an_invalid_user_id_conforms_to_the_problem_schema(client: TestClient):

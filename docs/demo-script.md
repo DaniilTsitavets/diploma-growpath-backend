@@ -79,7 +79,7 @@ What the expert should see:
 
 1. `no token: 401` and `garbage token: 401` on a protected route, and `catalog without a token (public): 200` (`GET /items`; `GET /items/{slug}` and `GET /plants/{slug}` are public too). The Cognito authorizer rejects before any service is reached; only these read-only routes are open.
 2. A new user and the expert are created and log in. The printed claims show `sub` and
-   `cognito:groups: ["users"]`; the expert has `["users","experts"]`. Tokens are printed truncated.
+   `cognito:groups: ["users"]`; the expert has `["experts"]` only (an expert cannot use customer routes: `403`). Tokens are printed truncated.
 3. A user who sends `X-User-Groups: experts` still gets `403`, and a user who sends a forged `X-User-Id`
    still gets their own entitlement (the `sub` of the token). Explain: the gateway maps claims to headers
    and overwrites the client's values (`IDENTITY_HEADERS` in `infra/localstack/init/ready.d/01-provision.sh`).
@@ -241,7 +241,7 @@ with a fixed recommendation and the AI quota is released. Code: `services/plant-
 `services/plant-care/app/service/diagnosis.py`.
 
 **Can a user forge their identity?** No: the gateway overwrites `X-User-Id` and `X-User-Groups` from verified claims, and
-entitlement's user id comes from the token. Caveat: every user must be in the `users` group. Shown in act 1.
+entitlement's user id comes from the token. Caveat: every user must have one group; sign-up is closed and the admin API always assigns it. Shown in act 1.
 
 **Where is rate limiting?** Declared on the gateway stage, not enforced by LocalStack, no service-side `429` yet. Say it
 plainly; see README, Known limitations.

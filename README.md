@@ -57,8 +57,8 @@ Everything else is behind Cognito: `POST /orders` (commerce); `/journals/...`, `
 is internal and has no route. The demo catalog is 15 plant packs (one per PlantSolve plant, `<Species> Starter Pack`)
 and two sensors; every item has a `slug`, and `plant_slug` (equal to `slug` for a pack, `null` for a sensor)
 links a pack to its plant profile. The plant page calls `GET /items/{slug}` and `GET /plants/{slug}` in parallel and
-renders each block on its own, so an order can be placed even when plant-care is down. Test users (LocalStack only): `check@growpath.test` and the expert
-`expert@growpath.test`; see `scripts/verify-localstack.sh` and `infra/localstack/init/ready.d/01-provision.sh`.
+renders each block on its own, so an order can be placed even when plant-care is down. Test users (LocalStack only): `check@growpath.test`, the expert
+`expert@growpath.test` and the admin `admin@growpath.test` (password from `ROOT_ADMIN_PASSWORD`); see `scripts/verify-localstack.sh` and `infra/localstack/init/ready.d/01-provision.sh`.
 
 ### Model provider
 
@@ -194,13 +194,22 @@ at the gateway and is **not demonstrable locally**. The service-side fallback (a
 middleware returning `429` as RFC 7807) is **not implemented**; it will be added only if a demonstrable
 limit is required. Nothing in this repository claims a working `429`.
 
-### Identity headers and the `users` group
+### Roles, closed sign-up and the admin API
+
+A user has exactly one role, which is a Cognito group: `users` (customer), `experts`, `admins`. Sign-up is
+closed (`AllowAdminCreateUserOnly`); an admin creates users and sets their passwords, because there is no
+email. The root admin `admin@growpath.test` is created by the provisioning script from `ROOT_ADMIN_PASSWORD`
+in `.env` (empty: no admin user). Experts and admins cannot buy, keep journals, chat, diagnose or escalate:
+the services answer `403` on those routes, not only the client. Admin endpoints (`/v1/admin/users`: list,
+create, change role, disable/enable, reset password) and `GET /v1/me` (the role of the caller) live in
+`expert-consultation` and call the Cognito Admin API.
 
 The gateway maps `cognito:groups` to `X-User-Groups`, but a mapped header replaces the client's value
 only when the claim has a value. A token without the claim would let a forged `X-User-Groups` through.
-Every user must therefore be in the Cognito group `users` so the claim is never empty. The provisioning
-script and the demo do this; a real deployment needs the same rule at sign-up (or an authorizer that
-always sets the header).
+That is why every user must have a group; the admin API always assigns one, and the services also require
+the group (a user without one gets `403` everywhere). LocalStack does not enforce closed sign-up (real
+Cognito does): a self-signed-up user stays unconfirmed, cannot sign in and has no group. Disabling a user does
+not revoke tokens already issued; they expire within the hour.
 
 ### Other notes
 

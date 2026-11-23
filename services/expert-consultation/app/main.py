@@ -7,16 +7,18 @@ from fastapi import FastAPI
 from growpath_observability import CorrelationIdMiddleware, configure_logging
 from sqlalchemy.orm import sessionmaker
 
-from app.api import experts, health
+from app.api import admin, experts, health, me
 from app.api.errors import register_error_handlers
 from app.background import run_periodically
 from app.config import Settings
 from app.db import create_db_engine
+from app.identity.cognito import CognitoUserDirectory, create_cognito_client
 from app.messaging.escalation_codec import escalation_routes
 from app.messaging.sns import SnsTicketEvents, create_sns_client
 from app.messaging.sqs import SqsQueue, create_sqs_client
 from app.repository.unit_of_work import SqlAlchemyUnitOfWork
 from app.service.consumer import QueueConsumer
+from app.service.directory import UserDirectory
 from app.service.events import TicketEvents
 from app.service.expert_tickets import ExpertTicketService
 from app.service.maintenance import TicketMaintenance
@@ -24,6 +26,7 @@ from app.service.photos import PhotoStorage
 from app.service.queue import MessageQueue
 from app.service.ticket_publisher import TerminalEventPublisher
 from app.service.tickets import TicketService
+from app.service.users import UserAdminService
 from app.storage.s3 import S3PhotoStorage, create_s3_client
 
 
@@ -54,6 +57,7 @@ def create_app(
     escalation_queue: MessageQueue | None = None,
     ticket_events: TicketEvents | None = None,
     photo_storage: PhotoStorage | None = None,
+    user_directory: UserDirectory | None = None,
 ) -> FastAPI:
     settings = settings or Settings()
     configure_logging(settings.service_name, settings.log_level)
@@ -65,6 +69,9 @@ def create_app(
     )
     photo_storage = photo_storage or S3PhotoStorage(
         create_s3_client(settings), settings.photos_bucket, settings.photo_url_ttl_seconds
+    )
+    user_directory = user_directory or CognitoUserDirectory(
+        create_cognito_client(settings), settings.cognito_user_pool_id
     )
 
     app = FastAPI(title="GrowPath expert-consultation", version="0.1.0", lifespan=lifespan)
@@ -81,6 +88,11 @@ def create_app(
         photo_storage,
         settings.queue_default_page_size,
         settings.queue_max_page_size,
+    )
+    app.state.user_admin_service = UserAdminService(
+        user_directory,
+        settings.admin_users_default_page_size,
+        settings.admin_users_max_page_size,
     )
     app.state.maintenance = TicketMaintenance(
         unit_of_work,
@@ -104,4 +116,6 @@ def create_app(
     register_error_handlers(app, settings.unavailable_retry_after_seconds)
     app.include_router(health.router)
     app.include_router(experts.router)
+    app.include_router(admin.router)
+    app.include_router(me.router)
     return app

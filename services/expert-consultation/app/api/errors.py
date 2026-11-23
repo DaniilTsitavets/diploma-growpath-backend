@@ -67,7 +67,10 @@ async def handle_validation_error(_: Request, exc: RequestValidationError) -> JS
     return problem_response(
         422,
         "Request does not match the contract",
-        errors=jsonable_encoder(exc.errors()),
+        # The rejected value is left out: it may be a password.
+        errors=jsonable_encoder(
+            [{k: v for k, v in e.items() if k != "input"} for e in exc.errors()]
+        ),
     )
 
 
@@ -81,7 +84,7 @@ async def handle_unexpected_error(request: Request, exc: Exception) -> JSONRespo
 
 
 async def handle_not_found(_: Request, exc: Exception) -> JSONResponse:
-    return problem_response(404, str(exc))
+    return problem_response(404, str(exc), code=getattr(exc, "code", None))
 
 
 async def handle_conflict(_: Request, exc: Exception) -> JSONResponse:

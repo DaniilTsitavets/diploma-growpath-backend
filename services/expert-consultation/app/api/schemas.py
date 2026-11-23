@@ -2,11 +2,13 @@ import uuid
 from datetime import datetime
 from typing import Annotated, Any
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator
+from pydantic import BaseModel, ConfigDict, Field, SecretStr, field_validator
 
+from app.service.directory import DirectoryUser, Role
 from app.service.expert_tickets import QueuePage, TicketView
 from app.service.model import ANSWER_LIMIT, BLANK_CHARACTERS, Ticket, TicketStatus, TicketSummary
 from app.service.photos import PhotoLink
+from app.service.users import UserPage
 
 
 class AnswerRequest(BaseModel):
@@ -100,3 +102,63 @@ class TicketResponse(BaseModel):
             photos=[PhotoResponse.of(link) for link in view.photos],
             answer_text=ticket.answer.body if ticket.answer else None,
         )
+
+
+EMAIL_PATTERN = r"^[^@\s]+@[^@\s]+$"
+
+
+class UserResponse(BaseModel):
+    user_id: uuid.UUID
+    username: str
+    email: str | None
+    role: Role | None
+    enabled: bool
+    created_at: datetime
+
+    @classmethod
+    def of(cls, user: DirectoryUser) -> "UserResponse":
+        return cls(
+            user_id=user.user_id,
+            username=user.username,
+            email=user.email,
+            role=user.role,
+            enabled=user.enabled,
+            created_at=user.created_at,
+        )
+
+
+class UsersResponse(BaseModel):
+    items: list[UserResponse]
+    next_cursor: str | None
+
+    @classmethod
+    def of(cls, page: UserPage) -> "UsersResponse":
+        return cls(
+            items=[UserResponse.of(user) for user in page.items], next_cursor=page.next_cursor
+        )
+
+
+class CreateUserRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    email: Annotated[str, Field(max_length=254, pattern=EMAIL_PATTERN)]
+    password: SecretStr
+    role: Role
+
+
+class RoleRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    role: Role
+
+
+class PasswordRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    password: SecretStr
+
+
+class MeResponse(BaseModel):
+    user_id: uuid.UUID
+    role: Role | None
+    groups: list[str]

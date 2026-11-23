@@ -19,7 +19,7 @@ from tests.unit.scenario import StaticTiers
 from tests.unit.settings import make_settings
 
 USER = uuid.uuid4()
-AS_USER = {"X-User-Id": str(USER)}
+AS_USER = {"X-User-Id": str(USER), "X-User-Groups": "users"}
 QUESTIONNAIRE = {
     "drainage": "poor",
     "lighting": "medium",

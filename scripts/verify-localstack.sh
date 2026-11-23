@@ -98,6 +98,12 @@ expect "GET /journals (plant-care)" 200 "$(status -H "Authorization: $token" "$b
 expect "GET /me/entitlement (entitlement)" 200 "$(status -H "Authorization: $token" "$base/me/entitlement")"
 expect "GET /expert/tickets (expert-consultation, expert)" 200 "$(status -H "Authorization: $expert_token" "$base/expert/tickets")"
 expect "internal quota API is not routed" 403 "$(status -H "Authorization: $token" "$base/quotas/ai/reservations")"
+expect "GET /me answers the role of a user" users \
+  "$(curl -s -H "Authorization: $token" "$base/me" | jq -r '.groups[0] // "none"')"
+expect "an expert cannot use customer routes: GET /journals" 403 "$(status -H "Authorization: $expert_token" "$base/journals")"
+expect "an expert cannot place orders: POST /orders" 403 \
+  "$(status -X POST -H "Authorization: $expert_token" -H 'Content-Type: application/json' -d '{}' "$base/orders")"
+expect "a customer cannot use the admin API: GET /admin/users" 403 "$(status -H "Authorization: $token" "$base/admin/users")"
 
 say "5. Identity headers come from the token, not from the client"
 expect "user without the experts group" 403 "$(status -H "Authorization: $token" "$base/expert/tickets")"

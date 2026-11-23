@@ -15,7 +15,7 @@ router = APIRouter(prefix="/v1/orders", tags=["orders"])
 @router.post(
     "",
     status_code=201,
-    responses={200: {"model": OrderResponse}, **problem_responses(401, 402, 404, 422)},
+    responses={200: {"model": OrderResponse}, **problem_responses(401, 402, 403, 404, 422)},
 )
 def create_order(
     body: CreateOrderRequest,

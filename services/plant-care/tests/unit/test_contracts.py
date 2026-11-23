@@ -35,7 +35,7 @@ DESCRIPTION = (
     "authorization; the `internal` tag marks operations it does not expose."
 )
 PUBLIC_PREFIXES = ("/v1/journals", "/v1/updates", "/v1/plants")
-AS_USER = {"X-User-Id": str(USER)}
+AS_USER = {"X-User-Id": str(USER), "X-User-Groups": "users"}
 QUESTIONNAIRE = {
     "drainage": "good",
     "lighting": "bright_indirect",
