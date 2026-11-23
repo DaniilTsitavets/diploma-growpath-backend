@@ -30,3 +30,12 @@ class PlantProfile:
     temperature: str | None = None
     pruning: str | None = None
     toxicity: str | None = None
+    dryness_threshold_pct: int | None = None
+    drought_tolerance: str | None = None
+    dormancy_shift: bool | None = None
+    soil_drainage: str | None = None
+    temp_min_c: float | None = None
+    temp_max_c: float | None = None
+    rh_min_pct: int | None = None
+    rh_max_pct: int | None = None
+    light_need: str | None = None

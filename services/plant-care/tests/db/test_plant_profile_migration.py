@@ -15,6 +15,12 @@ CONSTRAINTS = {
     "ck_plant_profiles_source_url",
     "ck_plant_profiles_license",
     "ck_plant_profiles_sha",
+    "ck_plant_profiles_dryness_threshold",
+    "ck_plant_profiles_drought_tolerance",
+    "ck_plant_profiles_soil_drainage",
+    "ck_plant_profiles_light_need",
+    "ck_plant_profiles_temp_range",
+    "ck_plant_profiles_rh_range",
 }
 OPTIONAL = {
     "common_name",
@@ -33,6 +39,15 @@ OPTIONAL = {
     "temperature",
     "pruning",
     "toxicity",
+    "dryness_threshold_pct",
+    "drought_tolerance",
+    "dormancy_shift",
+    "soil_drainage",
+    "temp_min_c",
+    "temp_max_c",
+    "rh_min_pct",
+    "rh_max_pct",
+    "light_need",
 }
 REQUIRED = {
     "slug",
