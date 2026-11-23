@@ -156,6 +156,11 @@ make test-db-down
 make contracts     # regenerate contracts/openapi/*.yaml from the apps (commit the diff)
 ```
 
+CI ([`.github/workflows/ci.yml`](.github/workflows/ci.yml), GitHub Actions) runs on every pull request and on `main`:
+`ruff check` and `ruff format --check`, the library tests, and for each of the four services the unit, contract and
+DB tests (PostgreSQL 16 service container) with the 70% coverage gate. The contract tests fail when an OpenAPI
+file is out of date with the app.
+
 ## Where each requirement is implemented
 
 | Requirement | Status | Where | See it live |
