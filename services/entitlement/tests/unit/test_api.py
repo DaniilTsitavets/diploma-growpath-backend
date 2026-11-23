@@ -73,7 +73,7 @@ def test_reserve_at_the_ceiling_is_409_with_a_code(
 
     assert response.status_code == 409
     assert response.headers["content-type"] == PROBLEM_JSON
-    assert response.json()["code"] == "quota_exhausted"
+    assert response.json()["code"] == "quota-exhausted"
 
 
 @KINDS
@@ -85,7 +85,7 @@ def test_reserve_with_an_id_of_another_user_is_409(
     response = client.post(url(kind), json={id_field: str(existing.id), "user_id": str(USER)})
 
     assert response.status_code == 409
-    assert response.json()["code"] == "reservation_id_in_use"
+    assert response.json()["code"] == "reservation-id-in-use"
     assert str(existing.user_id) not in response.text
 
 
@@ -101,6 +101,7 @@ def test_reserve_during_a_lock_timeout_is_503_with_retry_after(
     assert response.headers["retry-after"] == "3"
     assert response.headers["content-type"] == PROBLEM_JSON
     assert response.json()["title"] == "Service Unavailable"
+    assert response.json()["code"] == "service-unavailable"
 
 
 @KINDS
@@ -128,6 +129,7 @@ def test_commit_and_release_of_a_foreign_reservation_are_404(
 
     assert response.status_code == 404
     assert response.headers["content-type"] == PROBLEM_JSON
+    assert response.json()["code"] == "not-found"
     assert str(existing.user_id) not in response.text
 
 
@@ -137,7 +139,7 @@ def test_commit_of_an_expired_ai_reservation_is_409(client: TestClient, uow: Fak
     response = client.post(url("ai", f"/{existing.id}/commit"), json={"user_id": str(USER)})
 
     assert response.status_code == 409
-    assert response.json()["code"] == "reservation_unusable"
+    assert response.json()["code"] == "reservation-unusable"
 
 
 @KINDS
@@ -149,7 +151,7 @@ def test_rest_release_of_a_committed_reservation_is_409(
     response = client.post(url(kind, f"/{existing.id}/release"), json={"user_id": str(USER)})
 
     assert response.status_code == 409
-    assert response.json()["code"] == "reservation_unusable"
+    assert response.json()["code"] == "reservation-unusable"
     assert reservations(uow, kind).rows[existing.id].status is COMMITTED
 
 
@@ -177,6 +179,7 @@ def test_requests_must_match_the_contract(client: TestClient, path: str, body: d
 
     assert response.status_code == 422
     assert response.headers["content-type"] == PROBLEM_JSON
+    assert response.json()["code"] == "validation-error"
 
 
 def test_entitlement_reports_tier_and_quotas(client: TestClient, uow: FakeUnitOfWork):
@@ -219,4 +222,5 @@ def test_unexpected_failure_is_500_without_internals(client: TestClient, uow: Fa
     )
 
     assert response.status_code == 500
+    assert response.json()["code"] == "internal-error"
     assert "secret internals" not in response.text

@@ -85,7 +85,7 @@ def test_a_starter_has_no_expert_quota(client: TestClient):
     )
 
     assert response.status_code == 409
-    assert response.json()["code"] == "quota_exhausted"
+    assert response.json()["code"] == "quota-exhausted"
 
 
 def test_entitlement_is_computed_from_placed_orders(client: TestClient, engine: Engine):

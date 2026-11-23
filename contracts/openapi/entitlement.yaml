@@ -3,11 +3,12 @@ info:
   title: GrowPath entitlement
   version: 0.1.0
   description: Tier and quotas. The tier is computed from the paid orders of the last 30 days and is not
-    stored; AI and expert quotas are reserved, committed or released through the internal `/v1/quotas/**`
-    operations that plant-care calls. The gateway route `GET /v1/me/entitlement` maps to `GET /v1/entitlements/{user_id}`,
-    with the user id taken from the token and never from the URL. Identity arrives in the `X-User-Id`
-    and `X-User-Groups` headers, which the API gateway sets from the verified JWT; the internal operations
-    take the user id in the body. The `internal` tag marks operations the gateway does not expose.
+    stored (amounts are euro cents, EUR); AI and expert quotas are reserved, committed or released through
+    the internal `/v1/quotas/**` operations that plant-care calls. The gateway route `GET /v1/me/entitlement`
+    maps to `GET /v1/entitlements/{user_id}`, with the user id taken from the token and never from the
+    URL. Identity arrives in the `X-User-Id` and `X-User-Groups` headers, which the API gateway sets from
+    the verified JWT; the internal operations take the user id in the body. The `internal` tag marks operations
+    the gateway does not expose.
 paths:
   /health/live:
     get:
@@ -44,6 +45,12 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/HealthStatus'
+        '503':
+          description: Service Unavailable
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
         default:
           description: Problem details
           content:
@@ -74,7 +81,7 @@ paths:
               schema:
                 $ref: '#/components/schemas/EntitlementResponse'
         '422':
-          description: Problem details
+          description: Unprocessable Entity
           content:
             application/problem+json:
               schema:
@@ -113,8 +120,25 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/AiReservationResponse'
+        '409':
+          description: Conflict
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
         '422':
-          description: Problem details
+          description: Unprocessable Entity
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+        '503':
+          description: Service Unavailable
+          headers:
+            Retry-After:
+              description: Seconds to wait before repeating the request
+              schema:
+                type: integer
           content:
             application/problem+json:
               schema:
@@ -154,8 +178,20 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/AiReservationResponse'
+        '404':
+          description: Not Found
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+        '409':
+          description: Conflict
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
         '422':
-          description: Problem details
+          description: Unprocessable Entity
           content:
             application/problem+json:
               schema:
@@ -195,8 +231,20 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/AiReservationResponse'
+        '404':
+          description: Not Found
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+        '409':
+          description: Conflict
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
         '422':
-          description: Problem details
+          description: Unprocessable Entity
           content:
             application/problem+json:
               schema:
@@ -235,8 +283,25 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ExpertReservationResponse'
+        '409':
+          description: Conflict
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
         '422':
-          description: Problem details
+          description: Unprocessable Entity
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+        '503':
+          description: Service Unavailable
+          headers:
+            Retry-After:
+              description: Seconds to wait before repeating the request
+              schema:
+                type: integer
           content:
             application/problem+json:
               schema:
@@ -276,8 +341,20 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ExpertReservationResponse'
+        '404':
+          description: Not Found
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+        '409':
+          description: Conflict
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
         '422':
-          description: Problem details
+          description: Unprocessable Entity
           content:
             application/problem+json:
               schema:
@@ -317,8 +394,20 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ExpertReservationResponse'
+        '404':
+          description: Not Found
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+        '409':
+          description: Conflict
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
         '422':
-          description: Problem details
+          description: Unprocessable Entity
           content:
             application/problem+json:
               schema:
@@ -473,11 +562,13 @@ components:
     Problem:
       type: object
       title: Problem
-      description: Problem details (RFC 7807); members such as `code` or `errors` may follow.
+      description: Problem details (RFC 7807) with a stable kebab-case `code`; validation problems also
+        carry `errors`.
       required:
       - type
       - title
       - status
+      - code
       properties:
         type:
           type: string

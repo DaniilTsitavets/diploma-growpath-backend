@@ -38,6 +38,7 @@ def test_ready_reports_problem_when_database_down(client):
     assert response.headers["content-type"] == PROBLEM_JSON
     assert body["title"] == "Service Unavailable"
     assert body["detail"] == "database unavailable"
+    assert body["code"] == "service-unavailable"
 
 
 def test_unknown_route_is_problem_json_with_correlation_id(client):
