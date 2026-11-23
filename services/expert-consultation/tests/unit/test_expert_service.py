@@ -88,7 +88,7 @@ def test_a_ticket_is_shown_with_a_presigned_url_per_photo(harness: Harness):
             "schema_version": 1,
             "photos": [
                 {"kind": "overview", "storage_key": "journals/j/updates/u/overview"},
-                {"kind": "soil", "storage_key": "journals/j/updates/u/soil"},
+                {"kind": "symptom_closeup", "storage_key": "journals/j/updates/u/symptom_closeup"},
             ],
         },
     )
@@ -98,7 +98,9 @@ def test_a_ticket_is_shown_with_a_presigned_url_per_photo(harness: Harness):
     assert view.ticket == ticket
     assert view.photos == [
         PhotoLink("overview", "http://storage.test/journals/j/updates/u/overview?method=get"),
-        PhotoLink("soil", "http://storage.test/journals/j/updates/u/soil?method=get"),
+        PhotoLink(
+            "symptom_closeup", "http://storage.test/journals/j/updates/u/symptom_closeup?method=get"
+        ),
     ]
 
 
@@ -140,7 +142,7 @@ def test_a_photo_entry_without_a_key_is_skipped_with_a_warning(caplog: pytest.Lo
         "photos": [
             {"kind": "overview"},
             "stray",
-            {"kind": "soil", "storage_key": "k"},
+            {"kind": "symptom_closeup", "storage_key": "k"},
             {"storage_key": "x"},
         ]
     }
@@ -148,7 +150,7 @@ def test_a_photo_entry_without_a_key_is_skipped_with_a_warning(caplog: pytest.Lo
     with caplog.at_level(logging.WARNING, logger="app.service.photos"):
         refs = photo_refs(context)
 
-    assert [(ref.kind, ref.storage_key) for ref in refs] == [("soil", "k"), ("", "x")]
+    assert [(ref.kind, ref.storage_key) for ref in refs] == [("symptom_closeup", "k"), ("", "x")]
     assert len(caplog.records) == 2
 
 

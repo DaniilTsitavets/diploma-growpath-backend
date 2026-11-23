@@ -84,7 +84,7 @@ def test_a_ticket_is_shown_with_its_context_and_signed_photo_urls(api: Api):
     context = {
         "schema_version": 1,
         "species": "Мята",
-        "photos": [{"kind": "soil", "storage_key": "k"}],
+        "photos": [{"kind": "symptom_closeup", "storage_key": "k"}],
     }
     ticket = api.seed(add_ticket, context=context)
 
@@ -93,7 +93,9 @@ def test_a_ticket_is_shown_with_its_context_and_signed_photo_urls(api: Api):
     body = response.json()
     assert response.status_code == 200
     assert body["context"] == context
-    assert body["photos"] == [{"kind": "soil", "url": "http://storage.test/k?method=get"}]
+    assert body["photos"] == [
+        {"kind": "symptom_closeup", "url": "http://storage.test/k?method=get"}
+    ]
 
 
 def test_an_answer_is_stored_and_the_event_goes_out(api: Api):

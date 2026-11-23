@@ -357,8 +357,8 @@ components:
               photos:
                 - kind: overview
                   storage_key: journals/overview
-                - kind: soil
-                  storage_key: journals/soil
+                - kind: symptom_closeup
+                  storage_key: journals/symptom_closeup
               user_question: Why are the leaves spotted?
               diagnosis:
                 status: completed
