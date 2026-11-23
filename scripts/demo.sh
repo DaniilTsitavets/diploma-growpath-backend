@@ -432,6 +432,10 @@ act_auth() {
   expect "entitlement answers for the sub of the token" "$USER_SUB" "$(jq -r .user_id <<<"$BODY")"
   gw GET expert/tickets "$EXPERT_TOKEN"
   expect "expert in the experts group" 200 "$CODE"
+  gw GET journals "$EXPERT_TOKEN"
+  expect "expert cannot use customer routes (journals)" 403 "$CODE"
+  gw GET admin/users "$TOKEN"
+  expect "customer cannot use the admin API" 403 "$CODE"
   gwj POST quotas/ai/reservations "$TOKEN" '{}'
   expect "internal quota API is not routed" 403 "$CODE"
 

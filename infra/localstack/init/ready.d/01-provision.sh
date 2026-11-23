@@ -13,8 +13,13 @@ TEST_USER=check@growpath.test
 TEST_PASSWORD='Passw0rd!Check'
 EXPERT_USER=expert@growpath.test
 EXPERT_PASSWORD='Passw0rd!Expert'
+ADMIN_USER=admin@growpath.test
+# Not stored in the repository: set ROOT_ADMIN_PASSWORD in .env. Empty means no admin user.
+ADMIN_PASSWORD=${ROOT_ADMIN_PASSWORD:-}
+# A user belongs to exactly one of these groups; the services read the group as the role.
 USER_GROUP=users
 EXPERT_GROUP=experts
+ADMIN_GROUP=admins
 STAGE=v1
 COMMERCE=http://commerce:8000
 ENTITLEMENT=http://entitlement:8000
@@ -26,8 +31,10 @@ BURST_LIMIT=2
 CLIENT_ORIGINS='["http://127.0.0.1:5173","http://127.0.0.1:4173","http://localhost:5173","http://localhost:4173","http://*.cloudfront.localhost.localstack.cloud:4566"]'
 FRONTEND_BUCKET=growpath-frontend
 
+# Sign-up is closed: only an admin creates users. Real Cognito enforces this; LocalStack does not (a
+# self-signed-up user stays UNCONFIRMED, cannot sign in, and has no group, so no service lets it in).
 pool_id=$(awslocal cognito-idp create-user-pool --pool-name "$POOL_NAME" --user-pool-tags "_custom_id_=${POOL_ID}" \
-  --query UserPool.Id --output text)
+  --admin-create-user-config AllowAdminCreateUserOnly=true --query UserPool.Id --output text)
 pool_arn="arn:aws:cognito-idp:${AWS_DEFAULT_REGION:-us-east-1}:000000000000:userpool/${pool_id}"
 client_id=$(awslocal cognito-idp create-user-pool-client --user-pool-id "$pool_id" --client-name "_custom_id_:${CLIENT_ID}" \
   --explicit-auth-flows ALLOW_USER_PASSWORD_AUTH ALLOW_REFRESH_TOKEN_AUTH --query UserPoolClient.ClientId --output text)
@@ -37,16 +44,25 @@ awslocal cognito-idp admin-set-user-password --user-pool-id "$pool_id" --usernam
   --password "$TEST_PASSWORD" --permanent
 awslocal cognito-idp create-group --user-pool-id "$pool_id" --group-name "$USER_GROUP" >/dev/null
 awslocal cognito-idp create-group --user-pool-id "$pool_id" --group-name "$EXPERT_GROUP" >/dev/null
+awslocal cognito-idp create-group --user-pool-id "$pool_id" --group-name "$ADMIN_GROUP" >/dev/null
 awslocal cognito-idp admin-create-user --user-pool-id "$pool_id" --username "$EXPERT_USER" \
   --message-action SUPPRESS >/dev/null
 awslocal cognito-idp admin-set-user-password --user-pool-id "$pool_id" --username "$EXPERT_USER" \
   --password "$EXPERT_PASSWORD" --permanent
-for member in "$TEST_USER" "$EXPERT_USER"; do
-  awslocal cognito-idp admin-add-user-to-group --user-pool-id "$pool_id" --username "$member" \
-    --group-name "$USER_GROUP"
-done
+awslocal cognito-idp admin-add-user-to-group --user-pool-id "$pool_id" --username "$TEST_USER" \
+  --group-name "$USER_GROUP"
 awslocal cognito-idp admin-add-user-to-group --user-pool-id "$pool_id" --username "$EXPERT_USER" \
   --group-name "$EXPERT_GROUP"
+if [ -n "$ADMIN_PASSWORD" ]; then
+  awslocal cognito-idp admin-create-user --user-pool-id "$pool_id" --username "$ADMIN_USER" \
+    --message-action SUPPRESS >/dev/null
+  awslocal cognito-idp admin-set-user-password --user-pool-id "$pool_id" --username "$ADMIN_USER" \
+    --password "$ADMIN_PASSWORD" --permanent
+  awslocal cognito-idp admin-add-user-to-group --user-pool-id "$pool_id" --username "$ADMIN_USER" \
+    --group-name "$ADMIN_GROUP"
+else
+  echo "ROOT_ADMIN_PASSWORD is empty: the admin user ${ADMIN_USER} is not created"
+fi
 
 api_id=$(awslocal apigateway create-rest-api --name growpath-gateway --tags "_custom_id_=${API_ID}" --query id --output text)
 root_id=$(awslocal apigateway get-resources --rest-api-id "$api_id" --query 'items[0].id' --output text)
@@ -56,7 +72,8 @@ auth_id=$(awslocal apigateway create-authorizer --rest-api-id "$api_id" --name c
 
 # Every route sets the identity headers from the verified JWT claims. A mapped header replaces the one
 # the client sent, but only when the claim has a value: a token without `cognito:groups` would let a
-# forged X-User-Groups through. That is why every user belongs to the `users` group.
+# forged X-User-Groups through. That is why every user has one group (users, experts or admins);
+# the admin API always assigns one.
 IDENTITY_HEADERS="\"integration.request.header.X-Correlation-Id\":\"context.requestId\",\"integration.request.header.X-User-Id\":\"context.authorizer.claims.sub\",\"integration.request.header.X-User-Groups\":\"context.authorizer.claims['cognito:groups']\""
 
 # Prints the id of /v1/<path>, creating the missing parts.
@@ -118,7 +135,9 @@ route 'updates/{proxy+}' ANY "$PLANT_CARE/v1/updates/{proxy}" '"integration.requ
   method.request.path.proxy=true
 prefix_route expert/tickets "$EXPERT_CONSULTATION"
 # The user id comes from the token, never from the URL: entitlement serves any user id it is given.
-route me/entitlement GET "$ENTITLEMENT/v1/entitlements/{userId}" '"integration.request.path.userId":"context.authorizer.claims.sub"'
+route me GET "$EXPERT_CONSULTATION/v1/me"
+route me/entitlement GET "$ENTITLEMENT/v1/me/entitlement"
+prefix_route admin/users "$EXPERT_CONSULTATION"
 
 awslocal apigateway create-deployment --rest-api-id "$api_id" --stage-name "$STAGE" >/dev/null
 awslocal apigateway update-stage --rest-api-id "$api_id" --stage-name "$STAGE" --patch-operations \
