@@ -127,7 +127,7 @@ client shows a placeholder; the catalog API does not carry an image field.
 `slug, url, author, license, page`. `url` is an https link to download, or a file under
 `media/source/` (stock sites that do not allow downloads by link; those originals are git-ignored).
 `page` is the source page of the photo. Only licences that allow commercial use are accepted: CC0,
-public domain, CC BY, CC BY-SA and the free licences of Pixabay, Pexels, Unsplash and Magnific. The
+public domain, CC BY, CC BY-SA and the free licences of Pixabay, Pexels and Unsplash. The
 upload writes a `credits.json` next to the images with the author, licence and source page of every
 image; the client shows them.
 

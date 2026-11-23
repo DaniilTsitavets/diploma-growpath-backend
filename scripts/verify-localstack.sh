@@ -52,7 +52,7 @@ expect "expert tickets, no token" 401 "$(status "$base/expert/tickets")"
 expect "valid token" 200 "$(status -H "Authorization: $token" "$base/journals")"
 expect "catalog is public: GET /items, no token" 200 "$(status "$base/items")"
 expect "catalog lists items without a token" yes \
-  "$([ "$(curl -s "$base/items" | jq 'length')" -gt 0 ] && echo yes || echo no)"
+  "$([ "$(curl -s "$base/items" | jq '.items | length')" -gt 0 ] && echo yes || echo no)"
 
 say "3b. Public catalog and plant profiles, no token"
 # header <name> <curl args>: the value of one response header, or empty
@@ -60,7 +60,7 @@ header() {
   local name=$1; shift
   curl -s -D - -o /dev/null "$@" | tr -d '\r' | awk -v n="$(echo "$name" | tr 'A-Z' 'a-z'):" 'tolower($1) == n { sub(/^[^:]*: */, ""); print; exit }'
 }
-items_json=$(curl -s "$base/items")
+items_json=$(curl -s "$base/items" | jq -c '.items')
 expect "every item has a slug" 0 "$(echo "$items_json" | jq '[.[] | select((.slug // "") == "")] | length')"
 expect "every item has the plant_slug key" 0 "$(echo "$items_json" | jq '[.[] | select(has("plant_slug") | not)] | length')"
 expect "plant_slug is null exactly for the sensors" "soil-moisture-sensor thermo-hygrometer" \
