@@ -8,6 +8,7 @@ from app.api import plants
 from app.api.errors import register_error_handlers
 from app.repository.plant_profiles import SqlAlchemyPlantProfileRepository
 from app.service.errors import Unavailable
+from app.service.plant_profile_model import FaqEntry
 from app.service.plants import PlantService
 from tests.unit.fakes import FakeUnitOfWork
 
@@ -134,3 +135,29 @@ def test_app_wires_the_plant_service():
     )
 
     assert isinstance(app.state.plant_service, PlantService)
+
+
+def test_the_faq_and_the_labels_are_served_when_the_profile_has_them(
+    client: TestClient, uow: FakeUnitOfWork
+):
+    uow.plant_profiles.seed(
+        "aloe-vera",
+        faq=(FaqEntry("Q1?", "A1."), FaqEntry("Q2?", "A2.")),
+        labels=("beginner", "pet-safe"),
+    )
+
+    body = client.get("/v1/plants/aloe-vera").json()
+
+    assert body["faq"] == [
+        {"question": "Q1?", "answer": "A1."},
+        {"question": "Q2?", "answer": "A2."},
+    ]
+    assert body["labels"] == ["beginner", "pet-safe"]
+
+
+def test_an_absent_faq_and_empty_labels_are_left_out(client: TestClient, uow: FakeUnitOfWork):
+    uow.plant_profiles.seed("cactus", faq=None, labels=())
+
+    body = client.get("/v1/plants/cactus").json()
+
+    assert "faq" not in body and "labels" not in body

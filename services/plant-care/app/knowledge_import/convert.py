@@ -1,3 +1,4 @@
+import dataclasses
 import hashlib
 import html
 import json
@@ -9,11 +10,12 @@ from datetime import date
 from typing import Any
 from urllib.parse import urlsplit
 
+from app.knowledge_import.catalog_labels import derive_labels
 from app.knowledge_import.plants import MAX_SPECIES as MAX_PROFILE_SPECIES
 from app.knowledge_import.plants import PLANT_SLUG, PlantEntry
 from app.knowledge_import.watering_facts import watering_facts
 from app.service.knowledge_model import DocumentDraft, SectionDraft
-from app.service.plant_profile_model import PlantProfile
+from app.service.plant_profile_model import FaqEntry, PlantProfile
 
 KB_NAMESPACE = uuid.UUID("5e348c49-ad5f-422f-bdb5-afa4290841a4")
 ALLOWED_HOST = "www.plantsolve.com"
@@ -34,6 +36,8 @@ MAX_HEADING = 200
 MAX_BODY = 4000
 MAX_PROFILE_TEXT = 2000
 MAX_TAKEAWAYS = 12
+MAX_FAQ_ENTRIES = 10
+MAX_FAQ_QUESTION = 200
 MAX_FAQ_HEADING = 120
 
 _TAG = re.compile(r"<[^>]*>")
@@ -145,6 +149,7 @@ def convert_profile(
     taxonomy = _mapping(record.get("taxonomy"))
     citation = _mapping(record.get("citation"))
     humidity_range = _mapping(parameters.get("humidity")).get("recommended")
+    facts = watering_facts(record)
     fields: dict[str, Any] = {
         "slug": entry.slug,
         "source_slug": entry.source_slug,
@@ -168,7 +173,9 @@ def convert_profile(
         "source_name": SOURCE_NAME,
         "source_url": _valid_url(citation.get("canonicalUrl")),
         "license": _valid_license(citation.get("license")),
-        **watering_facts(record),
+        **facts,
+        "faq": _faq(record.get("faq")),
+        "labels": derive_labels(record, facts),
     }
     return PlantProfile(**fields, imported_on=imported_on, content_sha256=_sha256(fields))
 
@@ -328,7 +335,13 @@ def content_hash(
 
 
 def _sha256(payload: Mapping[str, Any]) -> str:
-    canonical = json.dumps(payload, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
+    canonical = json.dumps(
+        payload,
+        ensure_ascii=False,
+        sort_keys=True,
+        separators=(",", ":"),
+        default=dataclasses.asdict,
+    )
     return hashlib.sha256(canonical.encode("utf-8")).hexdigest()
 
 
@@ -396,6 +409,16 @@ def _prefixed(prefix: str, value: object) -> str:
 def _takeaways(value: object) -> tuple[str, ...] | None:
     items = (_shorten(clean_line(_text(item)), MAX_PROFILE_TEXT) for item in _sequence(value))
     return tuple(item for item in items if item)[:MAX_TAKEAWAYS] or None
+
+
+def _faq(value: object) -> tuple[FaqEntry, ...] | None:
+    entries = []
+    for entry in map(_mapping, _sequence(value)):
+        question = _shorten(clean_line(_text(entry.get("question"))), MAX_FAQ_QUESTION)
+        answer = _optional(entry.get("answer"))
+        if question and answer:
+            entries.append(FaqEntry(question, answer))
+    return tuple(entries[:MAX_FAQ_ENTRIES]) or None
 
 
 def _lines(pairs: Iterable[tuple[str, object]]) -> str:

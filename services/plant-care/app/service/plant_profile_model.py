@@ -3,8 +3,17 @@ from datetime import date
 
 
 @dataclass(frozen=True)
+class FaqEntry:
+    question: str
+    answer: str
+
+
+@dataclass(frozen=True)
 class PlantProfile:
-    """The facts of a plant page; every text except `species` may be absent."""
+    """The facts of a plant page; every text except `species` may be absent.
+
+    `labels` are the catalog labels derived from the PlantSolve record, empty when none apply.
+    """
 
     slug: str
     source_slug: str
@@ -39,3 +48,5 @@ class PlantProfile:
     rh_min_pct: int | None = None
     rh_max_pct: int | None = None
     light_need: str | None = None
+    faq: tuple[FaqEntry, ...] | None = None
+    labels: tuple[str, ...] = ()

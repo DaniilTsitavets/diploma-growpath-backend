@@ -21,6 +21,8 @@ CONSTRAINTS = {
     "ck_plant_profiles_light_need",
     "ck_plant_profiles_temp_range",
     "ck_plant_profiles_rh_range",
+    "ck_plant_profiles_faq",
+    "ck_plant_profiles_labels",
 }
 OPTIONAL = {
     "common_name",
@@ -48,8 +50,10 @@ OPTIONAL = {
     "rh_min_pct",
     "rh_max_pct",
     "light_need",
+    "faq",
 }
 REQUIRED = {
+    "labels",
     "slug",
     "source_slug",
     "species",
@@ -88,6 +92,29 @@ def test_the_columns_are_nullable_only_where_the_design_says(migrated):
     assert set(columns) == REQUIRED | OPTIONAL
     assert {name for name, column in columns.items() if not column["nullable"]} == REQUIRED
     assert str(columns["key_takeaways"]["type"]) == "JSONB"
+    assert str(columns["faq"]["type"]) == "JSONB"
+    assert str(columns["labels"]["type"]) == "ARRAY"
+
+
+def test_a_profile_stored_before_the_step_gets_no_labels_and_no_faq(blank_database, migrate):
+    engine = create_engine(blank_database)
+    with engine.connect() as connection:
+        migrate(connection, "0007")
+        connection.execute(
+            text(
+                "INSERT INTO plant_profiles (slug, source_slug, species, source_name, source_url,"
+                " license, imported_on, content_sha256) VALUES ('old', 'old-care', 'Old',"
+                " 'PlantSolve', 'https://www.plantsolve.com/plants/old/', 'CC BY 4.0',"
+                " '2026-11-22', repeat('a', 64))"
+            )
+        )
+        connection.commit()
+
+        migrate(connection, "head")
+
+        row = connection.execute(text("SELECT faq, labels FROM plant_profiles")).one()
+        assert (row.faq, row.labels) == (None, [])
+    engine.dispose()
 
 
 def test_the_creation_time_defaults_to_now(migrated):

@@ -3,11 +3,20 @@ import uuid
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
+from app.catalog_labels import load_label_table
 from app.models import CatalogItem, CatalogItemLabel
 from app.seed import CATALOG, LEGACY_PACK_NAMES, SEED_NAMESPACE, seed_catalog
 from tests.db.factories import make_item, make_sensor
 
 SENSOR_ID = uuid.uuid5(SEED_NAMESPACE, "Soil Moisture Sensor")
+DERIVED = load_label_table()
+LABEL_COUNT = sum(len(item.wanted_labels(DERIVED)) for item in CATALOG)
+
+
+def labels_of(session: Session, slug: str) -> set[str]:
+    item = session.scalars(select(CatalogItem).where(CatalogItem.slug == slug)).one()
+    session.refresh(item)
+    return {label.label for label in item.labels}
 
 
 def count(session: Session, model) -> int:
@@ -36,7 +45,7 @@ def test_seed_inserts_the_catalog_that_satisfies_the_schema(session: Session):
     seed_catalog(session)
 
     assert count(session, CatalogItem) == len(CATALOG) == 17
-    assert count(session, CatalogItemLabel) == sum(len(item.labels) for item in CATALOG)
+    assert count(session, CatalogItemLabel) == LABEL_COUNT
 
 
 def test_a_fresh_catalog_has_fifteen_packs_and_two_sensors(session: Session):
@@ -53,7 +62,7 @@ def test_seeding_twice_changes_nothing(session: Session):
     seed_catalog(session)
 
     assert count(session, CatalogItem) == len(CATALOG) + len(LEGACY_PACK_NAMES)
-    assert count(session, CatalogItemLabel) == sum(len(item.labels) for item in CATALOG)
+    assert count(session, CatalogItemLabel) == LABEL_COUNT
     assert len(active(session)) == len(CATALOG)
 
 
@@ -76,9 +85,47 @@ def test_seeding_adds_a_missing_label_to_an_existing_item(session: Session):
     session.flush()
 
     seed_catalog(session)
-    session.expire_all()
 
-    assert [label.label for label in cactus.labels] == ["low-maintenance"]
+    assert labels_of(session, "cactus") == set(DERIVED["cactus"])
+
+
+def test_every_pack_carries_the_labels_derived_from_its_profile(session: Session):
+    seed_catalog(session)
+
+    for item in CATALOG:
+        if item.plant_slug is not None:
+            assert set(DERIVED[item.plant_slug]) <= labels_of(session, item.slug)
+
+
+def test_the_hand_set_label_stays_next_to_the_derived_ones(session: Session):
+    seed_catalog(session)
+
+    assert labels_of(session, "monstera-deliciosa") == {"rare", *DERIVED["monstera-deliciosa"]}
+
+
+def test_a_label_that_is_no_longer_derived_is_removed_and_a_new_one_added(session: Session):
+    seed_catalog(session, {"cactus": ("beginner", "drought-tolerant")})
+    seed_catalog(session, {"cactus": ("beginner", "direct-sun")})
+
+    assert labels_of(session, "cactus") == {"beginner", "direct-sun"}
+
+
+def test_the_hand_set_label_survives_a_new_table(session: Session):
+    seed_catalog(session, {"ficus-lyrata": ("advanced",)})
+    seed_catalog(session, {})
+
+    assert labels_of(session, "ficus-lyrata") == {"rare"}
+
+
+def test_a_stray_label_on_a_catalog_item_is_removed(session: Session):
+    seed_catalog(session)
+    cactus = session.scalars(select(CatalogItem).where(CatalogItem.slug == "cactus")).one()
+    session.add(CatalogItemLabel(item_id=cactus.id, label="stray"))
+    session.flush()
+
+    seed_catalog(session)
+
+    assert "stray" not in labels_of(session, "cactus")
 
 
 def test_only_the_golden_pothos_pack_carries_the_first_purchase_discount(session: Session):
