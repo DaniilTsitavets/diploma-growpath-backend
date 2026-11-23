@@ -185,6 +185,23 @@ def test_a_citation_survives_the_removal_of_its_section(session: Session):
 
 @pytest.mark.parametrize(
     "fields",
+    [
+        {"source_name": "  "},
+        {"source_name": "n" * 301},
+        {"license": ""},
+        {"license": "l" * 101},
+    ],
+)
+def test_citation_attribution_is_bounded(session: Session, fields: dict):
+    rejected_by(session, "ck_chat_turn_sources_attribution", add_chat_source, **fields)
+
+
+def test_a_citation_may_have_no_license(session: Session):
+    add_chat_source(session, license=None)
+
+
+@pytest.mark.parametrize(
+    "fields",
     [{"document_title": "t" * 201}, {"section_heading": "h" * 201}, {"source_url": "u" * 1001}],
 )
 def test_citation_texts_are_bounded(session: Session, fields: dict):

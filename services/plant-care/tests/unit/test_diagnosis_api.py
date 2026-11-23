@@ -15,19 +15,23 @@ from app.service.model import DryDepth, PhotoKind
 from app.service.photos import PhotoService
 from tests.unit.fake_model import FakeModel, conclusion, question
 from tests.unit.fake_queue import FakeQueue
-from tests.unit.fake_storage import FakePhotoStorage
+from tests.unit.fake_storage import FakePhotoStorage, photo_policy
 from tests.unit.scenario import USER, Scenario
 from tests.unit.settings import make_settings
 
 PROBLEM_JSON = "application/problem+json"
 AS_USER = {"X-User-Id": str(USER), "X-User-Groups": "users"}
 RETRY_AFTER_SECONDS = 7
+PNG = {"content_type": "image/png", "size_bytes": 1000}
 
 
-def client_for(scenario: Scenario, model: FakeModel) -> TestClient:
+def client_for(
+    scenario: Scenario, model: FakeModel, storage: FakePhotoStorage | None = None
+) -> TestClient:
+    storage = storage or FakePhotoStorage()
     app = FastAPI()
     app.state.diagnosis_service = scenario.service(model)
-    app.state.photo_service = PhotoService(lambda: scenario.uow, FakePhotoStorage(), 600)
+    app.state.photo_service = PhotoService(lambda: scenario.uow, storage, photo_policy())
     app.add_middleware(CorrelationIdMiddleware)
     register_error_handlers(app, RETRY_AFTER_SECONDS)
     app.include_router(diagnoses.router)
@@ -190,12 +194,12 @@ def test_the_user_header_is_required(scenario: Scenario):
 def test_a_roots_photo_upload_is_409_until_the_ai_asks_for_one(scenario: Scenario):
     client = client_for(scenario, FakeModel(question(roots_photo=True)))
     upload = f"/v1/updates/{scenario.update_id}/photos"
-    roots = {"kind": PhotoKind.ROOTS_DRAINAGE.value}
+    roots = {**PNG, "kind": PhotoKind.ROOTS_DRAINAGE.value}
 
     before = client.post(upload, json=roots, headers=AS_USER)
     client.post(url(scenario), headers=AS_USER)
     after = client.post(upload, json=roots, headers=AS_USER)
-    other = client.post(upload, json={"kind": "symptom_closeup"}, headers=AS_USER)
+    other = client.post(upload, json={**PNG, "kind": "symptom_closeup"}, headers=AS_USER)
 
     assert before.status_code == 409
     assert before.headers["content-type"] == PROBLEM_JSON

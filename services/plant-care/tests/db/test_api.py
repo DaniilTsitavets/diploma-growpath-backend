@@ -2,14 +2,15 @@ import uuid
 
 import pytest
 from fastapi.testclient import TestClient
-from sqlalchemy import Engine
+from sqlalchemy import Engine, select
 from sqlalchemy.engine import URL
 from sqlalchemy.orm import Session
 
 from app.main import create_app
+from app.models import UpdatePhotoModel
 from tests.db.factories import add_journal
 from tests.unit.fake_queue import FakeQueue
-from tests.unit.fake_storage import FakePhotoStorage
+from tests.unit.fake_storage import FakePhotoStorage, upload_photo
 from tests.unit.fakes import FakeAiQuota
 from tests.unit.settings import make_settings
 
@@ -27,12 +28,17 @@ def quota() -> FakeAiQuota:
 
 
 @pytest.fixture
-def client(database_url: URL, quota: FakeAiQuota) -> TestClient:
+def storage() -> FakePhotoStorage:
+    return FakePhotoStorage()
+
+
+@pytest.fixture
+def client(database_url: URL, quota: FakeAiQuota, storage: FakePhotoStorage) -> TestClient:
     settings = make_settings(
         database_url=database_url.render_as_string(hide_password=False),
         feed_default_page_size=2,
     )
-    app = create_app(settings, FakeQueue(), quota, FakePhotoStorage())
+    app = create_app(settings, FakeQueue(), quota, storage)
     return TestClient(app, raise_server_exceptions=False)
 
 
@@ -60,6 +66,22 @@ def test_planting_a_journal_computes_checkpoints_on_read(client: TestClient, jou
     assert got.json()["checkpoints"][0]["opens_on"] == "2026-11-06"
     assert [item["id"] for item in listed.json()["items"]] == [str(journal_id)]
     assert listed.json()["next_cursor"] is None
+
+
+def test_planting_rules_over_the_real_database(client: TestClient, journal_id):
+    url = f"/v1/journals/{journal_id}/planting"
+
+    future = client.put(url, json={"planted_on": "2999-01-01"}, headers=AS_USER)
+    first = client.put(url, json={"planted_on": "2026-11-01"}, headers=AS_USER)
+    same = client.put(url, json={"planted_on": "2026-11-01"}, headers=AS_USER)
+    other = client.put(url, json={"planted_on": "2026-11-02"}, headers=AS_USER)
+
+    assert (future.status_code, future.json()["code"]) == (422, "validation-error")
+    assert first.status_code == same.status_code == 200
+    assert (other.status_code, other.json()["code"]) == (409, "planting-already-recorded")
+    assert client.get(f"/v1/journals/{journal_id}", headers=AS_USER).json()["planted_on"] == (
+        "2026-11-01"
+    )
 
 
 def test_an_update_is_idempotent_and_reserves_quota_once(
@@ -111,16 +133,47 @@ def test_the_feed_is_paged_newest_first_without_repeats(client: TestClient, jour
     assert seen == ids[::-1]
 
 
-def test_photos_are_recorded_per_kind_and_listed(client: TestClient, journal_id):
+def test_a_photo_is_stored_only_once_confirmed_and_confirming_again_changes_nothing(
+    client: TestClient, storage: FakePhotoStorage, journal_id, engine: Engine
+):
     update_id = submit(client, journal_id).json()["id"]
     url = f"/v1/updates/{update_id}/photos"
+    body = {"kind": "overview", "content_type": "image/png", "size_bytes": 1000}
 
-    client.post(url, json={"kind": "overview"}, headers=AS_USER)
-    client.post(url, json={"kind": "overview"}, headers=AS_USER)
+    presigned = client.post(url, json=body, headers=AS_USER)
+    with Session(engine) as session:
+        stored_before = session.scalars(select(UpdatePhotoModel.storage_key)).all()
+    listed_before = client.get(url, headers=AS_USER).json()
+    upload_photo(client, storage, AS_USER, journal_id, update_id, "overview")
+    again = upload_photo(client, storage, AS_USER, journal_id, update_id, "overview")
     listed = client.get(url, headers=AS_USER).json()
+    with Session(engine) as session:
+        stored = session.scalars(select(UpdatePhotoModel.storage_key)).all()
 
+    assert presigned.status_code == 200
+    assert stored_before == []
+    assert listed_before == {"photos": [], "missing_required": ["overview", "soil"]}
+    assert again.status_code == 200
     assert [photo["kind"] for photo in listed["photos"]] == ["overview"]
     assert listed["missing_required"] == ["soil"]
+    assert stored == [f"journals/{journal_id}/updates/{update_id}/overview"]
+
+
+def test_a_rejected_object_is_deleted_and_not_stored(
+    client: TestClient, storage: FakePhotoStorage, journal_id, engine: Engine
+):
+    update_id = submit(client, journal_id).json()["id"]
+    key = f"journals/{journal_id}/updates/{update_id}/soil"
+    storage.put(key, size_bytes=6_000_000)
+
+    response = client.post(f"/v1/updates/{update_id}/photos/soil/confirm", headers=AS_USER)
+
+    with Session(engine) as session:
+        stored = session.scalars(select(UpdatePhotoModel.storage_key)).all()
+    assert response.status_code == 422
+    assert response.json()["code"] == "photo-too-large"
+    assert storage.deleted == [key]
+    assert stored == []
 
 
 def test_another_user_sees_nothing(client: TestClient, journal_id):

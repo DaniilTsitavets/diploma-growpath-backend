@@ -77,6 +77,8 @@ def _citations(references: list[str], sections: list[RetrievedSection]) -> list[
             sections[number - 1].document_title,
             sections[number - 1].heading,
             sections[number - 1].source_url,
+            sections[number - 1].source_name,
+            sections[number - 1].license,
         )
         for rank, number in enumerate(numbers, start=1)
     ]

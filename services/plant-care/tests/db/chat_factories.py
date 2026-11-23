@@ -64,5 +64,7 @@ def add_chat_source(session: Session, turn_id: uuid.UUID | None = None, **overri
         "document_title": "A guide",
         "section_heading": "Watering",
         "source_url": "https://example.test/guide",
+        "source_name": "PlantSolve",
+        "license": "CC BY 4.0",
     }
     return _insert(session, ChatTurnSourceModel, values, overrides)

@@ -71,6 +71,7 @@ def test_a_question_goes_through_the_database_and_the_history_returns_it(
     assert replay.json() == created.json()
     (source,) = created.json()["sources"]
     assert source["rank"] == 1 and source["source_url"].startswith("https://")
+    assert (source["source_name"], source["license"]) == ("PlantSolve", "CC BY 4.0")
     assert history.json()["items"] == [created.json()]
     assert len(quota.committed) == 1
     with Session(engine) as session:

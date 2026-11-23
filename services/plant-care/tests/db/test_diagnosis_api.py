@@ -14,7 +14,7 @@ from app.service.model import Tier
 from tests.db.factories import add_journal
 from tests.unit.fake_model import FakeModel, conclusion, question
 from tests.unit.fake_queue import FakeQueue
-from tests.unit.fake_storage import FakePhotoStorage
+from tests.unit.fake_storage import FakePhotoStorage, presign_and_confirm
 from tests.unit.fakes import FakeAiQuota
 from tests.unit.scenario import StaticTiers
 from tests.unit.settings import make_settings
@@ -46,7 +46,7 @@ def client_with(database_url: URL, quota: FakeAiQuota, model: FakeModel) -> Test
         settings,
         FakeQueue(),
         quota,
-        FakePhotoStorage(),
+        FakePhotoStorage(any_object_exists=True),
         tier_lookup=StaticTiers(Tier.STARTER),
         diagnosis_model=model,
     )
@@ -61,7 +61,7 @@ def update_with_photos(client: TestClient, journal_id: uuid.UUID) -> str:
     )
     update_id = created.json()["id"]
     for kind in ("overview", "soil"):
-        client.post(f"/v1/updates/{update_id}/photos", json={"kind": kind}, headers=AS_USER)
+        presign_and_confirm(client, AS_USER, update_id, kind)
     return update_id
 
 
@@ -83,7 +83,7 @@ def test_the_clarification_flow_runs_against_the_database(
     update_id = update_with_photos(client, journal_id)
     diagnosis = f"/v1/updates/{update_id}/diagnosis"
     photos = f"/v1/updates/{update_id}/photos"
-    roots = {"kind": "roots_drainage"}
+    roots = {"kind": "roots_drainage", "content_type": "image/png", "size_bytes": 1000}
 
     roots_before = client.post(photos, json=roots, headers=AS_USER)
     asked = client.post(diagnosis, headers=AS_USER).json()
@@ -171,7 +171,7 @@ def test_an_attempt_whose_reservation_was_released_is_taken_over_by_the_next_one
     assert quota.committed == [stored_reservation(engine, update_id)]
 
 
-def test_a_diagnosis_cannot_start_without_the_required_photos(
+def test_a_diagnosis_cannot_start_before_the_photos_are_confirmed(
     database_url: URL, quota: FakeAiQuota, journal_id: uuid.UUID
 ):
     client = client_with(database_url, quota, FakeModel(conclusion()))
@@ -180,10 +180,20 @@ def test_a_diagnosis_cannot_start_without_the_required_photos(
         json={"id": str(uuid.uuid4()), **QUESTIONNAIRE},
         headers=AS_USER,
     ).json()
+    photos = f"/v1/updates/{created['id']}/photos"
+    body = {"content_type": "image/png", "size_bytes": 1000}
+    diagnosis = f"/v1/updates/{created['id']}/diagnosis"
 
-    response = client.post(f"/v1/updates/{created['id']}/diagnosis", headers=AS_USER)
+    for kind in ("overview", "soil"):
+        client.post(photos, json={"kind": kind, **body}, headers=AS_USER)
+    presigned_only = client.post(diagnosis, headers=AS_USER)
+    for kind in ("overview", "soil"):
+        client.post(f"{photos}/{kind}/confirm", headers=AS_USER)
+    confirmed = client.post(diagnosis, headers=AS_USER)
 
-    assert response.status_code == 422
+    assert presigned_only.status_code == 422
+    assert "overview" in presigned_only.json()["detail"]
+    assert confirmed.status_code == 200
 
 
 def test_the_assessment_uses_the_species_profile_and_the_journal_history(
@@ -216,7 +226,7 @@ def test_the_assessment_uses_the_species_profile_and_the_journal_history(
         )
         update_id = created.json()["id"]
         for kind in ("overview", "soil"):
-            client.post(f"/v1/updates/{update_id}/photos", json={"kind": kind}, headers=AS_USER)
+            presign_and_confirm(client, AS_USER, update_id, kind)
         return client.post(f"/v1/updates/{update_id}/diagnosis", headers=AS_USER).json()
 
     first = diagnose()

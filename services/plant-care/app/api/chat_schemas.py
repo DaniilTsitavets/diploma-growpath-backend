@@ -23,6 +23,8 @@ class SourceResponse(BaseModel):
     document_title: str
     section_heading: str
     source_url: str
+    source_name: str
+    license: str | None
 
     @classmethod
     def of(cls, citation: Citation) -> Self:
@@ -34,6 +36,8 @@ class RelatedSectionResponse(BaseModel):
     document_title: str
     section_heading: str
     source_url: str
+    source_name: str
+    license: str | None
     body: str
 
     @classmethod
@@ -43,6 +47,8 @@ class RelatedSectionResponse(BaseModel):
             document_title=section.document_title,
             section_heading=section.heading,
             source_url=section.source_url,
+            source_name=section.source_name,
+            license=section.license,
             body=section.body,
         )
 

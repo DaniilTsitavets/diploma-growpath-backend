@@ -36,7 +36,7 @@ from app.service.escalations import EscalationService
 from app.service.event_handlers import EventHandlers
 from app.service.expert_quota import ExpertQuota
 from app.service.journals import JournalService
-from app.service.photos import PhotoService, PhotoStorage
+from app.service.photos import PhotoPolicy, PhotoService, PhotoStorage
 from app.service.plants import PlantService
 from app.service.ticket_handlers import TicketEventHandlers
 from app.service.updates import UpdateService
@@ -122,7 +122,13 @@ def create_app(
         settings.feed_max_page_size,
     )
     app.state.photo_service = PhotoService(
-        unit_of_work, photo_storage, settings.photo_url_ttl_seconds
+        unit_of_work,
+        photo_storage,
+        PhotoPolicy(
+            settings.photo_allowed_content_types,
+            settings.model_photo_max_bytes,
+            settings.photo_url_ttl_seconds,
+        ),
     )
     app.state.diagnosis_service = DiagnosisService(
         unit_of_work,

@@ -1,10 +1,15 @@
 import uuid
-from datetime import date
+from datetime import date, timedelta
 
 import pytest
 
 from app.service.checkpoints import CheckpointState
-from app.service.errors import InvalidCursor, JournalNotFound
+from app.service.errors import (
+    InvalidCursor,
+    JournalNotFound,
+    PlantingAlreadyRecorded,
+    PlantingDateInFuture,
+)
 from app.service.journals import JournalService
 from tests.unit.fakes import TODAY, FakeUnitOfWork
 
@@ -94,6 +99,44 @@ def test_planting_stores_the_date_and_commits(service: JournalService, uow: Fake
     assert uow.journals.rows[journal.id].planted_on == date(2026, 11, 2)
     assert uow.commits == 1
     assert len(view.checkpoints) == 3
+
+
+def test_planting_today_is_allowed(service: JournalService, uow: FakeUnitOfWork):
+    journal = uow.journals.seed(USER)
+
+    assert service.plant(journal.id, USER, TODAY).journal.planted_on == TODAY
+
+
+def test_a_future_planting_date_is_rejected_without_a_write(
+    service: JournalService, uow: FakeUnitOfWork
+):
+    journal = uow.journals.seed(USER)
+
+    with pytest.raises(PlantingDateInFuture):
+        service.plant(journal.id, USER, TODAY + timedelta(days=1))
+
+    assert uow.journals.rows[journal.id].planted_on is None
+    assert uow.commits == 0
+
+
+def test_repeating_the_same_planting_date_is_idempotent(
+    service: JournalService, uow: FakeUnitOfWork
+):
+    journal = uow.journals.seed(USER, planted_on=date(2026, 11, 2))
+
+    view = service.plant(journal.id, USER, date(2026, 11, 2))
+
+    assert view.journal.planted_on == date(2026, 11, 2)
+
+
+def test_a_different_planting_date_is_a_conflict(service: JournalService, uow: FakeUnitOfWork):
+    journal = uow.journals.seed(USER, planted_on=date(2026, 11, 2))
+
+    with pytest.raises(PlantingAlreadyRecorded):
+        service.plant(journal.id, USER, date(2026, 11, 3))
+
+    assert uow.journals.rows[journal.id].planted_on == date(2026, 11, 2)
+    assert uow.commits == 0
 
 
 def test_planting_a_journal_of_another_user_is_not_found(

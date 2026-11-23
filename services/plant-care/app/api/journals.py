@@ -4,7 +4,7 @@ from typing import Annotated
 from fastapi import APIRouter, Depends, Query
 
 from app.api.dependencies import current_user_id, get_journal_service
-from app.api.problems import identity_required, invalid_request, not_found, responses
+from app.api.problems import identity_required, invalid_request, not_found, problem, responses
 from app.api.schemas import JournalListResponse, JournalResponse, PlantingRequest
 from app.service.journals import JournalService
 
@@ -21,6 +21,16 @@ ITEM_ERRORS = responses(
     identity_required(),
     not_found("The user has no such journal"),
     invalid_request("A path or body parameter is invalid"),
+)
+PLANTING_ERRORS = responses(
+    identity_required(),
+    not_found("The user has no such journal"),
+    invalid_request("The body is invalid, or the planting date is in the future (UTC today)"),
+    problem(
+        409,
+        "A different planting date is already recorded for the journal",
+        "planting-already-recorded",
+    ),
 )
 
 
@@ -40,9 +50,12 @@ def get_journal(journal_id: uuid.UUID, user_id: UserId, service: Journals) -> Jo
     return JournalResponse.of(service.get(journal_id, user_id))
 
 
-@router.put("/{journal_id}/planting", responses=ITEM_ERRORS)
+@router.put("/{journal_id}/planting", responses=PLANTING_ERRORS)
 def record_planting(
     journal_id: uuid.UUID, body: PlantingRequest, user_id: UserId, service: Journals
 ) -> JournalResponse:
-    """Record the planting date; the checkpoint windows are computed from it."""
+    """Record the planting date once; the checkpoint windows are computed from it.
+
+    Repeating the same date is a no-op; another date is refused once one is recorded.
+    """
     return JournalResponse.of(service.plant(journal_id, user_id, body.planted_on))

@@ -240,13 +240,17 @@ def test_a_species_without_a_document_finds_only_general_matches(session: Sessio
 
 def test_a_found_section_carries_the_document_title_and_source(session: Session):
     repo = seed_documents(
-        session, make_document("basil", "Basil", {"Watering": "Water."}, title="Basil guide")
+        session,
+        make_document(
+            "basil", "Basil", {"Watering": "Water."}, title="Basil guide", license="CC BY 4.0"
+        ),
     )
 
     (section,) = repo.search("water", "Basil", 4)
 
     assert section.document_title == "Basil guide"
     assert section.source_url == "https://example.test/basil"
+    assert (section.source_name, section.license) == ("PlantSolve", "CC BY 4.0")
     assert section.body == "Water."
 
 

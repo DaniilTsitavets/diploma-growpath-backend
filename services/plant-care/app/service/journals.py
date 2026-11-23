@@ -5,7 +5,7 @@ from datetime import UTC, date, datetime
 
 from app.service.checkpoints import Checkpoint, checkpoints_for
 from app.service.cursor import decode_cursor, encode_cursor
-from app.service.errors import JournalNotFound
+from app.service.errors import JournalNotFound, PlantingAlreadyRecorded, PlantingDateInFuture
 from app.service.model import FeedCursor, Journal
 from app.service.ports import UnitOfWork
 
@@ -60,8 +60,12 @@ class JournalService:
         return self._view(journal)
 
     def plant(self, journal_id: uuid.UUID, user_id: uuid.UUID, planted_on: date) -> JournalView:
+        if planted_on > self._today():
+            raise PlantingDateInFuture
         with self._unit_of_work() as uow:
             journal = uow.journals.set_planted_on(journal_id, user_id, planted_on)
+            if journal is None and uow.journals.get_owned(journal_id, user_id) is not None:
+                raise PlantingAlreadyRecorded
             uow.commit()
         if journal is None:
             raise JournalNotFound

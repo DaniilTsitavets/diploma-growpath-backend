@@ -124,6 +124,8 @@ def make_section(number: int = 1, **overrides) -> RetrievedSection:
         "id": uuid.uuid5(uuid.NAMESPACE_URL, f"section-{number}"),
         "document_title": f"Document {number}",
         "source_url": f"https://example.test/{number}",
+        "source_name": "PlantSolve",
+        "license": "CC BY 4.0",
         "heading": f"Heading {number}",
         "body": f"Body of section {number}.",
     }

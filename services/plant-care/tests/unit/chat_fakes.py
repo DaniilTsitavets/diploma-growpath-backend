@@ -119,7 +119,15 @@ def make_chat_request(**overrides) -> ChatRequest:
 
 def citation(rank: int = 1) -> Citation:
     section = make_section(rank)
-    return Citation(rank, section.id, section.document_title, section.heading, section.source_url)
+    return Citation(
+        rank,
+        section.id,
+        section.document_title,
+        section.heading,
+        section.source_url,
+        section.source_name,
+        section.license,
+    )
 
 
 class FakeChatModel:

@@ -129,6 +129,10 @@ class PhotoRepository(Protocol):
         """False when the update already has a photo of this kind; the stored key is kept."""
         ...
 
+    def remove(self, update_id: uuid.UUID, kind: PhotoKind) -> None:
+        """Drop the confirmed photo of this kind, if any."""
+        ...
+
     def list_for_update(self, update_id: uuid.UUID) -> list[Photo]: ...
 
 

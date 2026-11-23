@@ -52,19 +52,24 @@ def make_turn(sources: list[Citation]) -> NewChatTurn:
 
 def test_a_new_turn_is_inserted_with_a_conflict_clause_and_then_its_citations():
     session = RecordingSession()
-    source = Citation(1, uuid.uuid4(), "Guide", "Watering", "https://example.test")
+    source = Citation(
+        1, uuid.uuid4(), "Guide", "Watering", "https://example.test", "PlantSolve", "CC BY 4.0"
+    )
 
     assert SqlAlchemyChatTurnRepository(session).add(make_turn([source]))
 
     assert "INSERT INTO chat_turns" in session.sql(0)
     assert "ON CONFLICT (id) DO NOTHING RETURNING chat_turns.id" in session.sql(0)
     assert "INSERT INTO chat_turn_sources" in session.sql(1)
-    assert session.statements[1][1][0]["rank"] == 1
+    row = session.statements[1][1][0]
+    assert (row["rank"], row["source_name"], row["license"]) == (1, "PlantSolve", "CC BY 4.0")
 
 
 def test_a_stored_id_inserts_no_citations():
     session = RecordingSession(inserted=False)
-    source = Citation(1, uuid.uuid4(), "Guide", "Watering", "https://example.test")
+    source = Citation(
+        1, uuid.uuid4(), "Guide", "Watering", "https://example.test", "PlantSolve", None
+    )
 
     assert not SqlAlchemyChatTurnRepository(session).add(make_turn([source]))
 
