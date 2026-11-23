@@ -42,9 +42,22 @@ def attributes(user_id: uuid.UUID, email: str = "a@example.com") -> list[dict[st
     return [{"Name": "sub", "Value": str(user_id)}, {"Name": "email", "Value": email}]
 
 
+def username_of(user_id: uuid.UUID) -> str:
+    """The real username differs from the sub, as in a pool that signs in with the email."""
+    return f"{user_id}@example.com"
+
+
+def expect_username(stubber: Stubber, user_id: uuid.UUID) -> None:
+    stubber.add_response(
+        "admin_get_user",
+        {"Username": username_of(user_id), "UserAttributes": attributes(user_id)},
+        {"UserPoolId": USER_POOL_ID, "Username": str(user_id)},
+    )
+
+
 def raw_user(user_id: uuid.UUID = USER_ID, **overrides) -> dict:
     return {
-        "Username": str(user_id),
+        "Username": username_of(user_id),
         "Attributes": attributes(user_id),
         "UserCreateDate": CREATED_AT,
         "Enabled": True,
@@ -60,7 +73,7 @@ def expect_groups(stubber: Stubber, user_id: uuid.UUID, *names: str) -> None:
     stubber.add_response(
         "admin_list_groups_for_user",
         groups_response(*names),
-        {"UserPoolId": USER_POOL_ID, "Username": str(user_id)},
+        {"UserPoolId": USER_POOL_ID, "Username": username_of(user_id)},
     )
 
 
@@ -156,7 +169,7 @@ def test_a_user_is_read_with_the_groups_and_state():
         stubber.add_response(
             "admin_get_user",
             {
-                "Username": "a@example.com",
+                "Username": username_of(USER_ID),
                 "UserAttributes": attributes(USER_ID),
                 "UserCreateDate": CREATED_AT,
                 "Enabled": False,
@@ -167,7 +180,7 @@ def test_a_user_is_read_with_the_groups_and_state():
 
         user = directory.get_user(USER_ID)
 
-    assert user.username == "a@example.com" and user.enabled is False
+    assert user.username == username_of(USER_ID) and user.enabled is False
     assert user.created_at == CREATED_AT and user.role is Role.ADMIN
 
 
@@ -230,16 +243,17 @@ def test_a_foreign_pagination_token_is_an_invalid_cursor():
 
 def test_the_role_group_replaces_the_other_role_groups_and_keeps_foreign_ones():
     with directory_with_stubs() as (directory, stubber):
+        expect_username(stubber, USER_ID)
         expect_groups(stubber, USER_ID, "users", "beta-testers")
         stubber.add_response(
             "admin_remove_user_from_group",
             {},
-            {"UserPoolId": USER_POOL_ID, "Username": str(USER_ID), "GroupName": "users"},
+            {"UserPoolId": USER_POOL_ID, "Username": username_of(USER_ID), "GroupName": "users"},
         )
         stubber.add_response(
             "admin_add_user_to_group",
             {},
-            {"UserPoolId": USER_POOL_ID, "Username": str(USER_ID), "GroupName": "admins"},
+            {"UserPoolId": USER_POOL_ID, "Username": username_of(USER_ID), "GroupName": "admins"},
         )
 
         directory.set_role(USER_ID, Role.ADMIN)
@@ -247,9 +261,27 @@ def test_the_role_group_replaces_the_other_role_groups_and_keeps_foreign_ones():
 
 def test_a_user_who_already_has_the_role_is_left_alone():
     with directory_with_stubs() as (directory, stubber):
+        expect_username(stubber, USER_ID)
         expect_groups(stubber, USER_ID, "experts")
 
         directory.set_role(USER_ID, Role.EXPERT)
+
+
+@pytest.mark.parametrize(
+    "call",
+    [
+        lambda directory: directory.set_role(USER_ID, Role.ADMIN),
+        lambda directory: directory.set_enabled(USER_ID, False),
+        lambda directory: directory.set_password(USER_ID, PASSWORD),
+    ],
+    ids=["role", "enabled", "password"],
+)
+def test_an_unknown_id_is_not_found_by_every_change(call):
+    with directory_with_stubs() as (directory, stubber):
+        error(stubber, "admin_get_user", "UserNotFoundException")
+
+        with pytest.raises(UserNotFound):
+            call(directory)
 
 
 @pytest.mark.parametrize(
@@ -257,19 +289,23 @@ def test_a_user_who_already_has_the_role_is_left_alone():
 )
 def test_a_user_is_disabled_or_enabled(enabled: bool, operation: str):
     with directory_with_stubs() as (directory, stubber):
-        stubber.add_response(operation, {}, {"UserPoolId": USER_POOL_ID, "Username": str(USER_ID)})
+        expect_username(stubber, USER_ID)
+        stubber.add_response(
+            operation, {}, {"UserPoolId": USER_POOL_ID, "Username": username_of(USER_ID)}
+        )
 
         directory.set_enabled(USER_ID, enabled)
 
 
 def test_a_password_is_set_as_permanent():
     with directory_with_stubs() as (directory, stubber):
+        expect_username(stubber, USER_ID)
         stubber.add_response(
             "admin_set_user_password",
             {},
             {
                 "UserPoolId": USER_POOL_ID,
-                "Username": str(USER_ID),
+                "Username": username_of(USER_ID),
                 "Password": ANY,
                 "Permanent": True,
             },
@@ -281,6 +317,7 @@ def test_a_password_is_set_as_permanent():
 @pytest.mark.parametrize("code", ["TooManyRequestsException", "InternalErrorException"])
 def test_throttling_and_provider_failures_make_the_directory_unavailable(code: str):
     with directory_with_stubs() as (directory, stubber):
+        expect_username(stubber, USER_ID)
         error(stubber, "admin_disable_user", code)
 
         with pytest.raises(DirectoryUnavailable):
@@ -289,7 +326,7 @@ def test_throttling_and_provider_failures_make_the_directory_unavailable(code: s
 
 def test_a_network_failure_makes_the_directory_unavailable():
     class FailingClient:
-        def admin_disable_user(self, **_):
+        def admin_get_user(self, **_):
             raise EndpointConnectionError(endpoint_url="http://cognito")
 
     with pytest.raises(DirectoryUnavailable):

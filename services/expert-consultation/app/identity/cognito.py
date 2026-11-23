@@ -91,7 +91,7 @@ class CognitoUserDirectory:
         return self._user(created, created["Attributes"], groups=frozenset({ROLE_GROUPS[role]}))
 
     def set_role(self, user_id: uuid.UUID, role: Role) -> None:
-        username = str(user_id)
+        username = self._username(user_id)
         current = self._groups(username)
         target = ROLE_GROUPS[role]
         for group in (current & set(ROLE_GROUPS.values())) - {target}:
@@ -101,12 +101,19 @@ class CognitoUserDirectory:
 
     def set_enabled(self, user_id: uuid.UUID, enabled: bool) -> None:
         operation = "admin_enable_user" if enabled else "admin_disable_user"
-        self._call(operation, Username=str(user_id))
+        self._call(operation, Username=self._username(user_id))
 
     def set_password(self, user_id: uuid.UUID, password: str) -> None:
         self._call(
-            "admin_set_user_password", Username=str(user_id), Password=password, Permanent=True
+            "admin_set_user_password",
+            Username=self._username(user_id),
+            Password=password,
+            Permanent=True,
         )
+
+    def _username(self, user_id: uuid.UUID) -> str:
+        """Some backends reject the `sub` as a username in group calls; resolve the real one."""
+        return self._call("admin_get_user", Username=str(user_id))["Username"]
 
     def _groups(self, username: str) -> frozenset[str]:
         response = self._call("admin_list_groups_for_user", Username=username)
@@ -124,7 +131,7 @@ class CognitoUserDirectory:
             user_id=uuid.UUID(user_id),
             username=raw["Username"],
             email=values.get("email"),
-            groups=self._groups(user_id) if groups is None else groups,
+            groups=self._groups(raw["Username"]) if groups is None else groups,
             enabled=raw.get("Enabled", True),
             created_at=raw.get("UserCreateDate", datetime.fromtimestamp(0, UTC)),
         )
