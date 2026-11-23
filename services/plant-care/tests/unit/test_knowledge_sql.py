@@ -109,6 +109,17 @@ def test_the_match_query_filters_by_species_ranks_and_limits():
     assert session.compiled(1).params["param_1"] == 3
 
 
+def test_the_minimum_rank_is_a_bound_filter_on_the_same_rank_the_results_are_ordered_by():
+    session = RecordingSession(["basil"])
+    SqlAlchemyKnowledgeRepository(session).search("basil", "Basil", 3, min_rank=0.8)
+
+    match = session.compiled(1)
+
+    assert "ts_rank_cd(kb_sections.search_vector, CAST(" in str(match).split("WHERE")[1]
+    assert ">= %(min_rank)s" in str(match)
+    assert match.params["min_rank"] == 0.8
+
+
 def test_without_lexemes_only_the_species_sections_are_fetched_in_document_order():
     session = RecordingSession([])
 
@@ -143,3 +154,17 @@ def test_the_default_is_four_sections():
     settings: Settings = make_settings()
 
     assert settings.chat_top_k == 4
+
+
+def test_the_default_minimum_rank_is_taken_from_the_evaluation():
+    assert make_settings().chat_min_rank == 0.8
+
+
+def test_the_minimum_rank_can_be_configured_and_may_be_zero():
+    assert make_settings(chat_min_rank=0).chat_min_rank == 0
+    assert make_settings(chat_min_rank=2.5).chat_min_rank == 2.5
+
+
+def test_a_negative_minimum_rank_is_rejected():
+    with pytest.raises(ValueError, match="chat_min_rank"):
+        make_settings(chat_min_rank=-0.1)

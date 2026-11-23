@@ -62,7 +62,7 @@ def service_for(
 
     def build(model: FakeChatModel) -> ChatService:
         return ChatService(
-            unit_of_work, quota, model, EffortPolicy(StaticTiers(Tier.STARTER)), 4, 3, 20, 100
+            unit_of_work, quota, model, EffortPolicy(StaticTiers(Tier.STARTER)), 4, 0.8, 3, 20, 100
         )
 
     return build

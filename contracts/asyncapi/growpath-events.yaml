@@ -370,6 +370,31 @@ components:
                 recommendation: Water less.
               clarifying_question: Is the soil soggy?
               clarifying_answer: 'Yes'
+              watering:
+                status: overwatering
+                reliability: medium
+                depletion_D: 0.15
+                D_source: sensor
+                target_p: 0.5
+                p_source: profile
+                I_rec_days: 9.3
+                I_rec_bounds:
+                  lower_days: 7.1
+                  upper_days: 14.0
+                  text: between 7.1 and 14 days
+                I_fact_days: 2
+                ratio_r: 0.22
+                Ks: 1.0
+                flags: [drainage_none]
+                air:
+                  T: 22.4
+                  RH: 48
+                  VPD_kPa: 1.38
+                calibration:
+                  n_observations: 2
+                  reset_reason: null
+                assumptions:
+                  - The target depletion equals the species dryness threshold.
               history:
                 - date: '2026-11-05'
                   diagnosis_status: completed
@@ -764,6 +789,84 @@ components:
           type: string
         clarifying_answer:
           type: string
+        watering:
+          type: object
+          additionalProperties: false
+          description: >-
+            The watering assessment stored with the diagnosis (docs/watering.md), as stored.
+            Absent when the update has no diagnosis or the diagnosis has no assessment. Only
+            `status` and `reliability` are always present.
+          required: [status, reliability]
+          properties:
+            status:
+              type: string
+              enum: [underwatering, overwatering, on_track, unclear]
+            reliability:
+              type: string
+              enum: [high, medium, low]
+            depletion_D:
+              type: [number, 'null']
+            D_source:
+              type: string
+              enum: [sensor, weight_grams, depth, categorical_weight, none]
+            target_p:
+              type: number
+            p_source:
+              type: string
+              enum: [profile, profile_clamped, default]
+            I_rec_days:
+              type: [number, 'null']
+            I_rec_bounds:
+              type: [object, 'null']
+              additionalProperties: false
+              required: [lower_days, upper_days, text]
+              properties:
+                lower_days:
+                  type: [number, 'null']
+                upper_days:
+                  type: [number, 'null']
+                text:
+                  type: [string, 'null']
+            I_fact_days:
+              type: [integer, 'null']
+            ratio_r:
+              type: [number, 'null']
+            Ks:
+              type: [number, 'null']
+            flags:
+              type: array
+              items:
+                type: string
+                enum:
+                  - drainage_none
+                  - low_light_vs_species
+                  - rh_below_species_range
+                  - temp_outside_species_range
+                  - top_dry_heavy_conflict
+            air:
+              type: object
+              additionalProperties: false
+              required: [T, RH, VPD_kPa]
+              properties:
+                T:
+                  type: [number, 'null']
+                RH:
+                  type: [number, 'null']
+                VPD_kPa:
+                  type: [number, 'null']
+            calibration:
+              type: object
+              additionalProperties: false
+              required: [n_observations, reset_reason]
+              properties:
+                n_observations:
+                  type: integer
+                reset_reason:
+                  type: [string, 'null']
+            assumptions:
+              type: array
+              items:
+                type: string
         history:
           type: array
           description: Earlier updates of the journal, oldest first, without photos.

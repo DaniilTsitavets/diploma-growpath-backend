@@ -2,17 +2,53 @@
 
 from collections.abc import Sequence
 from dataclasses import replace
-from datetime import UTC, date
+from datetime import UTC, date, datetime
 from decimal import Decimal
+from enum import StrEnum
 
 from app.service import watering_types as wt
 from app.service.model import UpdateRecord, YesNo
 from app.service.watering_depletion import Depletion, Level, estimate_depletion
 
 
-def watering_inputs(update: UpdateRecord, today: date) -> wt.WateringInputs:
+class Season(StrEnum):
+    WINTER = "winter"
+    SPRING = "spring"
+    SUMMER = "summer"
+    AUTUMN = "autumn"
+
+
+_SEASON_BY_MONTH = (
+    Season.WINTER,
+    Season.WINTER,
+    Season.SPRING,
+    Season.SPRING,
+    Season.SPRING,
+    Season.SUMMER,
+    Season.SUMMER,
+    Season.SUMMER,
+    Season.AUTUMN,
+    Season.AUTUMN,
+    Season.AUTUMN,
+    Season.WINTER,
+)
+
+
+def season_of(day: date) -> Season:
+    """Meteorological season of the Northern Hemisphere; the journal stores no location."""
+    return _SEASON_BY_MONTH[day.month - 1]
+
+
+def crossed_season(earlier_at: datetime, today: date) -> bool:
+    return season_of(earlier_at.astimezone(UTC).date()) is not season_of(today)
+
+
+def watering_inputs(
+    update: UpdateRecord, today: date, season_changed: bool = False
+) -> wt.WateringInputs:
     return wt.WateringInputs(
         today=today,
+        season_changed=season_changed,
         last_watered_on=update.last_watered_on,
         watering_method=wt.WateringMethod(update.watering_method.value),
         pot_diameter_class=wt.PotDiameterClass(update.pot_diameter_class.value),
@@ -31,19 +67,31 @@ def watering_inputs(update: UpdateRecord, today: date) -> wt.WateringInputs:
     )
 
 
-def watering_history(updates_newest_first: Sequence[UpdateRecord]) -> list[wt.WateringObservation]:
+def watering_history(
+    updates_newest_first: Sequence[UpdateRecord], reset_on_season_change: bool = False
+) -> list[wt.WateringObservation]:
     """Observations of the earlier updates, oldest first, as the assessment expects them.
 
     An update that reports a repotting or a move cuts the observations before it, so the one
-    just before it is marked as a reset.
+    just before it is marked as a reset. With `reset_on_season_change` the same holds for an
+    update made in another season than the update before it.
     """
     history: list[wt.WateringObservation] = []
+    previous: UpdateRecord | None = None
     for update in reversed(updates_newest_first):
-        if update.repotted_or_moved is YesNo.YES and history:
+        if history and (
+            update.repotted_or_moved is YesNo.YES
+            or (
+                reset_on_season_change
+                and previous is not None
+                and crossed_season(previous.created_at, update.created_at.astimezone(UTC).date())
+            )
+        ):
             history[-1] = replace(history[-1], reset=True)
         observation = _observation(update)
         if observation is not None:
             history.append(observation)
+        previous = update
     return history
 
 

@@ -79,6 +79,27 @@ def test_the_codec_accepts_the_contract_examples(name: str):
     assert accepted(example_payloads(ESCALATION)[name])
 
 
+@pytest.mark.parametrize(
+    ("key", "value"),
+    [("status", "thirsty"), ("reliability", None), ("flags", ["unknown_flag"]), ("target_p", "x")],
+)
+def test_an_invalid_watering_assessment_breaks_the_contract_but_not_the_codec(
+    key: str, value: object
+):
+    payload = example_payloads(ESCALATION)["after a diagnosis"]
+    payload["context"]["watering"][key] = value
+
+    assert payload_errors(ESCALATION, payload)
+    assert accepted(payload)
+
+
+def test_a_context_without_an_assessment_satisfies_the_contract():
+    payload = example_payloads(ESCALATION)["without a diagnosis"]
+
+    assert "watering" not in payload["context"]
+    assert payload_errors(ESCALATION, payload) == []
+
+
 def test_the_codec_rejects_every_payload_that_lacks_a_required_field():
     example = example_payloads(ESCALATION)["after a diagnosis"]
 

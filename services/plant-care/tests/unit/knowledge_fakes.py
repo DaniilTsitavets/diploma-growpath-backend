@@ -16,6 +16,7 @@ class FakeKnowledge:
         self.documents: dict[uuid.UUID, DocumentDraft] = {}
         self.found: list[RetrievedSection] = []
         self.searches: list[tuple[str, str, int]] = []
+        self.min_ranks: list[float] = []
         self.search_error: Exception | None = None
 
     def sync(self, document: DocumentDraft) -> SyncResult:
@@ -35,8 +36,11 @@ class FakeKnowledge:
     def content_hashes(self, slugs: Collection[str]) -> dict[str, str]:
         return {d.slug: d.content_sha256 for d in self.documents.values() if d.slug in slugs}
 
-    def search(self, question: str, species: str, limit: int) -> list[RetrievedSection]:
+    def search(
+        self, question: str, species: str, limit: int, min_rank: float = 0.0
+    ) -> list[RetrievedSection]:
         self.searches.append((question, species, limit))
+        self.min_ranks.append(min_rank)
         if self.search_error is not None:
             raise self.search_error
         return self.found[:limit]

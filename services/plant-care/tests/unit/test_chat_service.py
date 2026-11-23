@@ -77,6 +77,14 @@ def test_the_question_is_normalised_and_searched_in_the_species_of_the_journal(
     assert scenario.uow.knowledge.searches == [("Café water?", "Basil", 3)]
 
 
+def test_the_search_gets_the_configured_minimum_rank(scenario: ChatScenario):
+    service = scenario.service(FakeChatModel(), min_rank=1.25)
+
+    scenario.ask(service)
+
+    assert scenario.uow.knowledge.min_ranks == [1.25]
+
+
 def test_the_model_gets_the_sections_the_species_and_the_effort_of_the_tier(
     scenario: ChatScenario,
 ):

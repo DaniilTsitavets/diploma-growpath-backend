@@ -204,11 +204,14 @@ class KnowledgeRepository(Protocol):
         """The stored content hash of each of the slugs that exist."""
         ...
 
-    def search(self, question: str, species: str, limit: int) -> list[RetrievedSection]:
+    def search(
+        self, question: str, species: str, limit: int, min_rank: float = 0.0
+    ) -> list[RetrievedSection]:
         """Sections matching the question, best first, at most `limit`.
 
-        Only sections of the species (case-insensitive) and general ones are searched; when fewer
-        than `limit` match, the species' own sections fill the rest in document order.
+        Only sections of the species (case-insensitive) and general ones are searched; a match
+        ranked below `min_rank` is ignored. When fewer than `limit` match, the species' own
+        sections fill the rest in document order.
         """
         ...
 
