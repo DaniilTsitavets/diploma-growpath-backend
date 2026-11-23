@@ -16,10 +16,8 @@ from tests.unit.settings import make_settings
 USER = uuid.uuid4()
 AS_USER = {"X-User-Id": str(USER), "X-User-Groups": "users"}
 QUESTIONNAIRE = {
-    "drainage": "good",
     "lighting": "bright_indirect",
-    "finger_test": "dry",
-    "pot_weight": "lighter",
+    "dry_depth": "about_2_3cm",
 }
 
 
@@ -67,7 +65,13 @@ def test_planting_a_journal_computes_checkpoints_on_read(client: TestClient, jou
 def test_an_update_is_idempotent_and_reserves_quota_once(
     client: TestClient, journal_id, quota: FakeAiQuota
 ):
-    body = {"id": str(uuid.uuid4()), **QUESTIONNAIRE, "sensor_reading": "35.50"}
+    body = {
+        "id": str(uuid.uuid4()),
+        **QUESTIONNAIRE,
+        "sensor_reading": "35.50",
+        "sensor_unit": "vwc_pct",
+        "air_measured_at": "2026-11-11T09:30:00+01:00",
+    }
     url = f"/v1/journals/{journal_id}/updates"
 
     first = client.post(url, json=body, headers=AS_USER)
@@ -75,6 +79,10 @@ def test_an_update_is_idempotent_and_reserves_quota_once(
 
     assert (first.status_code, again.status_code) == (201, 200)
     assert again.json() == first.json()
+    assert first.json()["sensor_reading"] == "35.50"
+    assert first.json()["sensor_unit"] == "vwc_pct"
+    assert first.json()["watering_method"] == "unknown"
+    assert first.json()["air_measured_at"] == "2026-11-11T08:30:00Z"
     assert first.json()["diagnosis"]["status"] == "diagnosis_pending"
     assert len(quota.reserved) == 1
 

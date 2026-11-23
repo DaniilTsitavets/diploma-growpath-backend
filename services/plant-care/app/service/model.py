@@ -1,14 +1,8 @@
 import uuid
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import date, datetime
 from decimal import Decimal
 from enum import StrEnum
-
-
-class Drainage(StrEnum):
-    GOOD = "good"
-    POOR = "poor"
-    NONE = "none"
 
 
 class Lighting(StrEnum):
@@ -18,16 +12,50 @@ class Lighting(StrEnum):
     DIRECT_SUN = "direct_sun"
 
 
-class FingerTest(StrEnum):
-    DRY = "dry"
-    SLIGHTLY_MOIST = "slightly_moist"
-    WET = "wet"
+class YesNo(StrEnum):
+    YES = "yes"
+    NO = "no"
 
 
-class PotWeight(StrEnum):
-    LIGHTER = "lighter"
-    AS_EXPECTED = "as_expected"
-    HEAVIER = "heavier"
+class Answer(StrEnum):
+    YES = "yes"
+    NO = "no"
+    UNKNOWN = "unknown"
+
+
+class WateringMethod(StrEnum):
+    THROUGH_DRAINAGE = "through_drainage"
+    PARTIAL = "partial"
+    UNKNOWN = "unknown"
+
+
+class PotDiameterClass(StrEnum):
+    LT_10 = "lt_10"
+    FROM_10_TO_15 = "10_15"
+    FROM_15_TO_20 = "15_20"
+    FROM_20_TO_30 = "20_30"
+    GT_30 = "gt_30"
+    UNKNOWN = "unknown"
+
+
+class DryDepth(StrEnum):
+    NOT_DRY = "not_dry"
+    ABOUT_2_3_CM = "about_2_3cm"
+    ABOUT_5_CM = "about_5cm"
+    WHOLE_ROOT_BALL_DRY = "whole_root_ball_dry"
+    UNKNOWN = "unknown"
+
+
+class PotWeightRelative(StrEnum):
+    ABOUT_SAME = "about_same"
+    NOTICEABLY_LIGHTER = "noticeably_lighter"
+    VERY_LIGHT = "very_light"
+    UNKNOWN = "unknown"
+
+
+class SensorUnit(StrEnum):
+    VWC_PCT = "vwc_pct"
+    RAW = "raw"
 
 
 class PhotoKind(StrEnum):
@@ -84,27 +112,31 @@ class Journal:
 class NewUpdate:
     id: uuid.UUID
     journal_id: uuid.UUID
-    last_watered_on: date | None
-    watering_interval_days: int | None
-    drainage: Drainage
     lighting: Lighting
-    finger_test: FingerTest
-    pot_weight: PotWeight
-    sensor_reading: Decimal | None
+    last_watered_on: date | None = None
+    watering_method: WateringMethod = WateringMethod.UNKNOWN
+    pot_diameter_class: PotDiameterClass = PotDiameterClass.UNKNOWN
+    drainage_holes: Answer = Answer.UNKNOWN
+    standing_water_over_1h: Answer = Answer.UNKNOWN
+    dry_depth: DryDepth = DryDepth.UNKNOWN
+    pot_weight_relative: PotWeightRelative = PotWeightRelative.UNKNOWN
+    pot_weight_after_watering_g: Decimal | None = None
+    pot_weight_now_g: Decimal | None = None
+    repotted_or_moved: YesNo | None = None
+    sensor_reading: Decimal | None = None
+    sensor_unit: SensorUnit | None = None
+    air_temp_c: Decimal | None = None
+    air_rh_pct: Decimal | None = None
+    air_measured_at: datetime | None = None
+    air_temp_min_c: Decimal | None = None
+    air_temp_max_c: Decimal | None = None
+    air_rh_min_pct: Decimal | None = None
+    air_rh_max_pct: Decimal | None = None
 
 
 @dataclass(frozen=True)
-class UpdateRecord:
-    id: uuid.UUID
-    journal_id: uuid.UUID
-    last_watered_on: date | None
-    watering_interval_days: int | None
-    drainage: Drainage
-    lighting: Lighting
-    finger_test: FingerTest
-    pot_weight: PotWeight
-    sensor_reading: Decimal | None
-    created_at: datetime
+class UpdateRecord(NewUpdate):
+    created_at: datetime = field(kw_only=True)
 
 
 @dataclass(frozen=True)

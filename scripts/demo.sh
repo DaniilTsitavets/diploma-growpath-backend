@@ -322,8 +322,9 @@ new_update() {
   ensure_journal
   UPDATE_ID=$(new_uuid)
   body=$(jq -n --arg id "$UPDATE_ID" --arg watered "$(day_offset -2)" '{
-    id: $id, last_watered_on: $watered, watering_interval_days: 3, drainage: "poor",
-    lighting: "low", finger_test: "wet", pot_weight: "heavier", sensor_reading: 82.5}')
+    id: $id, last_watered_on: $watered, lighting: "low", watering_method: "partial",
+    drainage_holes: "no", standing_water_over_1h: "yes", dry_depth: "not_dry",
+    pot_weight_relative: "about_same", sensor_reading: 82.5, sensor_unit: "vwc_pct"}')
   gwj POST "journals/$JOURNAL_ID/updates" "$TOKEN" "$body"
   expect "POST /journals/{id}/updates" 201 "$CODE"
   for kind in overview soil; do upload_photo "$kind"; done

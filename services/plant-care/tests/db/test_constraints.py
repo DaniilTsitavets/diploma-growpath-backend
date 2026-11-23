@@ -50,13 +50,30 @@ def test_journal_accepts_a_hundred_characters_and_starts_unplanted(session: Sess
 @pytest.mark.parametrize(
     ("constraint", "fields"),
     [
-        ("ck_updates_drainage", {"drainage": "ok"}),
         ("ck_updates_lighting", {"lighting": "dark"}),
-        ("ck_updates_finger_test", {"finger_test": "soaked"}),
-        ("ck_updates_pot_weight", {"pot_weight": "same"}),
-        ("ck_updates_watering_interval_days", {"watering_interval_days": 0}),
-        ("ck_updates_watering_interval_days", {"watering_interval_days": 366}),
-        ("ck_updates_sensor_reading", {"sensor_reading": -0.01}),
+        ("ck_updates_watering_method", {"watering_method": "sprinkled"}),
+        ("ck_updates_pot_diameter_class", {"pot_diameter_class": "huge"}),
+        ("ck_updates_drainage_holes", {"drainage_holes": "maybe"}),
+        ("ck_updates_standing_water_over_1h", {"standing_water_over_1h": "maybe"}),
+        ("ck_updates_dry_depth", {"dry_depth": "damp"}),
+        ("ck_updates_pot_weight_relative", {"pot_weight_relative": "heavier"}),
+        ("ck_updates_pot_weight_after_watering_g", {"pot_weight_after_watering_g": 0}),
+        ("ck_updates_pot_weight_after_watering_g", {"pot_weight_after_watering_g": 200001}),
+        ("ck_updates_pot_weight_now_g", {"pot_weight_now_g": 0}),
+        ("ck_updates_repotted_or_moved", {"repotted_or_moved": "unknown"}),
+        ("ck_updates_sensor_reading", {"sensor_reading": -0.01, "sensor_unit": "raw"}),
+        ("ck_updates_sensor_unit", {"sensor_reading": 1, "sensor_unit": "pct"}),
+        ("ck_updates_sensor_reading_unit", {"sensor_reading": 1}),
+        ("ck_updates_sensor_reading_unit", {"sensor_unit": "raw"}),
+        ("ck_updates_sensor_vwc_pct", {"sensor_reading": 100.5, "sensor_unit": "vwc_pct"}),
+        ("ck_updates_air_temp_c", {"air_temp_c": 60.5}),
+        ("ck_updates_air_temp_min_c", {"air_temp_min_c": -50.5}),
+        ("ck_updates_air_temp_max_c", {"air_temp_max_c": 61}),
+        ("ck_updates_air_temp_range", {"air_temp_min_c": 20, "air_temp_max_c": 10}),
+        ("ck_updates_air_rh_pct", {"air_rh_pct": 100.5}),
+        ("ck_updates_air_rh_min_pct", {"air_rh_min_pct": -1}),
+        ("ck_updates_air_rh_max_pct", {"air_rh_max_pct": 101}),
+        ("ck_updates_air_rh_range", {"air_rh_min_pct": 70, "air_rh_max_pct": 60}),
     ],
 )
 def test_update_rejects_values_outside_the_questionnaire(
@@ -70,8 +87,13 @@ def test_update_needs_an_existing_journal(session: Session):
 
 
 def test_update_accepts_the_edges_of_the_questionnaire(session: Session):
-    add_update(session, watering_interval_days=1, sensor_reading=0)
-    add_update(session, watering_interval_days=365, sensor_reading=100.5)
+    add_update(session, sensor_reading=0, sensor_unit="vwc_pct", pot_weight_now_g=0.01)
+    add_update(session, sensor_reading=100, sensor_unit="vwc_pct", pot_weight_now_g=200000)
+    add_update(session, sensor_reading=5000.5, sensor_unit="raw")
+    add_update(session, air_temp_min_c=-50, air_temp_max_c=-50, air_rh_min_pct=0, air_rh_max_pct=0)
+    add_update(
+        session, air_temp_min_c=60, air_temp_max_c=60, air_rh_min_pct=100, air_rh_max_pct=100
+    )
 
 
 def test_photo_kind_must_be_documented(session: Session):

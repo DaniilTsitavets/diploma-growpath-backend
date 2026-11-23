@@ -2,6 +2,7 @@ import json
 import uuid
 from dataclasses import dataclass
 from datetime import datetime, timedelta
+from decimal import Decimal
 from typing import Protocol
 
 from app.service.errors import ContextTooLarge
@@ -14,7 +15,7 @@ from app.service.model import (
 )
 
 CONTEXT_LIMIT_BYTES = 64 * 1024
-CONTEXT_SCHEMA_VERSION = 1
+CONTEXT_SCHEMA_VERSION = 2
 
 
 @dataclass(frozen=True)
@@ -85,22 +86,44 @@ def build_context(source: ContextSource, max_bytes: int = CONTEXT_LIMIT_BYTES) -
     return context
 
 
+def _update(update: UpdateRecord) -> dict[str, object]:
+    """The nine always-answered keys plus the optional ones, which are omitted when null."""
+    optional = {
+        "last_watered_on": _iso(update.last_watered_on),
+        "pot_weight_after_watering_g": _decimal(update.pot_weight_after_watering_g),
+        "pot_weight_now_g": _decimal(update.pot_weight_now_g),
+        "repotted_or_moved": None
+        if update.repotted_or_moved is None
+        else update.repotted_or_moved.value,
+        "sensor_reading": _decimal(update.sensor_reading),
+        "sensor_unit": None if update.sensor_unit is None else update.sensor_unit.value,
+        "air_temp_c": _decimal(update.air_temp_c),
+        "air_rh_pct": _decimal(update.air_rh_pct),
+        "air_measured_at": _iso(update.air_measured_at),
+        "air_temp_min_c": _decimal(update.air_temp_min_c),
+        "air_temp_max_c": _decimal(update.air_temp_max_c),
+        "air_rh_min_pct": _decimal(update.air_rh_min_pct),
+        "air_rh_max_pct": _decimal(update.air_rh_max_pct),
+    }
+    return {
+        "id": str(update.id),
+        "created_at": update.created_at.isoformat(),
+        "lighting": update.lighting.value,
+        "watering_method": update.watering_method.value,
+        "pot_diameter_class": update.pot_diameter_class.value,
+        "drainage_holes": update.drainage_holes.value,
+        "standing_water_over_1h": update.standing_water_over_1h.value,
+        "dry_depth": update.dry_depth.value,
+        "pot_weight_relative": update.pot_weight_relative.value,
+        **{key: value for key, value in optional.items() if value is not None},
+    }
+
+
 def _context(source: ContextSource) -> dict[str, object]:
-    update = source.update
     context: dict[str, object] = {
         "schema_version": CONTEXT_SCHEMA_VERSION,
         "species": source.species,
-        "update": {
-            "id": str(update.id),
-            "created_at": update.created_at.isoformat(),
-            "last_watered_on": _iso(update.last_watered_on),
-            "watering_interval_days": update.watering_interval_days,
-            "drainage": update.drainage.value,
-            "lighting": update.lighting.value,
-            "finger_test": update.finger_test.value,
-            "pot_weight": update.pot_weight.value,
-            "sensor_reading": None if update.sensor_reading is None else str(update.sensor_reading),
-        },
+        "update": _update(source.update),
         "photos": [{"kind": p.kind.value, "storage_key": p.storage_key} for p in source.photos],
     }
     if source.escalation.user_question is not None:
@@ -141,6 +164,10 @@ def _history(entries: list[HistoryEntry]) -> list[dict[str, object]]:
         }
         for entry in entries
     ]
+
+
+def _decimal(value: Decimal | None) -> str | None:
+    return None if value is None else str(value)
 
 
 def _iso(value: object) -> str | None:

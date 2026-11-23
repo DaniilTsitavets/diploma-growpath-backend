@@ -1,5 +1,7 @@
 import json
-from datetime import timedelta
+from dataclasses import replace
+from datetime import date, timedelta
+from decimal import Decimal
 
 import pytest
 
@@ -12,9 +14,16 @@ from app.service.escalation_events import (
     escalation_requested,
 )
 from app.service.model import (
+    Answer,
     CandidateRecord,
     DiagnosisStatus,
+    DryDepth,
     HistoryEntry,
+    PotDiameterClass,
+    PotWeightRelative,
+    SensorUnit,
+    WateringMethod,
+    YesNo,
 )
 from tests.unit.delivery_scenario import ACK_MARGIN, TTL, DeliveryScenario
 from tests.unit.fakes import NOW
@@ -40,18 +49,89 @@ def test_the_context_carries_the_question_the_clarification_and_the_update():
 
     context = build_context(source(scenario, user_question="Why the spots?"))
 
-    assert context["schema_version"] == 1
+    assert context["schema_version"] == 2
     assert context["species"] == "Mint"
     assert context["user_question"] == "Why the spots?"
     assert context["clarifying_question"] == "Is the soil soggy?"
     assert context["clarifying_answer"] == "Yes"
-    assert context["update"]["drainage"] == "good"
+    assert context["update"]["lighting"] == "low"
     assert context["photos"] == [
         {"kind": "overview", "storage_key": "journals/overview"},
         {"kind": "soil", "storage_key": "journals/soil"},
     ]
     assert context["diagnosis"]["status"] == "completed"
     assert context["history"] == []
+
+
+def test_the_update_object_carries_the_extended_questionnaire():
+    scenario = DeliveryScenario()
+    update = replace(
+        scenario.update,
+        last_watered_on=date(2026, 11, 9),
+        watering_method=WateringMethod.THROUGH_DRAINAGE,
+        pot_diameter_class=PotDiameterClass.GT_30,
+        drainage_holes=Answer.YES,
+        standing_water_over_1h=Answer.NO,
+        dry_depth=DryDepth.NOT_DRY,
+        pot_weight_relative=PotWeightRelative.ABOUT_SAME,
+        pot_weight_after_watering_g=Decimal("900.00"),
+        pot_weight_now_g=Decimal("850.50"),
+        repotted_or_moved=YesNo.NO,
+        sensor_reading=Decimal("42.00"),
+        sensor_unit=SensorUnit.RAW,
+        air_temp_c=Decimal("21.50"),
+        air_rh_pct=Decimal("55.00"),
+        air_measured_at=NOW,
+        air_temp_min_c=Decimal("18.00"),
+        air_temp_max_c=Decimal("24.00"),
+        air_rh_min_pct=Decimal("40.00"),
+        air_rh_max_pct=Decimal("60.00"),
+    )
+
+    context = build_context(replace(source(scenario), update=update))
+
+    assert context["update"] == {
+        "id": str(update.id),
+        "created_at": update.created_at.isoformat(),
+        "lighting": "low",
+        "last_watered_on": "2026-11-09",
+        "watering_method": "through_drainage",
+        "pot_diameter_class": "gt_30",
+        "drainage_holes": "yes",
+        "standing_water_over_1h": "no",
+        "dry_depth": "not_dry",
+        "pot_weight_relative": "about_same",
+        "pot_weight_after_watering_g": "900.00",
+        "pot_weight_now_g": "850.50",
+        "repotted_or_moved": "no",
+        "sensor_reading": "42.00",
+        "sensor_unit": "raw",
+        "air_temp_c": "21.50",
+        "air_rh_pct": "55.00",
+        "air_measured_at": NOW.isoformat(),
+        "air_temp_min_c": "18.00",
+        "air_temp_max_c": "24.00",
+        "air_rh_min_pct": "40.00",
+        "air_rh_max_pct": "60.00",
+    }
+
+
+def test_unanswered_questions_are_unknown_or_null_in_the_context():
+    scenario = DeliveryScenario()
+
+    update = build_context(source(scenario))["update"]
+
+    assert update == {
+        "id": str(scenario.update.id),
+        "created_at": scenario.update.created_at.isoformat(),
+        "lighting": "low",
+        "watering_method": "unknown",
+        "pot_diameter_class": "unknown",
+        "drainage_holes": "unknown",
+        "standing_water_over_1h": "unknown",
+        "dry_depth": "unknown",
+        "pot_weight_relative": "unknown",
+    }
 
 
 def test_optional_parts_are_left_out_when_absent():

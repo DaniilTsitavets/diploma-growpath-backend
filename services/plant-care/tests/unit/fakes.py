@@ -10,10 +10,8 @@ from app.service.model import (
     DiagnosisResult,
     DiagnosisStatus,
     DiagnosisSummary,
-    Drainage,
     FeedCursor,
     FeedItem,
-    FingerTest,
     Journal,
     Lighting,
     ModelEffort,
@@ -21,7 +19,6 @@ from app.service.model import (
     NewUpdate,
     Photo,
     PhotoKind,
-    PotWeight,
     UpdateRecord,
 )
 from tests.unit.knowledge_fakes import FakePlantProfiles
@@ -243,17 +240,7 @@ class FakeUpdates:
 
     def seed(self, journal_id: uuid.UUID, created_at: datetime | None = None) -> UpdateRecord:
         update = self._record(
-            NewUpdate(
-                uuid.uuid4(),
-                journal_id,
-                None,
-                None,
-                Drainage.GOOD,
-                Lighting.LOW,
-                FingerTest.DRY,
-                PotWeight.LIGHTER,
-                None,
-            ),
+            NewUpdate(uuid.uuid4(), journal_id, Lighting.LOW),
             created_at or NOW + timedelta(minutes=len(self.rows)),
         )
         self.rows[update.id] = update

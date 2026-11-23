@@ -3,14 +3,7 @@ import uuid
 import pytest
 
 from app.service.errors import AiQuotaExhausted, InvalidCursor, JournalNotFound, UpdateNotFound
-from app.service.model import (
-    DiagnosisStatus,
-    Drainage,
-    FingerTest,
-    Lighting,
-    NewUpdate,
-    PotWeight,
-)
+from app.service.model import DiagnosisStatus, Lighting, NewUpdate
 from app.service.updates import UpdateService
 from tests.unit.fakes import FakeAiQuota, FakeUnitOfWork
 
@@ -18,17 +11,7 @@ USER = uuid.uuid4()
 
 
 def new_update(journal_id: uuid.UUID, update_id: uuid.UUID | None = None) -> NewUpdate:
-    return NewUpdate(
-        update_id or uuid.uuid4(),
-        journal_id,
-        None,
-        7,
-        Drainage.GOOD,
-        Lighting.MEDIUM,
-        FingerTest.DRY,
-        PotWeight.LIGHTER,
-        None,
-    )
+    return NewUpdate(update_id or uuid.uuid4(), journal_id, Lighting.MEDIUM)
 
 
 @pytest.fixture

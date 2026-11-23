@@ -3,13 +3,11 @@ from datetime import UTC, date, datetime
 
 from app.service.diagnosis_model import DiagnosisRequest
 from app.service.model import (
-    Drainage,
-    FingerTest,
+    Answer,
     Lighting,
     ModelEffort,
     Photo,
     PhotoKind,
-    PotWeight,
     UpdateRecord,
 )
 
@@ -18,13 +16,9 @@ def make_update(**overrides) -> UpdateRecord:
     fields = {
         "id": uuid.uuid4(),
         "journal_id": uuid.uuid4(),
-        "last_watered_on": date(2026, 11, 9),
-        "watering_interval_days": 7,
-        "drainage": Drainage.POOR,
         "lighting": Lighting.MEDIUM,
-        "finger_test": FingerTest.WET,
-        "pot_weight": PotWeight.HEAVIER,
-        "sensor_reading": None,
+        "last_watered_on": date(2026, 11, 9),
+        "standing_water_over_1h": Answer.YES,
         "created_at": datetime(2026, 11, 11, tzinfo=UTC),
     }
     return UpdateRecord(**{**fields, **overrides})

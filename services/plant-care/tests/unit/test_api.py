@@ -1,5 +1,5 @@
 import uuid
-from datetime import date
+from datetime import UTC, date, datetime, timedelta
 
 import pytest
 from fastapi import FastAPI
@@ -16,10 +16,8 @@ PROBLEM_JSON = "application/problem+json"
 USER = uuid.uuid4()
 AS_USER = {"X-User-Id": str(USER), "X-User-Groups": "users"}
 QUESTIONNAIRE = {
-    "drainage": "good",
     "lighting": "bright_indirect",
-    "finger_test": "dry",
-    "pot_weight": "lighter",
+    "dry_depth": "about_2_3cm",
 }
 
 
@@ -43,6 +41,10 @@ def client(uow: FakeUnitOfWork, quota: FakeAiQuota) -> TestClient:
     app.include_router(journals.router)
     app.include_router(updates.router)
     return TestClient(app, raise_server_exceptions=False)
+
+
+def utc_today():
+    return datetime.now(UTC).date()
 
 
 def update_body(**overrides) -> dict:
@@ -168,7 +170,7 @@ def test_an_update_is_created_with_a_pending_diagnosis_then_replayed(
     client: TestClient, uow: FakeUnitOfWork
 ):
     journal = uow.journals.seed(USER)
-    body = update_body(watering_interval_days=7, sensor_reading="35.5")
+    body = update_body(sensor_reading="35.5", sensor_unit="vwc_pct")
     url = f"/v1/journals/{journal.id}/updates"
 
     first = client.post(url, json=body, headers=AS_USER)
@@ -179,6 +181,112 @@ def test_an_update_is_created_with_a_pending_diagnosis_then_replayed(
     assert first.json()["id"] == body["id"]
     assert first.json()["diagnosis"]["status"] == "diagnosis_pending"
     assert first.json()["escalation"] is None
+
+
+def test_an_update_with_only_the_lighting_defaults_the_rest(
+    client: TestClient, uow: FakeUnitOfWork
+):
+    journal = uow.journals.seed(USER)
+    body = {"id": str(uuid.uuid4()), "lighting": "low"}
+
+    response = client.post(f"/v1/journals/{journal.id}/updates", json=body, headers=AS_USER)
+
+    assert response.status_code == 201
+    stored = response.json()
+    assert stored["lighting"] == "low"
+    for field in (
+        "watering_method",
+        "pot_diameter_class",
+        "drainage_holes",
+        "standing_water_over_1h",
+        "dry_depth",
+        "pot_weight_relative",
+    ):
+        assert stored[field] == "unknown"
+    for field in (
+        "last_watered_on",
+        "pot_weight_after_watering_g",
+        "pot_weight_now_g",
+        "repotted_or_moved",
+        "sensor_reading",
+        "sensor_unit",
+        "air_temp_c",
+        "air_rh_pct",
+        "air_measured_at",
+        "air_temp_min_c",
+        "air_temp_max_c",
+        "air_rh_min_pct",
+        "air_rh_max_pct",
+    ):
+        assert stored[field] is None
+
+
+def test_every_questionnaire_field_is_stored_and_returned(client: TestClient, uow: FakeUnitOfWork):
+    journal = uow.journals.seed(USER)
+    body = update_body(
+        last_watered_on=TODAY.isoformat(),
+        watering_method="through_drainage",
+        pot_diameter_class="10_15",
+        drainage_holes="yes",
+        standing_water_over_1h="no",
+        dry_depth="whole_root_ball_dry",
+        pot_weight_relative="very_light",
+        pot_weight_after_watering_g="820.5",
+        pot_weight_now_g="600",
+        repotted_or_moved="no",
+        sensor_reading="3200",
+        sensor_unit="raw",
+        air_temp_c="21.5",
+        air_rh_pct="48",
+        air_measured_at="2026-11-11T09:30:00+02:00",
+        air_temp_min_c="-50",
+        air_temp_max_c="60",
+        air_rh_min_pct="0",
+        air_rh_max_pct="100",
+    )
+
+    response = client.post(f"/v1/journals/{journal.id}/updates", json=body, headers=AS_USER)
+
+    assert response.status_code == 201
+    assert {key: response.json()[key] for key in body} == {
+        **body,
+        "pot_weight_after_watering_g": "820.5",
+        "pot_weight_now_g": "600",
+        "sensor_reading": "3200",
+        "air_temp_c": "21.5",
+        "air_rh_pct": "48",
+        "air_temp_min_c": "-50",
+        "air_temp_max_c": "60",
+        "air_rh_min_pct": "0",
+        "air_rh_max_pct": "100",
+    }
+
+
+@pytest.mark.parametrize(
+    "overrides",
+    [
+        {"sensor_reading": "100", "sensor_unit": "vwc_pct"},
+        {"sensor_reading": "0", "sensor_unit": "vwc_pct"},
+        {"sensor_reading": "100000", "sensor_unit": "raw"},
+        {"pot_weight_now_g": "0.01"},
+        {"pot_weight_after_watering_g": "200000"},
+        {"air_temp_min_c": "20", "air_temp_max_c": "20"},
+        {"air_rh_min_pct": "55", "air_rh_max_pct": "55"},
+        {"air_temp_min_c": "20"},
+        {"last_watered_on": utc_today().isoformat()},
+        {"repotted_or_moved": None},
+    ],
+)
+def test_the_edges_of_the_questionnaire_are_accepted(
+    client: TestClient, uow: FakeUnitOfWork, overrides: dict
+):
+    journal = uow.journals.seed(USER)
+
+    response = client.post(
+        f"/v1/journals/{journal.id}/updates", json=update_body(**overrides), headers=AS_USER
+    )
+
+    assert response.status_code == 201
 
 
 def test_an_exhausted_quota_is_409_with_a_code(
@@ -200,11 +308,39 @@ def test_an_exhausted_quota_is_409_with_a_code(
 @pytest.mark.parametrize(
     "overrides",
     [
-        {"drainage": "ok"},
-        {"watering_interval_days": 0},
-        {"watering_interval_days": 366},
-        {"sensor_reading": "-1"},
-        {"sensor_reading": "1.234"},
+        {"lighting": "dark"},
+        {"watering_method": "sprinkled"},
+        {"pot_diameter_class": "huge"},
+        {"drainage_holes": "maybe"},
+        {"standing_water_over_1h": "maybe"},
+        {"dry_depth": "damp"},
+        {"pot_weight_relative": "heavier"},
+        {"repotted_or_moved": "unknown"},
+        {"last_watered_on": (utc_today() + timedelta(days=1)).isoformat()},
+        {"pot_weight_now_g": "0"},
+        {"pot_weight_now_g": "-5"},
+        {"pot_weight_after_watering_g": "200000.01"},
+        {"sensor_reading": "-1", "sensor_unit": "raw"},
+        {"sensor_reading": "1.234", "sensor_unit": "raw"},
+        {"sensor_reading": "35"},
+        {"sensor_unit": "raw"},
+        {"sensor_reading": "100.01", "sensor_unit": "vwc_pct"},
+        {"sensor_reading": "5", "sensor_unit": "pct"},
+        {"air_temp_c": "60.01"},
+        {"air_temp_c": "-50.01"},
+        {"air_rh_pct": "100.01"},
+        {"air_rh_pct": "-0.01"},
+        {"air_measured_at": "2026-11-11T09:30:00"},
+        {"air_temp_min_c": "-51"},
+        {"air_temp_max_c": "61"},
+        {"air_temp_min_c": "25", "air_temp_max_c": "24.99"},
+        {"air_rh_min_pct": "-1"},
+        {"air_rh_max_pct": "101"},
+        {"air_rh_min_pct": "70", "air_rh_max_pct": "69"},
+        {"drainage": "good"},
+        {"finger_test": "dry"},
+        {"pot_weight": "lighter"},
+        {"watering_interval_days": 7},
         {"unknown": 1},
         {"id": "not-a-uuid"},
     ],

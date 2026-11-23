@@ -1,5 +1,5 @@
 import uuid
-from datetime import timedelta
+from datetime import UTC, date, datetime, timedelta
 from decimal import Decimal
 
 from sqlalchemy import select
@@ -9,14 +9,19 @@ from app.models import DiagnosisModel, UpdateModel
 from app.repository.diagnoses import SqlAlchemyDiagnosisRepository
 from app.repository.updates import SqlAlchemyUpdateRepository
 from app.service.model import (
+    Answer,
     DiagnosisStatus,
-    Drainage,
+    DryDepth,
     EscalationStatus,
     FeedCursor,
-    FingerTest,
     Lighting,
     NewUpdate,
-    PotWeight,
+    PotDiameterClass,
+    PotWeightRelative,
+    SensorUnit,
+    UpdateRecord,
+    WateringMethod,
+    YesNo,
 )
 from tests.db.factories import (
     add_diagnosis,
@@ -31,13 +36,26 @@ def new_update(journal_id: uuid.UUID, **overrides) -> NewUpdate:
     fields = {
         "id": uuid.uuid4(),
         "journal_id": journal_id,
-        "last_watered_on": None,
-        "watering_interval_days": 7,
-        "drainage": Drainage.GOOD,
         "lighting": Lighting.MEDIUM,
-        "finger_test": FingerTest.DRY,
-        "pot_weight": PotWeight.LIGHTER,
+        "last_watered_on": date(2026, 11, 9),
+        "watering_method": WateringMethod.PARTIAL,
+        "pot_diameter_class": PotDiameterClass.FROM_15_TO_20,
+        "drainage_holes": Answer.YES,
+        "standing_water_over_1h": Answer.NO,
+        "dry_depth": DryDepth.ABOUT_2_3_CM,
+        "pot_weight_relative": PotWeightRelative.NOTICEABLY_LIGHTER,
+        "pot_weight_after_watering_g": Decimal("900.50"),
+        "pot_weight_now_g": Decimal("700.00"),
+        "repotted_or_moved": YesNo.NO,
         "sensor_reading": Decimal("35.50"),
+        "sensor_unit": SensorUnit.VWC_PCT,
+        "air_temp_c": Decimal("21.50"),
+        "air_rh_pct": Decimal("48.00"),
+        "air_measured_at": datetime(2026, 11, 11, 9, 30, tzinfo=UTC),
+        "air_temp_min_c": Decimal("18.00"),
+        "air_temp_max_c": Decimal("24.00"),
+        "air_rh_min_pct": Decimal("40.00"),
+        "air_rh_max_pct": Decimal("60.00"),
     }
     return NewUpdate(**{**fields, **overrides})
 
@@ -48,10 +66,10 @@ def test_a_retried_update_id_is_not_stored_twice(session: Session):
     update = new_update(journal_id)
 
     first = repository.add(update)
-    retried = repository.add(new_update(journal_id, id=update.id, drainage=Drainage.POOR))
+    retried = repository.add(new_update(journal_id, id=update.id, lighting=Lighting.LOW))
 
     assert (first, retried) == (True, False)
-    assert session.scalars(select(UpdateModel.drainage)).all() == ["good"]
+    assert session.scalars(select(UpdateModel.lighting)).all() == ["medium"]
 
 
 def test_a_stored_update_round_trips_with_typed_answers(session: Session):
@@ -62,15 +80,24 @@ def test_a_stored_update_round_trips_with_typed_answers(session: Session):
     item = repository.item(update.id)
 
     assert item is not None
+    assert item.update == UpdateRecord(**vars(update), created_at=item.update.created_at)
+
+
+def test_unanswered_questions_are_stored_as_unknown_and_null(session: Session):
+    repository = SqlAlchemyUpdateRepository(session)
+    update = NewUpdate(uuid.uuid4(), add_journal(session)["id"], Lighting.LOW)
+    repository.add(update)
+
+    item = repository.item(update.id)
+
+    assert item is not None
     stored = item.update
-    assert (stored.drainage, stored.lighting, stored.finger_test, stored.pot_weight) == (
-        Drainage.GOOD,
-        Lighting.MEDIUM,
-        FingerTest.DRY,
-        PotWeight.LIGHTER,
-    )
-    assert stored.sensor_reading == Decimal("35.50")
-    assert stored.journal_id == update.journal_id
+    assert stored.watering_method is WateringMethod.UNKNOWN
+    assert stored.drainage_holes is Answer.UNKNOWN
+    assert stored.dry_depth is DryDepth.UNKNOWN
+    assert stored.repotted_or_moved is None
+    assert stored.sensor_unit is None
+    assert stored.air_measured_at is None
 
 
 def test_a_missing_update_is_none(session: Session):

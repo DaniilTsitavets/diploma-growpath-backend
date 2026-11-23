@@ -1,7 +1,7 @@
 from dataclasses import dataclass
 
 from app.service.diagnosis_model import DiagnosisRequest
-from app.service.model import Photo, PhotoKind
+from app.service.model import Photo, PhotoKind, UpdateRecord
 
 SPECIES_LIMIT = 100
 QUESTION_LIMIT = 500
@@ -61,6 +61,42 @@ def ordered_photos(photos: list[Photo]) -> list[Photo]:
     return sorted(photos, key=lambda photo: order.index(photo.kind))
 
 
+def _shown(value: object | None, missing: str) -> str:
+    return missing if value is None else str(value)
+
+
+def _questionnaire_lines(update: UpdateRecord) -> list[str]:
+    air_measured_at = None if update.air_measured_at is None else update.air_measured_at.isoformat()
+    answers = {
+        "lighting": update.lighting,
+        "last_watered_on": update.last_watered_on,
+        "watering_method": update.watering_method,
+        "pot_diameter_class": update.pot_diameter_class,
+        "drainage_holes": update.drainage_holes,
+        "standing_water_over_1h": update.standing_water_over_1h,
+        "dry_depth": update.dry_depth,
+        "pot_weight_relative": update.pot_weight_relative,
+        "repotted_or_moved": update.repotted_or_moved,
+    }
+    measurements = {
+        "pot_weight_after_watering_g": update.pot_weight_after_watering_g,
+        "pot_weight_now_g": update.pot_weight_now_g,
+        "soil_sensor_reading": update.sensor_reading,
+        "soil_sensor_unit": update.sensor_unit,
+        "air_temp_c": update.air_temp_c,
+        "air_rh_pct": update.air_rh_pct,
+        "air_measured_at": air_measured_at,
+        "air_temp_min_c": update.air_temp_min_c,
+        "air_temp_max_c": update.air_temp_max_c,
+        "air_rh_min_pct": update.air_rh_min_pct,
+        "air_rh_max_pct": update.air_rh_max_pct,
+    }
+    return [
+        *(f"{name}: {_shown(value, 'unknown')}" for name, value in answers.items()),
+        *(f"{name}: {_shown(value, 'none')}" for name, value in measurements.items()),
+    ]
+
+
 def build_prompt(request: DiagnosisRequest) -> Prompt:
     update = request.update
     photos = ordered_photos(request.photos)
@@ -68,13 +104,7 @@ def build_prompt(request: DiagnosisRequest) -> Prompt:
     lines = [
         f"<plant>{_quoted(request.species, SPECIES_LIMIT)}</plant>",
         "<questionnaire>",
-        f"last_watered_on: {update.last_watered_on or 'unknown'}",
-        f"watering_interval_days: {update.watering_interval_days or 'unknown'}",
-        f"drainage: {update.drainage.value}",
-        f"lighting: {update.lighting.value}",
-        f"finger_test: {update.finger_test.value}",
-        f"pot_weight: {update.pot_weight.value}",
-        f"soil_moisture_sensor_percent: {update.sensor_reading or 'none'}",
+        *_questionnaire_lines(update),
         "</questionnaire>",
         "<photos>",
         *photo_lines,
