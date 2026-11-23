@@ -1,7 +1,9 @@
 import uuid
 from datetime import datetime
+from typing import Any
 
 from sqlalchemy import CheckConstraint, DateTime, ForeignKey, func, text
+from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.models.base import Base
@@ -69,6 +71,9 @@ class DiagnosisModel(Base):
     recommendation: Mapped[str | None]
     escalation_offered: Mapped[bool] = mapped_column(server_default=text("false"))
     escalation_declined: Mapped[bool] = mapped_column(server_default=text("false"))
+    # NULL for diagnoses made before the assessment existed; without none_as_null, None would be
+    # stored as the JSON value `null`.
+    watering_assessment: Mapped[dict[str, Any] | None] = mapped_column(JSONB(none_as_null=True))
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
 

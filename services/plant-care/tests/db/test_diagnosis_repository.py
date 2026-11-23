@@ -1,10 +1,11 @@
 import uuid
 
-from sqlalchemy import select
+from sqlalchemy import select, text
 from sqlalchemy.orm import Session
 
 from app.models import DiagnosisCandidateModel, DiagnosisModel
 from app.repository.diagnoses import SqlAlchemyDiagnosisRepository
+from app.repository.updates import SqlAlchemyUpdateRepository
 from app.service.model import Candidate, DiagnosisResult, DiagnosisStatus, ModelEffort
 from tests.db.factories import add_candidate, add_diagnosis, add_update, violated
 
@@ -324,3 +325,54 @@ def test_declining_needs_an_offered_expert_and_happens_once(session: Session):
     assert repository.decline_escalation(offered) is True
     assert repository.decline_escalation(offered) is False
     assert stored(session, offered).escalation_declined is True
+
+
+ASSESSMENT = {"status": "on_track", "reliability": "medium", "flags": [], "assumptions": ["a"]}
+
+
+def stored_as_sql_null(session: Session, update_id: uuid.UUID) -> bool:
+    return session.scalar(
+        text("SELECT watering_assessment IS NULL FROM diagnoses WHERE update_id = :id"),
+        {"id": update_id},
+    )
+
+
+def test_the_result_stores_the_watering_assessment_and_get_reads_it_back(session: Session):
+    update_id = pending(session, model_effort="high")
+    repository = SqlAlchemyDiagnosisRepository(session)
+
+    recorded = repository.record_result(update_id, RESERVATION, result(), ASSESSMENT)
+
+    assert recorded is True
+    assert repository.get(update_id).summary.watering == ASSESSMENT
+
+
+def test_a_degraded_attempt_keeps_the_assessment_it_was_computed_with(session: Session):
+    update_id = pending(session, model_effort="high")
+    repository = SqlAlchemyDiagnosisRepository(session)
+
+    repository.mark_degraded(update_id, RESERVATION, "fallback", ASSESSMENT)
+
+    summary = repository.get(update_id).summary
+    assert (summary.status, summary.watering) == (DiagnosisStatus.DEGRADED, ASSESSMENT)
+
+
+def test_no_assessment_is_a_sql_null_and_not_a_json_null(session: Session):
+    update_id = pending(session, model_effort="high")
+    repository = SqlAlchemyDiagnosisRepository(session)
+
+    repository.record_result(update_id, RESERVATION, result())
+
+    assert stored_as_sql_null(session, update_id) is True
+    assert repository.get(update_id).summary.watering is None
+
+
+def test_the_feed_item_carries_the_stored_assessment(session: Session):
+    update_id = pending(session, model_effort="high")
+    SqlAlchemyDiagnosisRepository(session).record_result(
+        update_id, RESERVATION, result(), ASSESSMENT
+    )
+
+    item = SqlAlchemyUpdateRepository(session).item(update_id)
+
+    assert item.diagnosis.watering == ASSESSMENT

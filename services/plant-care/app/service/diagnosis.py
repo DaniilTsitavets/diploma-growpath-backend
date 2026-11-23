@@ -3,6 +3,8 @@ import unicodedata
 import uuid
 from collections.abc import Callable
 from dataclasses import dataclass
+from datetime import UTC, date, datetime
+from typing import Any
 
 from app.service.ai_quota import AiQuota
 from app.service.consensus import decide
@@ -18,6 +20,7 @@ from app.service.errors import (
     InvalidRequest,
     PhotosMissing,
     ReservationUnusable,
+    Unavailable,
     UpdateNotFound,
 )
 from app.service.model import (
@@ -30,8 +33,13 @@ from app.service.model import (
 )
 from app.service.photos import missing_required
 from app.service.ports import UnitOfWork
+from app.service.update_watering import assess_update
 
 logger = logging.getLogger(__name__)
+
+
+def utc_today() -> date:
+    return datetime.now(UTC).date()
 
 
 @dataclass(frozen=True)
@@ -71,6 +79,8 @@ class DiagnosisService:
         dominance_rule: DominanceRule,
         samples: int,
         sample_temperature: float,
+        watering_history_limit: int,
+        today: Callable[[], date] = utc_today,
     ) -> None:
         self._unit_of_work = unit_of_work
         self._ai_quota = ai_quota
@@ -79,6 +89,8 @@ class DiagnosisService:
         self._dominance_rule = dominance_rule
         self._samples = samples
         self._sample_temperature = sample_temperature
+        self._watering_history_limit = watering_history_limit
+        self._today = today
 
     def get(self, user_id: uuid.UUID, update_id: uuid.UUID) -> Diagnosis:
         with self._unit_of_work() as uow:
@@ -198,6 +210,7 @@ class DiagnosisService:
 
     def _execute(self, user_id: uuid.UUID, context: Context, attempt: Attempt) -> Diagnosis:
         summary = context.diagnosis.summary
+        watering = self._assess_watering(context)
         request = DiagnosisRequest(
             species=context.species,
             update=context.update,
@@ -206,6 +219,7 @@ class DiagnosisService:
             clarifying_question=summary.clarifying_question,
             clarifying_answer=summary.clarifying_answer,
             temperature=self._sample_temperature if self._samples > 1 else None,
+            watering=watering,
         )
         update_id = context.diagnosis.update_id
         try:
@@ -220,14 +234,50 @@ class DiagnosisService:
                 "the model gave no usable answer, the diagnosis degrades",
                 extra={"update_id": str(update_id), "failure": type(failure).__name__},
             )
-            return self._degrade(user_id, update_id, attempt)
-        return self._store(user_id, update_id, attempt, result)
+            return self._degrade(user_id, update_id, attempt, watering)
+        return self._store(user_id, update_id, attempt, result, watering)
+
+    def _assess_watering(self, context: Context) -> dict[str, Any] | None:
+        """The watering facts the model receives; the stored ones when the user clarifies.
+
+        A clarification answers the question about the same attempt, so the facts it was asked
+        with stay and do not shift with the day. A diagnosis made before the assessment existed
+        has none stored and is assessed now. None when the database cannot be reached: the
+        diagnosis then runs on the raw questionnaire alone.
+        """
+        summary = context.diagnosis.summary
+        if summary.clarifying_answer is not None and summary.watering is not None:
+            return summary.watering
+        try:
+            with self._unit_of_work() as uow:
+                assessment = assess_update(
+                    uow.plant_profiles,
+                    uow.updates,
+                    context.update,
+                    context.species,
+                    self._today(),
+                    self._watering_history_limit,
+                )
+        except Unavailable:
+            logger.warning(
+                "the watering assessment could not be computed",
+                extra={"update_id": str(context.diagnosis.update_id)},
+            )
+            return None
+        return assessment.to_dict()
 
     def _store(
-        self, user_id: uuid.UUID, update_id: uuid.UUID, attempt: Attempt, result: DiagnosisResult
+        self,
+        user_id: uuid.UUID,
+        update_id: uuid.UUID,
+        attempt: Attempt,
+        result: DiagnosisResult,
+        watering: dict[str, Any] | None,
     ) -> Diagnosis:
         with self._unit_of_work() as uow:
-            stored = uow.diagnoses.record_result(update_id, attempt.reservation_id, result)
+            stored = uow.diagnoses.record_result(
+                update_id, attempt.reservation_id, result, watering
+            )
             if stored:
                 uow.commit()
         if not stored:
@@ -241,10 +291,16 @@ class DiagnosisService:
         )
         return self._reload(update_id)
 
-    def _degrade(self, user_id: uuid.UUID, update_id: uuid.UUID, attempt: Attempt) -> Diagnosis:
+    def _degrade(
+        self,
+        user_id: uuid.UUID,
+        update_id: uuid.UUID,
+        attempt: Attempt,
+        watering: dict[str, Any] | None,
+    ) -> Diagnosis:
         with self._unit_of_work() as uow:
             marked = uow.diagnoses.mark_degraded(
-                update_id, attempt.reservation_id, FALLBACK_RECOMMENDATION
+                update_id, attempt.reservation_id, FALLBACK_RECOMMENDATION, watering
             )
             if marked:
                 uow.commit()

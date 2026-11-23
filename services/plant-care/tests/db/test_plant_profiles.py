@@ -3,11 +3,12 @@ from datetime import date
 
 import pytest
 from sqlalchemy import insert, text
-from sqlalchemy.exc import IntegrityError
+from sqlalchemy.exc import IntegrityError, OperationalError
 from sqlalchemy.orm import Session
 
 from app.models import PlantProfileModel
 from app.repository.plant_profiles import SqlAlchemyPlantProfileRepository
+from app.service.errors import Unavailable
 from app.service.knowledge_model import SyncResult
 from app.service.plant_profile_model import PlantProfile
 from tests.db.factories import violated
@@ -234,3 +235,39 @@ def test_the_watering_facts_round_trip_and_a_changed_one_updates_the_row(session
 )
 def test_the_watering_facts_are_bounded(session: Session, constraint: str, fields: dict):
     rejected_by(session, constraint, **fields)
+
+
+def test_a_profile_is_found_by_its_species_ignoring_case(session: Session):
+    repo = SqlAlchemyPlantProfileRepository(session)
+    repo.sync_profile(profile("lavender", species="Lavender"))
+    repo.sync_profile(profile("basil", species="Sweet Basil"))
+
+    found = repo.get_by_species("sWEET basil")
+
+    assert found is not None and found.slug == "basil"
+
+
+def test_an_unknown_species_has_no_profile(session: Session):
+    repo = SqlAlchemyPlantProfileRepository(session)
+    repo.sync_profile(profile())
+
+    assert repo.get_by_species("Mint") is None
+
+
+def test_the_lowest_slug_wins_when_two_profiles_share_a_species(session: Session):
+    repo = SqlAlchemyPlantProfileRepository(session)
+    repo.sync_profile(profile("english-lavender", species="Lavender"))
+    repo.sync_profile(profile("a-lavender", species="Lavender"))
+
+    found = repo.get_by_species("Lavender")
+
+    assert found is not None and found.slug == "a-lavender"
+
+
+def test_the_species_lookup_reports_an_unreachable_database_as_unavailable(session: Session):
+    class Failing:
+        def execute(self, *args, **kwargs):
+            raise OperationalError("select", {}, Exception("connection lost"))
+
+    with pytest.raises(Unavailable):
+        SqlAlchemyPlantProfileRepository(Failing()).get_by_species("Lavender")

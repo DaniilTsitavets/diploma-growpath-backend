@@ -1,10 +1,12 @@
 import pytest
+from alembic import command
 from alembic.autogenerate import compare_metadata
 from alembic.migration import MigrationContext
 from sqlalchemy import create_engine, inspect, text
 from sqlalchemy.engine import URL
 
 from app.models import Base
+from tests.db.conftest import alembic_config
 
 TABLES = (
     "('journals', 'updates', 'update_photos', 'diagnoses', 'diagnosis_candidates', 'escalations')"
@@ -146,6 +148,26 @@ def test_flags_default_to_false_and_escalations_to_requested(migrated):
         "diagnoses.escalation_declined": "false",
         "escalations.status": "'requested'::text",
     }
+
+
+def test_the_watering_assessment_is_a_nullable_jsonb_column_without_a_default(migrated):
+    column = migrated.execute(
+        text(
+            "SELECT data_type, is_nullable, column_default FROM information_schema.columns"
+            " WHERE table_name = 'diagnoses' AND column_name = 'watering_assessment'"
+        )
+    ).one()
+
+    assert tuple(column) == ("jsonb", "YES", None)
+
+
+def test_downgrading_one_step_drops_the_watering_assessment(migrated):
+    command.downgrade(alembic_config(migrated), "0006")
+    migrated.commit()
+
+    columns = {column["name"] for column in inspect(migrated).get_columns("diagnoses")}
+
+    assert "watering_assessment" not in columns
 
 
 def test_downgrade_removes_every_table(migrated, migrate):

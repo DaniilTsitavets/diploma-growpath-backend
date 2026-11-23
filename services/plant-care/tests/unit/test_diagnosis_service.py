@@ -1,12 +1,14 @@
 import uuid
-from dataclasses import fields
+from dataclasses import fields, replace
+from datetime import date, timedelta
 
 import pytest
 
-from app.service.diagnosis import validate_clarification_answer
+from app.service.diagnosis import DiagnosisService, validate_clarification_answer
 from app.service.diagnosis_model import InvalidModelAnswer, ModelUnavailable, PhotoUnreadable
 from app.service.diagnosis_prompt import FALLBACK_RECOMMENDATION
 from app.service.dominance import Support
+from app.service.effort import EffortPolicy
 from app.service.errors import (
     AiQuotaExhausted,
     AiQuotaUnavailable,
@@ -14,11 +16,20 @@ from app.service.errors import (
     InvalidRequest,
     PhotosMissing,
     ReservationUnusable,
+    Unavailable,
     UpdateNotFound,
 )
-from app.service.model import CandidateRecord, DiagnosisStatus, ModelEffort, PhotoKind, Tier
-from tests.unit.fake_model import FakeModel, conclusion, question, ranked
-from tests.unit.fakes import FakeAiQuota
+from app.service.model import (
+    CandidateRecord,
+    DiagnosisStatus,
+    DryDepth,
+    ModelEffort,
+    PhotoKind,
+    PotDiameterClass,
+    Tier,
+)
+from tests.unit.fake_model import RULE, FakeModel, conclusion, question, ranked
+from tests.unit.fakes import NOW, FakeAiQuota
 from tests.unit.scenario import USER, Scenario
 
 PENDING = DiagnosisStatus.PENDING
@@ -534,3 +545,166 @@ def test_invalid_answers_are_rejected(text: str):
 def test_a_valid_answer_is_normalised_and_keeps_line_breaks():
     assert validate_clarification_answer("  é\nok  ") == "é\nok"
     assert len(validate_clarification_answer("x" * 1000)) == 1000
+
+
+def watered_on(scenario: Scenario, last_watered_on: date, **answers) -> None:
+    update = scenario.uow.updates.rows[scenario.update_id]
+    scenario.uow.updates.rows[scenario.update_id] = replace(
+        update, last_watered_on=last_watered_on, **answers
+    )
+
+
+def test_the_model_gets_the_assessment_and_the_diagnosis_stores_it(scenario: Scenario):
+    scenario.uow.plant_profiles.seed("basil", species="Basil", dryness_threshold_pct=50)
+    watered_on(
+        scenario,
+        date(2026, 11, 6),
+        dry_depth=DryDepth.ABOUT_2_3_CM,
+        pot_diameter_class=PotDiameterClass.FROM_10_TO_15,
+    )
+    model = FakeModel(conclusion())
+
+    diagnosis = scenario.service(model).run(USER, scenario.update_id)
+
+    (request,) = model.requests
+    assert request.watering is not None
+    assert request.watering["I_fact_days"] == 5
+    assert request.watering["target_p"] == 0.5
+    assert request.watering["D_source"] == "depth"
+    assert diagnosis.summary.watering == request.watering
+
+
+def test_a_species_without_a_profile_and_a_journal_without_history_are_assessed_anyway(
+    scenario: Scenario,
+):
+    watered_on(scenario, date(2026, 11, 6), dry_depth=DryDepth.NOT_DRY)
+    model = FakeModel(conclusion())
+
+    diagnosis = scenario.service(model).run(USER, scenario.update_id)
+
+    watering = diagnosis.summary.watering
+    assert watering is not None
+    assert (watering["p_source"], watering["calibration"]["n_observations"]) == ("default", 1)
+    assert diagnosis.summary.status is COMPLETED
+
+
+def test_the_history_of_the_journal_calibrates_the_assessment(scenario: Scenario):
+    journal_id = scenario.uow.updates.rows[scenario.update_id].journal_id
+    scenario.uow.updates.seed(
+        journal_id,
+        created_at=NOW - timedelta(days=7),
+        last_watered_on=NOW.date() - timedelta(days=14),
+        dry_depth=DryDepth.ABOUT_2_3_CM,
+        pot_diameter_class=PotDiameterClass.FROM_10_TO_15,
+    )
+    watered_on(
+        scenario,
+        date(2026, 11, 4),
+        dry_depth=DryDepth.ABOUT_2_3_CM,
+        pot_diameter_class=PotDiameterClass.FROM_10_TO_15,
+    )
+
+    diagnosis = scenario.service(FakeModel(conclusion())).run(USER, scenario.update_id)
+
+    assert diagnosis.summary.watering["calibration"]["n_observations"] == 2
+
+
+def test_the_history_limit_bounds_the_earlier_updates_that_are_read(scenario: Scenario):
+    journal_id = scenario.uow.updates.rows[scenario.update_id].journal_id
+    for days in (3, 2, 1):
+        scenario.uow.updates.seed(
+            journal_id,
+            created_at=NOW - timedelta(days=days),
+            last_watered_on=NOW.date() - timedelta(days=days + 6),
+            dry_depth=DryDepth.NOT_DRY,
+            pot_diameter_class=PotDiameterClass.LT_10,
+        )
+    watered_on(
+        scenario,
+        date(2026, 11, 8),
+        dry_depth=DryDepth.NOT_DRY,
+        pot_diameter_class=PotDiameterClass.LT_10,
+    )
+
+    diagnosis = scenario.service(FakeModel(conclusion()), history_limit=2).run(
+        USER, scenario.update_id
+    )
+
+    assert diagnosis.summary.watering["calibration"]["n_observations"] == 3
+
+
+def test_a_failed_model_still_stores_the_assessment_with_the_degraded_diagnosis(
+    scenario: Scenario,
+):
+    watered_on(scenario, date(2026, 11, 6), dry_depth=DryDepth.NOT_DRY)
+
+    diagnosis = scenario.service(FakeModel(ModelUnavailable())).run(USER, scenario.update_id)
+
+    assert diagnosis.summary.status is DEGRADED
+    assert diagnosis.summary.watering["I_fact_days"] == 5
+
+
+def test_an_unreachable_database_leaves_the_diagnosis_without_an_assessment(scenario: Scenario):
+    scenario.uow.plant_profiles.get_error = Unavailable("the database did not answer")
+    model = FakeModel(conclusion())
+
+    diagnosis = scenario.service(model).run(USER, scenario.update_id)
+
+    assert model.requests[0].watering is None
+    assert diagnosis.summary.status is COMPLETED
+    assert diagnosis.summary.watering is None
+
+
+def test_the_clarification_reuses_the_assessment_of_the_first_attempt(scenario: Scenario):
+    watered_on(scenario, date(2026, 11, 6), dry_depth=DryDepth.NOT_DRY)
+    model = FakeModel(question(), conclusion())
+    first_day = scenario.service(model)
+    first_day.run(USER, scenario.update_id)
+    stored = scenario.row.summary.watering
+    later = DiagnosisService(
+        lambda: scenario.uow,
+        scenario.quota,
+        model,
+        EffortPolicy(scenario.tiers),
+        RULE,
+        1,
+        0.7,
+        6,
+        lambda: date(2026, 11, 20),
+    )
+
+    diagnosis = later.answer_clarification(USER, scenario.update_id, "Yes")
+
+    assert model.requests[1].watering == stored
+    assert diagnosis.summary.watering == stored
+    assert stored["I_fact_days"] == 5
+
+
+def test_a_clarification_of_a_diagnosis_without_an_assessment_computes_it_now(
+    scenario: Scenario,
+):
+    watered_on(scenario, date(2026, 11, 6), dry_depth=DryDepth.NOT_DRY)
+    scenario.seed(
+        status=AWAITING,
+        model_effort="high",
+        clarifying_question="Soft?",
+        has_dominant_candidate=False,
+    )
+    model = FakeModel(conclusion())
+
+    diagnosis = scenario.service(model).answer_clarification(USER, scenario.update_id, "Yes")
+
+    assert model.requests[0].watering["I_fact_days"] == 5
+    assert diagnosis.summary.watering == model.requests[0].watering
+
+
+def test_a_retry_after_a_degraded_attempt_computes_a_fresh_assessment(scenario: Scenario):
+    watered_on(scenario, date(2026, 11, 6), dry_depth=DryDepth.NOT_DRY)
+    model = FakeModel(ModelUnavailable(), conclusion())
+    first = scenario.service(model)
+    first.run(USER, scenario.update_id)
+
+    retried = first.run(USER, scenario.update_id)
+
+    assert retried.summary.status is COMPLETED
+    assert retried.summary.watering is not None

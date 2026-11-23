@@ -2,12 +2,15 @@ import uuid
 from datetime import UTC, date, datetime, timedelta
 from decimal import Decimal
 
+import pytest
 from sqlalchemy import select
+from sqlalchemy.exc import OperationalError
 from sqlalchemy.orm import Session
 
 from app.models import DiagnosisModel, UpdateModel
 from app.repository.diagnoses import SqlAlchemyDiagnosisRepository
 from app.repository.updates import SqlAlchemyUpdateRepository
+from app.service.errors import Unavailable
 from app.service.model import (
     Answer,
     DiagnosisStatus,
@@ -226,3 +229,63 @@ def test_an_answered_escalation_shows_the_answer(session: Session):
         EscalationStatus.ANSWERED,
         "Water less",
     )
+
+
+def stamped(session: Session, journal_id: uuid.UUID, created_at: datetime) -> uuid.UUID:
+    return add_update(session, journal_id, created_at=created_at)["id"]
+
+
+def owned(repository: SqlAlchemyUpdateRepository, update_id: uuid.UUID, journal: dict):
+    return repository.get_owned(update_id, journal["user_id"])
+
+
+def test_the_earlier_updates_are_the_journals_own_older_ones_newest_first(session: Session):
+    journal = add_journal(session)
+    base = datetime(2026, 11, 1, 12, tzinfo=UTC)
+    oldest = stamped(session, journal["id"], base)
+    middle = stamped(session, journal["id"], base + timedelta(days=1))
+    current = stamped(session, journal["id"], base + timedelta(days=2))
+    stamped(session, journal["id"], base + timedelta(days=3))
+    stamped(session, add_journal(session)["id"], base + timedelta(hours=1))
+    repository = SqlAlchemyUpdateRepository(session)
+
+    earlier = repository.earlier_in_journal(owned(repository, current, journal), 10)
+
+    assert [row.id for row in earlier] == [middle, oldest]
+
+
+def test_the_earlier_updates_are_bounded_to_the_newest_ones(session: Session):
+    journal = add_journal(session)
+    base = datetime(2026, 11, 1, 12, tzinfo=UTC)
+    ids = [stamped(session, journal["id"], base + timedelta(days=day)) for day in range(5)]
+    repository = SqlAlchemyUpdateRepository(session)
+
+    earlier = repository.earlier_in_journal(owned(repository, ids[4], journal), 2)
+
+    assert [row.id for row in earlier] == [ids[3], ids[2]]
+
+
+def test_updates_with_the_same_instant_are_ordered_by_id(session: Session):
+    journal = add_journal(session)
+    moment = datetime(2026, 11, 1, 12, tzinfo=UTC)
+    ids = sorted(stamped(session, journal["id"], moment) for _ in range(3))
+    repository = SqlAlchemyUpdateRepository(session)
+
+    earlier = repository.earlier_in_journal(owned(repository, ids[2], journal), 10)
+
+    assert [row.id for row in earlier] == [ids[1], ids[0]]
+
+
+def test_a_database_failure_is_reported_as_unavailable(session: Session):
+    journal = add_journal(session)
+    update_id = stamped(session, journal["id"], datetime(2026, 11, 1, tzinfo=UTC))
+    update = owned(SqlAlchemyUpdateRepository(session), update_id, journal)
+    broken = SqlAlchemyUpdateRepository(Failing())
+
+    with pytest.raises(Unavailable):
+        broken.earlier_in_journal(update, 3)
+
+
+class Failing:
+    def execute(self, *args, **kwargs):
+        raise OperationalError("select", {}, Exception("connection lost"))

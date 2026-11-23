@@ -1,5 +1,5 @@
 from dataclasses import dataclass
-from typing import Protocol
+from typing import Any, Protocol
 
 from app.service.dominance import Support
 from app.service.model import ModelEffort, Photo, UpdateRecord
@@ -56,6 +56,8 @@ class DiagnosisRequest:
     clarifying_answer: str | None
     temperature: float | None = None
     """None leaves the temperature to the provider; parallel samples set one so they can differ."""
+    watering: dict[str, Any] | None = None
+    """WateringAssessment.to_dict() of this attempt; None when it could not be computed."""
 
 
 class DiagnosisModel(Protocol):

@@ -5,10 +5,11 @@ from app.service.effort import EffortPolicy
 from app.service.errors import AiQuotaUnavailable
 from app.service.model import Diagnosis, PhotoKind, Tier
 from tests.unit.fake_model import RULE, FakeModel
-from tests.unit.fakes import FakeAiQuota, FakeUnitOfWork
+from tests.unit.fakes import TODAY, FakeAiQuota, FakeUnitOfWork
 
 USER = uuid.uuid4()
 SAMPLE_TEMPERATURE = 0.7
+HISTORY_LIMIT = 6
 
 
 class StaticTiers:
@@ -36,7 +37,9 @@ class Scenario:
         self.quota.reserved.append(self.reservation_id)
         self.uow.diagnoses.seed(self.update_id, self.reservation_id)
 
-    def service(self, model: FakeModel, samples: int = 1) -> DiagnosisService:
+    def service(
+        self, model: FakeModel, samples: int = 1, history_limit: int = HISTORY_LIMIT
+    ) -> DiagnosisService:
         return DiagnosisService(
             lambda: self.uow,
             self.quota,
@@ -45,6 +48,8 @@ class Scenario:
             RULE,
             samples,
             SAMPLE_TEMPERATURE,
+            history_limit,
+            lambda: TODAY,
         )
 
     @property

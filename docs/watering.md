@@ -226,3 +226,62 @@ Decisions made while writing this module (the specification said "decide"):
 - the pot class of an observation is compared only when both classes are known and not `unknown`;
 - a sensor, a depth or a weight that gives D for a partial watering still gives `Ks` and the status, but the observation
   is not added to the calibration.
+
+## 5. Integration
+
+The diagnosis attempt (`DiagnosisService`) computes the assessment before the model call and gives the model a computed
+fact with its basis instead of the raw questionnaire alone. The code is `app/service/watering_input.py` (mapping),
+`app/service/update_watering.py` (`assess_update`, the function that reads through the repository ports) and
+`DiagnosisService._assess_watering`.
+
+### Inputs
+
+- `today` is the UTC date of the attempt (`DiagnosisService` takes a clock, so tests fix it).
+- The update's questionnaire enums are mapped to the module enums by value; `Decimal` measurements become floats and a
+  missing value stays `None`. `season_changed` and `reset_reason` are not set: the service does not decide when a
+  season changed.
+- The species profile is found by the journal's `species` with `PlantProfileRepository.get_by_species`, a
+  case-insensitive match of `plant_profiles.species` (the lowest slug when two profiles share a species). No profile
+  gives `profile = None`, which is not an error: `p` is the default 0.5 and the species flags do not fire.
+
+### History
+
+- The earlier updates of the same journal, newest first, at most `PLANT_CARE_WATERING_HISTORY_LIMIT` (default 6;
+  0 reads none), through `UpdateRepository.earlier_in_journal`.
+- Each one becomes a `WateringObservation` with its own inputs and its own day (`created_at` in UTC) as `today`. It uses
+  step A only (`estimate_depletion`), because an observation needs only the days since watering, D and its source; a
+  categorical answer is stored as 0.0 (wet) or 1.0 (at or past the target), as the module expects. An update without
+  `last_watered_on`, or with no usable signal, gives no observation.
+- Reset rules: an update that answers `repotted_or_moved = yes` marks the observation just before it as a reset
+  (`reset = true`), so the module cuts everything up to and including it; the repotting update keeps its own
+  observation. The same answer on the update being assessed is applied by the module (`reset_reason`). A change of
+  `pot_diameter_class` between known classes is cut by the module through the observation's pot class.
+
+### Prompt and storage
+
+- The user prompt gets a `<watering_assessment>` block with `WateringAssessment.to_dict()` as JSON (angle brackets
+  escaped like every other block), after `<questionnaire>`. The system prompt tells the model that the block is data,
+  that `status` and `flags` win over guesses from the raw answers, that a `low` reliability or a categorical-only
+  estimate is never presented as exact (and what data would sharpen it), and that the raw questionnaire stays the source
+  for everything the assessment does not cover. The JSON schema of the model's answer is unchanged.
+- The same dictionary is stored in `diagnoses.watering_assessment` (migration `0007`) by the write that finishes the
+  attempt: the result of a completed or `awaiting_clarification` diagnosis, and also `degraded`. It is overwritten by
+  the next attempt.
+- If the profile or history lookup cannot reach the database (`Unavailable`), the attempt continues without an
+  assessment: no block in the prompt and `watering = null`.
+
+### Clarification
+
+A clarification re-evaluation reuses the stored assessment of the first attempt, so the model sees the same facts it was
+asked the question with and the interval does not shift with the day (a stored assessment depends on `today`). A
+diagnosis made before the column existed has none stored and is assessed at the re-evaluation. A retry after `degraded`
+or a lost reservation is a new attempt and computes a fresh assessment.
+
+### API
+
+`DiagnosisResponse` (the feed item and the diagnosis resource) has `watering`: the dictionary above, typed as
+`WateringResponse` in `contracts/openapi/plant-care.yaml`, or `null` for a diagnosis made before the assessment existed
+or when it could not be computed. Keys: `status`, `reliability`, `depletion_D`, `D_source`, `target_p`, `p_source`,
+`I_rec_days`, `I_rec_bounds {lower_days, upper_days, text}`, `I_fact_days`, `ratio_r`, `Ks`, `flags[]`,
+`air {T, RH, VPD_kPa}`, `calibration {n_observations, reset_reason}`, `assumptions[]`.
+The escalation context sent to the expert (snapshot v2) does not include it.

@@ -1,6 +1,6 @@
 from collections.abc import Collection
 
-from sqlalchemy import select, update
+from sqlalchemy import func, select, update
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.exc import InterfaceError, OperationalError
 from sqlalchemy.exc import TimeoutError as PoolTimeout
@@ -87,11 +87,22 @@ class SqlAlchemyPlantProfileRepository:
 
     def get(self, slug: str) -> PlantProfile | None:
         """Raises Unavailable when the database cannot be reached."""
+        return self._first(PlantProfileModel.slug == slug)
+
+    def get_by_species(self, species: str) -> PlantProfile | None:
+        """The profile whose species equals `species` ignoring case; the lowest slug if several.
+
+        Raises Unavailable when the database cannot be reached.
+        """
+        return self._first(func.lower(PlantProfileModel.species) == species.lower())
+
+    def _first(self, condition) -> PlantProfile | None:
         try:
             row = self._session.execute(
-                select(*(getattr(PlantProfileModel, name) for name in READ_COLUMNS)).where(
-                    PlantProfileModel.slug == slug
-                )
+                select(*(getattr(PlantProfileModel, name) for name in READ_COLUMNS))
+                .where(condition)
+                .order_by(PlantProfileModel.slug)
+                .limit(1)
             ).one_or_none()
         except (OperationalError, InterfaceError, PoolTimeout) as error:
             raise Unavailable("the database did not answer") from error

@@ -1,7 +1,7 @@
 import uuid
 from dataclasses import replace
 from datetime import UTC, date, datetime, timedelta
-from typing import Self
+from typing import Any, Self
 
 from app.service.errors import AiQuotaExhausted, AiQuotaUnavailable, ReservationUnusable
 from app.service.model import (
@@ -171,7 +171,11 @@ class FakeDiagnoses:
         return True
 
     def record_result(
-        self, update_id: uuid.UUID, reservation_id: uuid.UUID, result: DiagnosisResult
+        self,
+        update_id: uuid.UUID,
+        reservation_id: uuid.UUID,
+        result: DiagnosisResult,
+        watering: dict[str, Any] | None = None,
     ) -> bool:
         row = self.states.get(update_id)
         if (
@@ -185,6 +189,7 @@ class FakeDiagnoses:
             "has_dominant_candidate": result.has_dominant_candidate,
             "recommendation": result.recommendation,
             "escalation_offered": result.escalation_offered,
+            "watering": watering,
         }
         if result.clarifying_question is not None:
             fields["clarifying_question"] = result.clarifying_question
@@ -197,7 +202,11 @@ class FakeDiagnoses:
         return True
 
     def mark_degraded(
-        self, update_id: uuid.UUID, reservation_id: uuid.UUID, recommendation: str
+        self,
+        update_id: uuid.UUID,
+        reservation_id: uuid.UUID,
+        recommendation: str,
+        watering: dict[str, Any] | None = None,
     ) -> bool:
         row = self.states.get(update_id)
         if (
@@ -206,7 +215,12 @@ class FakeDiagnoses:
             or row.summary.status is not DiagnosisStatus.PENDING
         ):
             return False
-        self._change(row, status=DiagnosisStatus.DEGRADED, recommendation=recommendation)
+        self._change(
+            row,
+            status=DiagnosisStatus.DEGRADED,
+            recommendation=recommendation,
+            watering=watering,
+        )
         return True
 
     def decline_escalation(self, update_id: uuid.UUID) -> bool:
@@ -237,10 +251,13 @@ class FakeUpdates:
         self._diagnoses = diagnoses
         self._journals = journals
         self.feed_calls: list[tuple[uuid.UUID, int, FeedCursor | None]] = []
+        self.earlier_error: Exception | None = None
 
-    def seed(self, journal_id: uuid.UUID, created_at: datetime | None = None) -> UpdateRecord:
+    def seed(
+        self, journal_id: uuid.UUID, created_at: datetime | None = None, **answers: object
+    ) -> UpdateRecord:
         update = self._record(
-            NewUpdate(uuid.uuid4(), journal_id, Lighting.LOW),
+            NewUpdate(uuid.uuid4(), journal_id, Lighting.LOW, **answers),
             created_at or NOW + timedelta(minutes=len(self.rows)),
         )
         self.rows[update.id] = update
@@ -272,6 +289,18 @@ class FakeUpdates:
         if update is None or self._journals.get_owned(update.journal_id, user_id) is None:
             return None
         return update
+
+    def earlier_in_journal(self, update: UpdateRecord, limit: int) -> list[UpdateRecord]:
+        if self.earlier_error is not None:
+            raise self.earlier_error
+        rows = [
+            row
+            for row in self.rows.values()
+            if row.journal_id == update.journal_id
+            and (row.created_at, row.id) < (update.created_at, update.id)
+        ]
+        rows.sort(key=lambda row: (row.created_at, row.id), reverse=True)
+        return rows[:limit]
 
     def feed(self, journal_id: uuid.UUID, limit: int, before: FeedCursor | None) -> list[FeedItem]:
         self.feed_calls.append((journal_id, limit, before))

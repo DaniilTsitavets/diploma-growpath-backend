@@ -1,4 +1,6 @@
 import uuid
+from dataclasses import replace
+from datetime import date
 
 import pytest
 from fastapi import FastAPI
@@ -9,7 +11,7 @@ from app.api import diagnoses, photos
 from app.api.errors import register_error_handlers
 from app.main import create_app
 from app.service.diagnosis_model import ModelUnavailable
-from app.service.model import PhotoKind
+from app.service.model import DryDepth, PhotoKind
 from app.service.photos import PhotoService
 from tests.unit.fake_model import FakeModel, conclusion, question
 from tests.unit.fake_queue import FakeQueue
@@ -212,3 +214,43 @@ def test_the_application_exposes_the_diagnosis_routes_with_the_mock_model_by_def
         "/v1/updates/{update_id}/diagnosis/clarification",
         "/v1/updates/{update_id}/diagnosis/escalation-decline",
     } <= paths
+
+
+def test_the_diagnosis_carries_the_watering_assessment(scenario: Scenario):
+    update = scenario.uow.updates.rows[scenario.update_id]
+    scenario.uow.updates.rows[scenario.update_id] = replace(
+        update, last_watered_on=date(2026, 11, 6), dry_depth=DryDepth.NOT_DRY
+    )
+    client = client_for(scenario, FakeModel(conclusion()))
+
+    posted = client.post(url(scenario), headers=AS_USER).json()
+    fetched = client.get(url(scenario), headers=AS_USER).json()
+
+    watering = posted["watering"]
+    assert fetched["watering"] == watering
+    assert set(watering) == {
+        "status",
+        "reliability",
+        "depletion_D",
+        "D_source",
+        "target_p",
+        "p_source",
+        "I_rec_days",
+        "I_rec_bounds",
+        "I_fact_days",
+        "ratio_r",
+        "Ks",
+        "flags",
+        "air",
+        "calibration",
+        "assumptions",
+    }
+    assert watering["status"] == "overwatering"
+    assert watering["I_fact_days"] == 5
+    assert set(watering["air"]) == {"T", "RH", "VPD_kPa"}
+
+
+def test_a_diagnosis_made_before_the_assessment_has_watering_null(scenario: Scenario):
+    client = client_for(scenario, FakeModel(conclusion()))
+
+    assert client.get(url(scenario), headers=AS_USER).json()["watering"] is None

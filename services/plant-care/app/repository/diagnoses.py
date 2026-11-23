@@ -1,4 +1,5 @@
 import uuid
+from typing import Any
 
 from sqlalchemy import delete, select, update
 from sqlalchemy.dialects.postgresql import insert
@@ -57,6 +58,7 @@ class SqlAlchemyDiagnosisRepository:
                 recommendation=row.recommendation,
                 escalation_offered=row.escalation_offered,
                 escalation_declined=row.escalation_declined,
+                watering=row.watering_assessment,
             ),
             candidates=[CandidateRecord(c.rank, c.cause, c.rationale) for c in candidates],
         )
@@ -101,13 +103,18 @@ class SqlAlchemyDiagnosisRepository:
         )
 
     def record_result(
-        self, update_id: uuid.UUID, reservation_id: uuid.UUID, result: DiagnosisResult
+        self,
+        update_id: uuid.UUID,
+        reservation_id: uuid.UUID,
+        result: DiagnosisResult,
+        watering: dict[str, Any] | None = None,
     ) -> bool:
         values: dict[str, object] = {
             "status": result.status.value,
             "has_dominant_candidate": result.has_dominant_candidate,
             "recommendation": result.recommendation,
             "escalation_offered": result.escalation_offered,
+            "watering_assessment": watering,
         }
         if result.clarifying_question is not None:
             values["clarifying_question"] = result.clarifying_question
@@ -123,13 +130,21 @@ class SqlAlchemyDiagnosisRepository:
         return stored
 
     def mark_degraded(
-        self, update_id: uuid.UUID, reservation_id: uuid.UUID, recommendation: str
+        self,
+        update_id: uuid.UUID,
+        reservation_id: uuid.UUID,
+        recommendation: str,
+        watering: dict[str, Any] | None = None,
     ) -> bool:
         return self._guarded_update(
             DiagnosisModel.update_id == update_id,
             DiagnosisModel.ai_reservation_id == reservation_id,
             DiagnosisModel.status == PENDING,
-            values={"status": DiagnosisStatus.DEGRADED.value, "recommendation": recommendation},
+            values={
+                "status": DiagnosisStatus.DEGRADED.value,
+                "recommendation": recommendation,
+                "watering_assessment": watering,
+            },
         )
 
     def decline_escalation(self, update_id: uuid.UUID) -> bool:

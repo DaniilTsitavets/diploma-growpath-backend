@@ -83,6 +83,12 @@ class FakePlantProfiles:
             raise self.get_error
         return self.rows.get(slug)
 
+    def get_by_species(self, species: str) -> PlantProfile | None:
+        if self.get_error is not None:
+            raise self.get_error
+        matching = [row for row in self.rows.values() if row.species.lower() == species.lower()]
+        return min(matching, key=lambda row: row.slug, default=None)
+
 
 class FakeKnowledgeUnitOfWork:
     """Every unit shares one FakeKnowledge; `sync_failures` lists slugs whose write fails."""

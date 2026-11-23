@@ -62,6 +62,8 @@ class Settings(BaseSettings):
     # parallel at `diagnosis_sample_temperature` and one attempt still spends one unit of AI quota.
     diagnosis_samples: int = Field(default=1, ge=1)
     diagnosis_sample_temperature: float = Field(default=0.7, gt=0, le=1)
+    # Earlier updates of the journal that calibrate the watering interval, newest first.
+    watering_history_limit: int = Field(default=6, ge=0)
     openrouter_api_key: SecretStr | None = None
     openrouter_model: str | None = None
     # The chat needs no vision input; falls back to `openrouter_model` when unset.

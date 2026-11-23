@@ -3,9 +3,12 @@ import uuid
 from sqlalchemy import Select, select, true, tuple_
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.engine import Row
+from sqlalchemy.exc import InterfaceError, OperationalError
+from sqlalchemy.exc import TimeoutError as PoolTimeout
 from sqlalchemy.orm import Session
 
 from app.models import DiagnosisModel, EscalationModel, JournalModel, UpdateModel
+from app.service.errors import Unavailable
 from app.service.model import (
     Answer,
     DiagnosisStatus,
@@ -109,6 +112,23 @@ class SqlAlchemyUpdateRepository:
         ).one_or_none()
         return None if row is None else to_update(row)
 
+    def earlier_in_journal(self, update: UpdateRecord, limit: int) -> list[UpdateRecord]:
+        """Raises Unavailable when the database cannot be reached."""
+        try:
+            rows = self._session.execute(
+                select(*UPDATE_COLUMNS)
+                .where(
+                    UpdateModel.journal_id == update.journal_id,
+                    tuple_(UpdateModel.created_at, UpdateModel.id)
+                    < tuple_(update.created_at, update.id),
+                )
+                .order_by(UpdateModel.created_at.desc(), UpdateModel.id.desc())
+                .limit(limit)
+            ).all()
+        except (OperationalError, InterfaceError, PoolTimeout) as error:
+            raise Unavailable("the database did not answer") from error
+        return [to_update(row) for row in rows]
+
     def feed(self, journal_id: uuid.UUID, limit: int, before: FeedCursor | None) -> list[FeedItem]:
         statement = (
             _feed_statement()
@@ -151,6 +171,7 @@ def _feed_statement() -> Select:
             DiagnosisModel.recommendation,
             DiagnosisModel.escalation_offered,
             DiagnosisModel.escalation_declined,
+            DiagnosisModel.watering_assessment,
             latest_escalation,
         )
         .select_from(UpdateModel)
@@ -173,6 +194,7 @@ def _to_feed_item(row: Row) -> FeedItem:
             recommendation=fields["recommendation"],
             escalation_offered=fields["escalation_offered"],
             escalation_declined=fields["escalation_declined"],
+            watering=fields["watering_assessment"],
         )
     escalation = None
     if fields["escalation_id"] is not None:

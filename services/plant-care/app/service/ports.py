@@ -1,7 +1,7 @@
 import uuid
 from collections.abc import Collection
 from datetime import date, datetime, timedelta
-from typing import Protocol, Self
+from typing import Any, Protocol, Self
 
 from app.service.chat_model import ChatTurn, NewChatTurn
 from app.service.knowledge_model import DocumentDraft, RetrievedSection, SyncResult
@@ -57,6 +57,13 @@ class UpdateRepository(Protocol):
         """The update of a journal that belongs to the user."""
         ...
 
+    def earlier_in_journal(self, update: UpdateRecord, limit: int) -> list[UpdateRecord]:
+        """The journal's updates created before `update`, newest first, at most `limit`.
+
+        Raises Unavailable when the database cannot be reached.
+        """
+        ...
+
     def feed(self, journal_id: uuid.UUID, limit: int, before: FeedCursor | None) -> list[FeedItem]:
         """Newest first; with `before`, only the items strictly older than the cursor."""
         ...
@@ -90,13 +97,24 @@ class DiagnosisRepository(Protocol):
         ...
 
     def record_result(
-        self, update_id: uuid.UUID, reservation_id: uuid.UUID, result: DiagnosisResult
+        self,
+        update_id: uuid.UUID,
+        reservation_id: uuid.UUID,
+        result: DiagnosisResult,
+        watering: dict[str, Any] | None = None,
     ) -> bool:
-        """Store the result and its candidates; False when another attempt owns the diagnosis."""
+        """Store the result, its candidates and the watering assessment of the attempt.
+
+        False when another attempt owns the diagnosis.
+        """
         ...
 
     def mark_degraded(
-        self, update_id: uuid.UUID, reservation_id: uuid.UUID, recommendation: str
+        self,
+        update_id: uuid.UUID,
+        reservation_id: uuid.UUID,
+        recommendation: str,
+        watering: dict[str, Any] | None = None,
     ) -> bool:
         """Finish the attempt with a fallback recommendation; False when it lost the diagnosis."""
         ...
@@ -204,6 +222,13 @@ class PlantProfileRepository(Protocol):
         ...
 
     def get(self, slug: str) -> PlantProfile | None: ...
+
+    def get_by_species(self, species: str) -> PlantProfile | None:
+        """The profile of the species, matched ignoring case; None when there is none.
+
+        Raises Unavailable when the database cannot be reached.
+        """
+        ...
 
 
 class ChatTurnRepository(Protocol):

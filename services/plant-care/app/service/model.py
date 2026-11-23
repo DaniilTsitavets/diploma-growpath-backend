@@ -3,6 +3,7 @@ from dataclasses import dataclass, field
 from datetime import date, datetime
 from decimal import Decimal
 from enum import StrEnum
+from typing import Any
 
 
 class Lighting(StrEnum):
@@ -150,6 +151,8 @@ class DiagnosisSummary:
     recommendation: str | None
     escalation_offered: bool
     escalation_declined: bool
+    watering: dict[str, Any] | None = None
+    """WateringAssessment.to_dict() of the last attempt; None before the assessment existed."""
 
 
 @dataclass(frozen=True)

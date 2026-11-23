@@ -1,13 +1,14 @@
 import uuid
+from datetime import UTC, date, datetime, timedelta
 
 import pytest
 from fastapi.testclient import TestClient
-from sqlalchemy import Engine, select
+from sqlalchemy import Engine, insert, select
 from sqlalchemy.engine import URL
 from sqlalchemy.orm import Session
 
 from app.main import create_app
-from app.models import DiagnosisModel
+from app.models import DiagnosisModel, PlantProfileModel
 from app.service.diagnosis_model import ModelUnavailable
 from app.service.model import Tier
 from tests.db.factories import add_journal
@@ -183,3 +184,49 @@ def test_a_diagnosis_cannot_start_without_the_required_photos(
     response = client.post(f"/v1/updates/{created['id']}/diagnosis", headers=AS_USER)
 
     assert response.status_code == 422
+
+
+def test_the_assessment_uses_the_species_profile_and_the_journal_history(
+    database_url: URL, quota: FakeAiQuota, journal_id: uuid.UUID, engine: Engine
+):
+    with Session(engine) as session:
+        session.execute(
+            insert(PlantProfileModel).values(
+                slug="basil",
+                source_slug="basil-care",
+                species="Basil",
+                source_name="PlantSolve",
+                source_url="https://www.plantsolve.com/plants/basil/",
+                license="CC BY 4.0",
+                imported_on=date(2026, 11, 22),
+                content_sha256="a" * 64,
+                dryness_threshold_pct=25,
+            )
+        )
+        session.commit()
+    client = client_with(database_url, quota, FakeModel(conclusion(), conclusion()))
+    watered = (datetime.now(UTC) - timedelta(days=4)).date().isoformat()
+    answers = {"last_watered_on": watered, "dry_depth": "not_dry", "pot_diameter_class": "10_15"}
+
+    def diagnose(**extra) -> dict:
+        created = client.post(
+            f"/v1/journals/{journal_id}/updates",
+            json={"id": str(uuid.uuid4()), **QUESTIONNAIRE, **answers, **extra},
+            headers=AS_USER,
+        )
+        update_id = created.json()["id"]
+        for kind in ("overview", "soil"):
+            client.post(f"/v1/updates/{update_id}/photos", json={"kind": kind}, headers=AS_USER)
+        return client.post(f"/v1/updates/{update_id}/diagnosis", headers=AS_USER).json()
+
+    first = diagnose()
+    second = diagnose()
+
+    assert first["watering"]["p_source"] == "profile"
+    assert first["watering"]["target_p"] == 0.25
+    assert first["watering"]["I_fact_days"] == 4
+    assert first["watering"]["calibration"]["n_observations"] == 1
+    assert second["watering"]["calibration"]["n_observations"] == 2
+    with Session(engine) as session:
+        stored = session.scalars(select(DiagnosisModel.watering_assessment)).all()
+    assert sorted(item["calibration"]["n_observations"] for item in stored) == [1, 2]

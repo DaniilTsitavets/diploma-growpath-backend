@@ -26,6 +26,10 @@ from app.service.model import (
     YesNo,
 )
 from app.service.updates import FeedPage
+from app.service.watering_types import DepletionSource, PSource
+from app.service.watering_types import Flag as WateringFlag
+from app.service.watering_types import Reliability as WateringReliability
+from app.service.watering_types import Status as WateringStatus
 
 # Measurements are Decimal, so responses carry them as strings and no precision is lost.
 SensorReading = Annotated[Decimal, Field(ge=0, max_digits=10, decimal_places=2)]
@@ -133,6 +137,43 @@ class SubmitUpdateRequest(BaseModel):
         return NewUpdate(journal_id=journal_id, **self.model_dump())
 
 
+class RecommendedIntervalBounds(BaseModel):
+    lower_days: float | None
+    upper_days: float | None
+    text: str | None
+
+
+class AirContextResponse(BaseModel):
+    T: float | None
+    RH: float | None
+    VPD_kPa: float | None
+
+
+class CalibrationResponse(BaseModel):
+    n_observations: int
+    reset_reason: str | None
+
+
+class WateringResponse(BaseModel):
+    """The watering assessment computed for the diagnosis attempt (see docs/watering.md)."""
+
+    status: WateringStatus
+    reliability: WateringReliability
+    depletion_D: float | None
+    D_source: DepletionSource
+    target_p: float
+    p_source: PSource
+    I_rec_days: float | None
+    I_rec_bounds: RecommendedIntervalBounds | None
+    I_fact_days: int | None
+    ratio_r: float | None
+    Ks: float | None
+    flags: list[WateringFlag]
+    air: AirContextResponse
+    calibration: CalibrationResponse
+    assumptions: list[str]
+
+
 class DiagnosisResponse(BaseModel):
     status: DiagnosisStatus
     model_effort: str | None
@@ -143,6 +184,7 @@ class DiagnosisResponse(BaseModel):
     recommendation: str | None
     escalation_offered: bool
     escalation_declined: bool
+    watering: WateringResponse | None
 
     @classmethod
     def of(cls, diagnosis: DiagnosisSummary) -> "DiagnosisResponse":
