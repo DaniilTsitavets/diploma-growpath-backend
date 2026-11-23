@@ -31,7 +31,7 @@ class Scenario:
         self.tiers = StaticTiers(tier)
         journal = self.uow.journals.seed(USER)
         self.update_id = self.uow.updates.seed(journal.id).id
-        for kind in (PhotoKind.OVERVIEW, PhotoKind.SOIL):
+        for kind in (PhotoKind.OVERVIEW, PhotoKind.SYMPTOM_CLOSEUP):
             self.uow.photos.add(self.update_id, kind, f"key/{kind.value}")
         self.reservation_id = uuid.uuid4()
         self.quota.reserved.append(self.reservation_id)

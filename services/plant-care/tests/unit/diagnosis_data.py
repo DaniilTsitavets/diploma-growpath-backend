@@ -30,7 +30,7 @@ def make_request(**overrides) -> DiagnosisRequest:
         "species": "Basil",
         "update": update,
         "photos": [
-            Photo(update.id, PhotoKind.SOIL, "key/soil"),
+            Photo(update.id, PhotoKind.SYMPTOM_CLOSEUP, "key/closeup"),
             Photo(update.id, PhotoKind.OVERVIEW, "key/overview"),
         ],
         "effort": ModelEffort.HIGH,

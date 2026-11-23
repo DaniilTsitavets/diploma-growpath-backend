@@ -22,14 +22,14 @@ def test_photos_of_an_update_are_listed_with_typed_kinds(session: Session):
     repository = SqlAlchemyPhotoRepository(session)
     update_id = add_update(session)["id"]
     other_id = add_update(session)["id"]
-    repository.add(update_id, PhotoKind.SOIL, "soil-key")
+    repository.add(update_id, PhotoKind.SYMPTOM_CLOSEUP, "closeup-key")
     repository.add(update_id, PhotoKind.OVERVIEW, "overview-key")
     repository.add(other_id, PhotoKind.OVERVIEW, "other-key")
 
     photos = repository.list_for_update(update_id)
 
     assert {(photo.kind, photo.storage_key) for photo in photos} == {
-        (PhotoKind.SOIL, "soil-key"),
+        (PhotoKind.SYMPTOM_CLOSEUP, "closeup-key"),
         (PhotoKind.OVERVIEW, "overview-key"),
     }
 
@@ -42,11 +42,11 @@ def test_removing_a_photo_drops_only_that_kind_of_that_update(session: Session):
     repository = SqlAlchemyPhotoRepository(session)
     update_id = add_update(session)["id"]
     other_id = add_update(session)["id"]
-    repository.add(update_id, PhotoKind.SOIL, "soil-key")
+    repository.add(update_id, PhotoKind.SYMPTOM_CLOSEUP, "closeup-key")
     repository.add(update_id, PhotoKind.OVERVIEW, "overview-key")
-    repository.add(other_id, PhotoKind.SOIL, "other-key")
+    repository.add(other_id, PhotoKind.SYMPTOM_CLOSEUP, "other-key")
 
-    repository.remove(update_id, PhotoKind.SOIL)
+    repository.remove(update_id, PhotoKind.SYMPTOM_CLOSEUP)
     repository.remove(update_id, PhotoKind.SYMPTOM_CLOSEUP)
 
     assert session.scalars(select(UpdatePhotoModel.storage_key)).all() != []

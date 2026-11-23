@@ -75,7 +75,7 @@ def test_the_context_carries_the_question_the_clarification_and_the_update():
     assert context["update"]["lighting"] == "low"
     assert context["photos"] == [
         {"kind": "overview", "storage_key": "journals/overview"},
-        {"kind": "soil", "storage_key": "journals/soil"},
+        {"kind": "symptom_closeup", "storage_key": "journals/symptom_closeup"},
     ]
     assert context["diagnosis"]["status"] == "completed"
     assert context["history"] == []

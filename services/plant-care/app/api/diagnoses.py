@@ -26,7 +26,7 @@ RUN_ERRORS = responses(
         "diagnosis-conflict",
         "ai-quota-exhausted",
     ),
-    invalid_request("A path parameter is invalid, or the required photos are missing"),
+    invalid_request("A path parameter is invalid"),
 )
 CLARIFICATION_ERRORS = responses(
     READ_ERRORS,

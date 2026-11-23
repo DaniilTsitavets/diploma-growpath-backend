@@ -72,13 +72,11 @@ class PhotoResponse(BaseModel):
 
 class PhotosResponse(BaseModel):
     photos: list[PhotoResponse]
-    missing_required: list[PhotoKind]
 
     @classmethod
     def of(cls, photos: UpdatePhotos) -> "PhotosResponse":
         return cls(
             photos=[PhotoResponse(kind=link.kind, url=link.url) for link in photos.photos],
-            missing_required=photos.missing_required,
         )
 
 
@@ -122,5 +120,5 @@ def confirm_upload(
 
 @router.get("", responses=LIST_ERRORS)
 def list_photos(update_id: uuid.UUID, user_id: UserId, service: Photos) -> PhotosResponse:
-    """The photos of the update with presigned GET URLs and the required kinds still missing."""
+    """The photos of the update with presigned GET URLs; photos are optional."""
     return PhotosResponse.of(service.list_photos(update_id, user_id))

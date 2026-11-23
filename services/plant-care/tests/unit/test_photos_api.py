@@ -72,10 +72,10 @@ def test_an_upload_url_is_issued_with_the_headers_to_send(client: TestClient, up
     [
         {},
         {"kind": "selfie", **PNG},
-        {"kind": "soil", "content_type": "image/png"},
-        {"kind": "soil", "size_bytes": 10},
-        {"kind": "soil", "content_type": "image/png", "size_bytes": 0},
-        {"kind": "soil", **PNG, "extra": 1},
+        {"kind": "symptom_closeup", "content_type": "image/png"},
+        {"kind": "symptom_closeup", "size_bytes": 10},
+        {"kind": "symptom_closeup", "content_type": "image/png", "size_bytes": 0},
+        {"kind": "symptom_closeup", **PNG, "extra": 1},
     ],
 )
 def test_a_malformed_body_is_422(client: TestClient, update_id: uuid.UUID, body: dict):
@@ -171,7 +171,7 @@ def test_the_photos_are_listed_only_once_confirmed(
     client: TestClient, update, storage: FakePhotoStorage
 ):
     upload(client, update.id, "overview")
-    upload(client, update.id, "soil")
+    upload(client, update.id, "symptom_closeup")
     storage.put(storage_key_for(update.journal_id, update.id, PhotoKind.OVERVIEW))
     confirm(client, update.id, "overview")
 
@@ -180,4 +180,3 @@ def test_the_photos_are_listed_only_once_confirmed(
     assert [(p["kind"], p["url"].endswith("method=get")) for p in body["photos"]] == [
         ("overview", True)
     ]
-    assert body["missing_required"] == ["soil"]

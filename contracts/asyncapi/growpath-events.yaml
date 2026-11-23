@@ -357,8 +357,8 @@ components:
               photos:
                 - kind: overview
                   storage_key: journals/overview
-                - kind: soil
-                  storage_key: journals/soil
+                - kind: symptom_closeup
+                  storage_key: journals/symptom_closeup
               user_question: Why are the leaves spotted?
               diagnosis:
                 status: completed
@@ -751,7 +751,7 @@ components:
             properties:
               kind:
                 type: string
-                enum: [overview, soil, symptom_closeup, roots_drainage]
+                enum: [overview, symptom_closeup, roots_drainage]
               storage_key:
                 type: string
                 description: The S3 object key; the expert service presigns it.

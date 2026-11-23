@@ -25,7 +25,7 @@ class DeliveryScenario:
         self.quota = FakeExpertQuota()
         self.journal = self.uow.journals.seed(USER, species="Mint")
         self.update = self.uow.updates.seed(self.journal.id, created_at=NOW)
-        for kind in (PhotoKind.OVERVIEW, PhotoKind.SOIL):
+        for kind in (PhotoKind.OVERVIEW, PhotoKind.SYMPTOM_CLOSEUP):
             self.uow.photos.add(self.update.id, kind, f"journals/{kind.value}")
         self.uow.diagnoses.seed(
             self.update.id,
