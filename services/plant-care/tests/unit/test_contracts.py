@@ -37,10 +37,8 @@ DESCRIPTION = (
 PUBLIC_PREFIXES = ("/v1/journals", "/v1/updates", "/v1/plants")
 AS_USER = {"X-User-Id": str(USER), "X-User-Groups": "users"}
 QUESTIONNAIRE = {
-    "drainage": "good",
     "lighting": "bright_indirect",
-    "finger_test": "dry",
-    "pot_weight": "lighter",
+    "dry_depth": "about_2_3cm",
 }
 
 

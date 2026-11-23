@@ -36,6 +36,15 @@ READ_COLUMNS = (
     "temperature",
     "pruning",
     "toxicity",
+    "dryness_threshold_pct",
+    "drought_tolerance",
+    "dormancy_shift",
+    "soil_drainage",
+    "temp_min_c",
+    "temp_max_c",
+    "rh_min_pct",
+    "rh_max_pct",
+    "light_need",
 )
 
 

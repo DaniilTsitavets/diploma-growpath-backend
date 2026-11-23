@@ -1,6 +1,6 @@
 from datetime import date, datetime
 
-from sqlalchemy import CheckConstraint, DateTime, func
+from sqlalchemy import CheckConstraint, DateTime, Numeric, SmallInteger, func
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -48,6 +48,22 @@ class PlantProfileModel(Base):
         ),
         CheckConstraint("btrim(license) <> '' AND char_length(license) <= 100", name="license"),
         CheckConstraint("content_sha256 ~ '^[0-9a-f]{64}$'", name="sha"),
+        CheckConstraint("dryness_threshold_pct IN (25, 50, 100)", name="dryness_threshold"),
+        CheckConstraint("drought_tolerance IN ('low', 'medium', 'high')", name="drought_tolerance"),
+        CheckConstraint("soil_drainage IN ('fast', 'good')", name="soil_drainage"),
+        CheckConstraint(
+            "light_need IN ('low', 'medium', 'bright_indirect', 'direct_sun')", name="light_need"
+        ),
+        CheckConstraint(
+            "temp_min_c BETWEEN -50 AND 60 AND temp_max_c BETWEEN -50 AND 60"
+            " AND (temp_min_c IS NULL OR temp_max_c IS NULL OR temp_min_c <= temp_max_c)",
+            name="temp_range",
+        ),
+        CheckConstraint(
+            "rh_min_pct BETWEEN 0 AND 100 AND rh_max_pct BETWEEN 0 AND 100"
+            " AND (rh_min_pct IS NULL OR rh_max_pct IS NULL OR rh_min_pct <= rh_max_pct)",
+            name="rh_range",
+        ),
     )
 
     slug: Mapped[str] = mapped_column(primary_key=True)
@@ -70,6 +86,15 @@ class PlantProfileModel(Base):
     temperature: Mapped[str | None]
     pruning: Mapped[str | None]
     toxicity: Mapped[str | None]
+    dryness_threshold_pct: Mapped[int | None] = mapped_column(SmallInteger)
+    drought_tolerance: Mapped[str | None]
+    dormancy_shift: Mapped[bool | None]
+    soil_drainage: Mapped[str | None]
+    temp_min_c: Mapped[float | None] = mapped_column(Numeric(3, 1, asdecimal=False))
+    temp_max_c: Mapped[float | None] = mapped_column(Numeric(3, 1, asdecimal=False))
+    rh_min_pct: Mapped[int | None] = mapped_column(SmallInteger)
+    rh_max_pct: Mapped[int | None] = mapped_column(SmallInteger)
+    light_need: Mapped[str | None]
     source_name: Mapped[str]
     source_url: Mapped[str]
     license: Mapped[str]

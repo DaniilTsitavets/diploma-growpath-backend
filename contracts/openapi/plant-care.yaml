@@ -1670,6 +1670,13 @@ paths:
       x-gateway: public
 components:
   schemas:
+    Answer:
+      type: string
+      enum:
+      - 'yes'
+      - 'no'
+      - unknown
+      title: Answer
     CandidateResponse:
       properties:
         rank:
@@ -1937,13 +1944,15 @@ components:
       - completed
       - degraded
       title: DiagnosisStatus
-    Drainage:
+    DryDepth:
       type: string
       enum:
-      - good
-      - poor
-      - none
-      title: Drainage
+      - not_dry
+      - about_2_3cm
+      - about_5cm
+      - whole_root_ball_dry
+      - unknown
+      title: DryDepth
     EscalationDetailResponse:
       properties:
         id:
@@ -2052,13 +2061,6 @@ components:
       - items
       - next_cursor
       title: FeedResponse
-    FingerTest:
-      type: string
-      enum:
-      - dry
-      - slightly_moist
-      - wet
-      title: FingerTest
     HealthStatus:
       properties:
         status:
@@ -2302,13 +2304,24 @@ components:
       required:
       - planted_on
       title: PlantingRequest
-    PotWeight:
+    PotDiameterClass:
       type: string
       enum:
-      - lighter
-      - as_expected
-      - heavier
-      title: PotWeight
+      - lt_10
+      - '10_15'
+      - '15_20'
+      - '20_30'
+      - gt_30
+      - unknown
+      title: PotDiameterClass
+    PotWeightRelative:
+      type: string
+      enum:
+      - about_same
+      - noticeably_lighter
+      - very_light
+      - unknown
+      title: PotWeightRelative
     RelatedSectionResponse:
       properties:
         section_id:
@@ -2335,6 +2348,12 @@ components:
       - source_url
       - body
       title: RelatedSectionResponse
+    SensorUnit:
+      type: string
+      enum:
+      - vwc_pct
+      - raw
+      title: SensorUnit
     SourceResponse:
       properties:
         rank:
@@ -2367,27 +2386,52 @@ components:
           type: string
           format: uuid
           title: Id
+        lighting:
+          $ref: '#/components/schemas/Lighting'
         last_watered_on:
           anyOf:
           - type: string
             format: date
           - type: 'null'
           title: Last Watered On
-        watering_interval_days:
+        watering_method:
+          $ref: '#/components/schemas/WateringMethod'
+          default: unknown
+        pot_diameter_class:
+          $ref: '#/components/schemas/PotDiameterClass'
+          default: unknown
+        drainage_holes:
+          $ref: '#/components/schemas/Answer'
+          default: unknown
+        standing_water_over_1h:
+          $ref: '#/components/schemas/Answer'
+          default: unknown
+        dry_depth:
+          $ref: '#/components/schemas/DryDepth'
+          default: unknown
+        pot_weight_relative:
+          $ref: '#/components/schemas/PotWeightRelative'
+          default: unknown
+        pot_weight_after_watering_g:
           anyOf:
-          - type: integer
-            maximum: 365.0
-            minimum: 1.0
+          - type: number
+            maximum: 200000.0
+            exclusiveMinimum: 0.0
+          - type: string
           - type: 'null'
-          title: Watering Interval Days
-        drainage:
-          $ref: '#/components/schemas/Drainage'
-        lighting:
-          $ref: '#/components/schemas/Lighting'
-        finger_test:
-          $ref: '#/components/schemas/FingerTest'
-        pot_weight:
-          $ref: '#/components/schemas/PotWeight'
+          title: Pot Weight After Watering G
+        pot_weight_now_g:
+          anyOf:
+          - type: number
+            maximum: 200000.0
+            exclusiveMinimum: 0.0
+          - type: string
+          - type: 'null'
+          title: Pot Weight Now G
+        repotted_or_moved:
+          anyOf:
+          - $ref: '#/components/schemas/YesNo'
+          - type: 'null'
         sensor_reading:
           anyOf:
           - type: number
@@ -2395,14 +2439,69 @@ components:
           - type: string
           - type: 'null'
           title: Sensor Reading
+        sensor_unit:
+          anyOf:
+          - $ref: '#/components/schemas/SensorUnit'
+          - type: 'null'
+        air_temp_c:
+          anyOf:
+          - type: number
+            maximum: 60.0
+            minimum: -50.0
+          - type: string
+          - type: 'null'
+          title: Air Temp C
+        air_rh_pct:
+          anyOf:
+          - type: number
+            maximum: 100.0
+            minimum: 0.0
+          - type: string
+          - type: 'null'
+          title: Air Rh Pct
+        air_measured_at:
+          anyOf:
+          - type: string
+            format: date-time
+          - type: 'null'
+          title: Air Measured At
+        air_temp_min_c:
+          anyOf:
+          - type: number
+            maximum: 60.0
+            minimum: -50.0
+          - type: string
+          - type: 'null'
+          title: Air Temp Min C
+        air_temp_max_c:
+          anyOf:
+          - type: number
+            maximum: 60.0
+            minimum: -50.0
+          - type: string
+          - type: 'null'
+          title: Air Temp Max C
+        air_rh_min_pct:
+          anyOf:
+          - type: number
+            maximum: 100.0
+            minimum: 0.0
+          - type: string
+          - type: 'null'
+          title: Air Rh Min Pct
+        air_rh_max_pct:
+          anyOf:
+          - type: number
+            maximum: 100.0
+            minimum: 0.0
+          - type: string
+          - type: 'null'
+          title: Air Rh Max Pct
       additionalProperties: false
       type: object
       required:
       - id
-      - drainage
       - lighting
-      - finger_test
-      - pot_weight
       title: SubmitUpdateRequest
     UpdateResponse:
       properties:
@@ -2418,30 +2517,85 @@ components:
           type: string
           format: date-time
           title: Created At
+        lighting:
+          $ref: '#/components/schemas/Lighting'
         last_watered_on:
           anyOf:
           - type: string
             format: date
           - type: 'null'
           title: Last Watered On
-        watering_interval_days:
+        watering_method:
+          $ref: '#/components/schemas/WateringMethod'
+        pot_diameter_class:
+          $ref: '#/components/schemas/PotDiameterClass'
+        drainage_holes:
+          $ref: '#/components/schemas/Answer'
+        standing_water_over_1h:
+          $ref: '#/components/schemas/Answer'
+        dry_depth:
+          $ref: '#/components/schemas/DryDepth'
+        pot_weight_relative:
+          $ref: '#/components/schemas/PotWeightRelative'
+        pot_weight_after_watering_g:
           anyOf:
-          - type: integer
+          - type: string
           - type: 'null'
-          title: Watering Interval Days
-        drainage:
-          $ref: '#/components/schemas/Drainage'
-        lighting:
-          $ref: '#/components/schemas/Lighting'
-        finger_test:
-          $ref: '#/components/schemas/FingerTest'
-        pot_weight:
-          $ref: '#/components/schemas/PotWeight'
+          title: Pot Weight After Watering G
+        pot_weight_now_g:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Pot Weight Now G
+        repotted_or_moved:
+          anyOf:
+          - $ref: '#/components/schemas/YesNo'
+          - type: 'null'
         sensor_reading:
           anyOf:
           - type: string
           - type: 'null'
           title: Sensor Reading
+        sensor_unit:
+          anyOf:
+          - $ref: '#/components/schemas/SensorUnit'
+          - type: 'null'
+        air_temp_c:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Air Temp C
+        air_rh_pct:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Air Rh Pct
+        air_measured_at:
+          anyOf:
+          - type: string
+            format: date-time
+          - type: 'null'
+          title: Air Measured At
+        air_temp_min_c:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Air Temp Min C
+        air_temp_max_c:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Air Temp Max C
+        air_rh_min_pct:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Air Rh Min Pct
+        air_rh_max_pct:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Air Rh Max Pct
         diagnosis:
           anyOf:
           - $ref: '#/components/schemas/DiagnosisResponse'
@@ -2455,13 +2609,26 @@ components:
       - id
       - journal_id
       - created_at
-      - last_watered_on
-      - watering_interval_days
-      - drainage
       - lighting
-      - finger_test
-      - pot_weight
+      - last_watered_on
+      - watering_method
+      - pot_diameter_class
+      - drainage_holes
+      - standing_water_over_1h
+      - dry_depth
+      - pot_weight_relative
+      - pot_weight_after_watering_g
+      - pot_weight_now_g
+      - repotted_or_moved
       - sensor_reading
+      - sensor_unit
+      - air_temp_c
+      - air_rh_pct
+      - air_measured_at
+      - air_temp_min_c
+      - air_temp_max_c
+      - air_rh_min_pct
+      - air_rh_max_pct
       - diagnosis
       - escalation
       title: UpdateResponse
@@ -2490,6 +2657,19 @@ components:
       - upload_url
       - expires_in_seconds
       title: UploadResponse
+    WateringMethod:
+      type: string
+      enum:
+      - through_drainage
+      - partial
+      - unknown
+      title: WateringMethod
+    YesNo:
+      type: string
+      enum:
+      - 'yes'
+      - 'no'
+      title: YesNo
     Problem:
       type: object
       title: Problem

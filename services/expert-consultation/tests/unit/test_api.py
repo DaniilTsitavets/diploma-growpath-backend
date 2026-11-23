@@ -199,12 +199,21 @@ def test_a_missing_ticket_is_404_not_found(client: TestClient):
     assert (response.status_code, response.json()["code"]) == (404, "not-found")
 
 
+@pytest.mark.parametrize(
+    "update",
+    [
+        {"watering_method": "partial", "dry_depth": "about_5cm", "pot_weight_now_g": "830.5"},
+        {"drainage": "good", "finger_test": "dry", "pot_weight": "lighter"},
+    ],
+    ids=["version 2", "stored version 1"],
+)
 def test_a_ticket_is_shown_with_its_context_and_presigned_photo_urls(
-    harness: Harness, client: TestClient
+    harness: Harness, client: TestClient, update: dict
 ):
     context = {
-        "schema_version": 1,
+        "schema_version": 2 if "watering_method" in update else 1,
         "species": "Basil",
+        "update": update,
         "photos": [{"kind": "overview", "storage_key": "journals/j/updates/u/overview"}],
     }
     ticket = harness.add(make_ticket(context=context))

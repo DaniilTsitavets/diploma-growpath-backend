@@ -12,7 +12,7 @@ from app.messaging.escalation_codec import (
 from app.service.queue import InvalidMessage
 from tests.unit.fakes import HOUR, NOW, escalation_body
 
-BASE_CONTEXT = {"schema_version": 1, "pad": ""}
+BASE_CONTEXT = {"schema_version": 2, "pad": ""}
 
 
 def encode(**overrides) -> str:
@@ -49,7 +49,16 @@ def test_a_valid_event_decodes_into_the_domain_event():
 def test_unknown_fields_are_ignored():
     event = decode_escalation_requested(encode(added_later="x"))
 
-    assert event.context["schema_version"] == 1
+    assert event.context["schema_version"] == 2
+
+
+@pytest.mark.parametrize("version", [1, 2])
+def test_both_context_versions_are_decoded_as_received(version: int):
+    context = {"schema_version": version, "species": "Basil", "update": {"drainage": "good"}}
+
+    event = decode_escalation_requested(encode(context=context))
+
+    assert event.context == context
 
 
 @pytest.mark.parametrize(
@@ -99,8 +108,8 @@ def test_a_body_that_is_not_json_is_invalid():
     [
         {},
         {"species": "Basil"},
-        {"schema_version": 2},
-        {"schema_version": "1"},
+        {"schema_version": 3},
+        {"schema_version": "2"},
         {"schema_version": 1.0},
         {"schema_version": True},
         {"schema_version": None},

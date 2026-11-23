@@ -11,6 +11,7 @@ from urllib.parse import urlsplit
 
 from app.knowledge_import.plants import MAX_SPECIES as MAX_PROFILE_SPECIES
 from app.knowledge_import.plants import PLANT_SLUG, PlantEntry
+from app.knowledge_import.watering_facts import watering_facts
 from app.service.knowledge_model import DocumentDraft, SectionDraft
 from app.service.plant_profile_model import PlantProfile
 
@@ -167,6 +168,7 @@ def convert_profile(
         "source_name": SOURCE_NAME,
         "source_url": _valid_url(citation.get("canonicalUrl")),
         "license": _valid_license(citation.get("license")),
+        **watering_facts(record),
     }
     return PlantProfile(**fields, imported_on=imported_on, content_sha256=_sha256(fields))
 

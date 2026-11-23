@@ -60,10 +60,7 @@ def add_update(session: Session, journal_id: uuid.UUID | None = None, **override
     values = {
         "id": uuid.uuid4(),
         "journal_id": journal_id or add_journal(session)["id"],
-        "drainage": "good",
         "lighting": "bright_indirect",
-        "finger_test": "dry",
-        "pot_weight": "lighter",
     }
     return _insert(session, UpdateModel, values, overrides)
 

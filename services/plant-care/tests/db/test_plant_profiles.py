@@ -191,3 +191,46 @@ def test_content_hashes_returns_the_stored_hash_of_each_known_slug(session: Sess
 
 def test_an_unknown_profile_is_none(session: Session):
     assert SqlAlchemyPlantProfileRepository(session).get("ghost") is None
+
+
+WATERING_FACTS = {
+    "dryness_threshold_pct": 100,
+    "drought_tolerance": "high",
+    "dormancy_shift": True,
+    "soil_drainage": "fast",
+    "temp_min_c": 18.3,
+    "temp_max_c": 29.4,
+    "rh_min_pct": 20,
+    "rh_max_pct": None,
+    "light_need": "direct_sun",
+}
+
+
+def test_the_watering_facts_round_trip_and_a_changed_one_updates_the_row(session: Session):
+    repo = SqlAlchemyPlantProfileRepository(session)
+    new = profile(**WATERING_FACTS)
+
+    assert repo.sync_profile(new) is SyncResult.CREATED
+    assert repo.get("lavender") == new
+
+    changed = profile(sha="b", **{**WATERING_FACTS, "dryness_threshold_pct": 50})
+    assert repo.sync_profile(changed) is SyncResult.UPDATED
+    assert repo.get("lavender").dryness_threshold_pct == 50
+
+
+@pytest.mark.parametrize(
+    ("constraint", "fields"),
+    [
+        ("ck_plant_profiles_dryness_threshold", {"dryness_threshold_pct": 30}),
+        ("ck_plant_profiles_drought_tolerance", {"drought_tolerance": "extreme"}),
+        ("ck_plant_profiles_soil_drainage", {"soil_drainage": "slow"}),
+        ("ck_plant_profiles_light_need", {"light_need": "bright"}),
+        ("ck_plant_profiles_temp_range", {"temp_min_c": 25.0, "temp_max_c": 18.0}),
+        ("ck_plant_profiles_temp_range", {"temp_min_c": -60.0}),
+        ("ck_plant_profiles_temp_range", {"temp_max_c": 61.0}),
+        ("ck_plant_profiles_rh_range", {"rh_min_pct": 70, "rh_max_pct": 40}),
+        ("ck_plant_profiles_rh_range", {"rh_max_pct": 101}),
+    ],
+)
+def test_the_watering_facts_are_bounded(session: Session, constraint: str, fields: dict):
+    rejected_by(session, constraint, **fields)

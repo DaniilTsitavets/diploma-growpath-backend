@@ -21,10 +21,8 @@ from tests.unit.settings import make_settings
 USER = uuid.uuid4()
 AS_USER = {"X-User-Id": str(USER), "X-User-Groups": "users"}
 QUESTIONNAIRE = {
-    "drainage": "poor",
     "lighting": "medium",
-    "finger_test": "wet",
-    "pot_weight": "heavier",
+    "standing_water_over_1h": "yes",
 }
 
 

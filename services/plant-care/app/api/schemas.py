@@ -1,29 +1,37 @@
 import uuid
-from datetime import date, datetime
+from datetime import UTC, date, datetime
 from decimal import Decimal
 from typing import Annotated
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import AwareDatetime, BaseModel, ConfigDict, Field, field_validator, model_validator
 
 from app.service.checkpoints import Checkpoint, CheckpointState
 from app.service.journals import JournalPage, JournalView
 from app.service.model import (
+    Answer,
     Diagnosis,
     DiagnosisStatus,
     DiagnosisSummary,
-    Drainage,
+    DryDepth,
     Escalation,
     EscalationStatus,
     EscalationSummary,
     FeedItem,
-    FingerTest,
     Lighting,
     NewUpdate,
-    PotWeight,
+    PotDiameterClass,
+    PotWeightRelative,
+    SensorUnit,
+    WateringMethod,
+    YesNo,
 )
 from app.service.updates import FeedPage
 
+# Measurements are Decimal, so responses carry them as strings and no precision is lost.
 SensorReading = Annotated[Decimal, Field(ge=0, max_digits=10, decimal_places=2)]
+PotWeightGrams = Annotated[Decimal, Field(gt=0, le=200000, max_digits=10, decimal_places=2)]
+Temperature = Annotated[Decimal, Field(ge=-50, le=60, max_digits=5, decimal_places=2)]
+Humidity = Annotated[Decimal, Field(ge=0, le=100, max_digits=5, decimal_places=2)]
 
 
 class CheckpointResponse(BaseModel):
@@ -79,13 +87,47 @@ class SubmitUpdateRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     id: uuid.UUID
-    last_watered_on: date | None = None
-    watering_interval_days: Annotated[int, Field(ge=1, le=365)] | None = None
-    drainage: Drainage
     lighting: Lighting
-    finger_test: FingerTest
-    pot_weight: PotWeight
+    last_watered_on: date | None = None
+    watering_method: WateringMethod = WateringMethod.UNKNOWN
+    pot_diameter_class: PotDiameterClass = PotDiameterClass.UNKNOWN
+    drainage_holes: Answer = Answer.UNKNOWN
+    standing_water_over_1h: Answer = Answer.UNKNOWN
+    dry_depth: DryDepth = DryDepth.UNKNOWN
+    pot_weight_relative: PotWeightRelative = PotWeightRelative.UNKNOWN
+    pot_weight_after_watering_g: PotWeightGrams | None = None
+    pot_weight_now_g: PotWeightGrams | None = None
+    repotted_or_moved: YesNo | None = None
     sensor_reading: SensorReading | None = None
+    sensor_unit: SensorUnit | None = None
+    air_temp_c: Temperature | None = None
+    air_rh_pct: Humidity | None = None
+    air_measured_at: AwareDatetime | None = None
+    air_temp_min_c: Temperature | None = None
+    air_temp_max_c: Temperature | None = None
+    air_rh_min_pct: Humidity | None = None
+    air_rh_max_pct: Humidity | None = None
+
+    @field_validator("last_watered_on")
+    @classmethod
+    def not_in_the_future(cls, value: date | None) -> date | None:
+        if value is not None and value > datetime.now(UTC).date():
+            raise ValueError("last_watered_on must not be in the future")
+        return value
+
+    @model_validator(mode="after")
+    def consistent_ranges_and_sensor(self) -> "SubmitUpdateRequest":
+        if (self.sensor_reading is None) != (self.sensor_unit is None):
+            raise ValueError("sensor_reading and sensor_unit must be given together")
+        if self.sensor_unit is SensorUnit.VWC_PCT and self.sensor_reading > 100:
+            raise ValueError("sensor_reading must be at most 100 when sensor_unit is vwc_pct")
+        for low, high in (
+            (self.air_temp_min_c, self.air_temp_max_c),
+            (self.air_rh_min_pct, self.air_rh_max_pct),
+        ):
+            if low is not None and high is not None and low > high:
+                raise ValueError("a minimum must not exceed its maximum")
+        return self
 
     def to_new_update(self, journal_id: uuid.UUID) -> NewUpdate:
         return NewUpdate(journal_id=journal_id, **self.model_dump())
@@ -171,13 +213,26 @@ class UpdateResponse(BaseModel):
     id: uuid.UUID
     journal_id: uuid.UUID
     created_at: datetime
-    last_watered_on: date | None
-    watering_interval_days: int | None
-    drainage: Drainage
     lighting: Lighting
-    finger_test: FingerTest
-    pot_weight: PotWeight
+    last_watered_on: date | None
+    watering_method: WateringMethod
+    pot_diameter_class: PotDiameterClass
+    drainage_holes: Answer
+    standing_water_over_1h: Answer
+    dry_depth: DryDepth
+    pot_weight_relative: PotWeightRelative
+    pot_weight_after_watering_g: Decimal | None
+    pot_weight_now_g: Decimal | None
+    repotted_or_moved: YesNo | None
     sensor_reading: Decimal | None
+    sensor_unit: SensorUnit | None
+    air_temp_c: Decimal | None
+    air_rh_pct: Decimal | None
+    air_measured_at: datetime | None
+    air_temp_min_c: Decimal | None
+    air_temp_max_c: Decimal | None
+    air_rh_min_pct: Decimal | None
+    air_rh_max_pct: Decimal | None
     diagnosis: DiagnosisResponse | None
     escalation: EscalationResponse | None
 

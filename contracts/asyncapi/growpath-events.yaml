@@ -329,18 +329,31 @@ components:
             update_id: d4e5f6a7-8b9c-4d0e-9f1a-2b3c4d5e6f70
             accept_until: '2026-11-14T11:55:00+00:00'
             context:
-              schema_version: 1
+              schema_version: 2
               species: Basil
               update:
                 id: d4e5f6a7-8b9c-4d0e-9f1a-2b3c4d5e6f70
                 created_at: '2026-11-11T11:50:00+00:00'
-                last_watered_on: '2026-11-09'
-                watering_interval_days: 3
-                drainage: good
                 lighting: bright_indirect
-                finger_test: dry
-                pot_weight: lighter
+                last_watered_on: '2026-11-09'
+                watering_method: through_drainage
+                pot_diameter_class: '15_20'
+                drainage_holes: 'yes'
+                standing_water_over_1h: 'no'
+                dry_depth: about_5cm
+                pot_weight_relative: noticeably_lighter
+                pot_weight_after_watering_g: 1200
+                pot_weight_now_g: '830.5'
+                repotted_or_moved: 'no'
                 sensor_reading: '35.5'
+                sensor_unit: vwc_pct
+                air_temp_c: '22.4'
+                air_rh_pct: 48
+                air_measured_at: '2026-11-11T11:45:00+00:00'
+                air_temp_min_c: '19.8'
+                air_temp_max_c: '24.1'
+                air_rh_min_pct: 41
+                air_rh_max_pct: 57
               photos:
                 - kind: overview
                   storage_key: journals/overview
@@ -371,18 +384,18 @@ components:
             update_id: e5f6a7b8-9c0d-4e1f-8a2b-3c4d5e6f7081
             accept_until: '2026-11-14T12:05:00+00:00'
             context:
-              schema_version: 1
+              schema_version: 2
               species: Mint
               update:
                 id: e5f6a7b8-9c0d-4e1f-8a2b-3c4d5e6f7081
                 created_at: '2026-11-11T12:00:00+00:00'
-                last_watered_on: null
-                watering_interval_days: null
-                drainage: poor
                 lighting: low
-                finger_test: wet
-                pot_weight: heavier
-                sensor_reading: null
+                watering_method: unknown
+                pot_diameter_class: unknown
+                drainage_holes: unknown
+                standing_water_over_1h: unknown
+                dry_depth: unknown
+                pot_weight_relative: unknown
               photos: []
               history: []
     TicketCreated:
@@ -454,6 +467,17 @@ components:
       type: string
       format: date-time
       description: RFC 3339 with an explicit offset.
+    YesNoUnknown:
+      type: string
+      enum: ['yes', 'no', unknown]
+
+    DecimalNumber:
+      description: A number, or a decimal number as text.
+      oneOf:
+        - type: number
+        - type: string
+          pattern: '^-?[0-9]+(\.[0-9]+)?$'
+
     OrderPlacedAttributes:
       type: object
       description: SQS message attributes of an `order.placed` message.
@@ -615,51 +639,84 @@ components:
         compact JSON serialization (`separators=(",", ":")`, no ASCII escaping) is at most 65536
         UTF-8 bytes; JSON Schema cannot express that, so plant-care checks it before publishing
         (oldest `history` entries are dropped first) and expert-consultation rejects a larger
-        context. Only `schema_version` 1 is accepted.
+        context. Plant-care publishes `schema_version` 2 only. expert-consultation also still reads
+        version 1 (the retired questionnaire: `drainage`, `finger_test`, `pot_weight`,
+        `watering_interval_days`) so that messages queued before the switch and tickets already
+        stored (they live 72 hours) stay readable; the context is stored and shown as received.
       required: [schema_version, species, update, photos, history]
       properties:
         schema_version:
-          const: 1
+          const: 2
         species:
           type: string
         update:
           type: object
           additionalProperties: false
+          description: >-
+            The update questionnaire. Optional keys are omitted, never sent as null.
           required:
             - id
             - created_at
-            - last_watered_on
-            - watering_interval_days
-            - drainage
             - lighting
-            - finger_test
-            - pot_weight
-            - sensor_reading
+            - watering_method
+            - pot_diameter_class
+            - drainage_holes
+            - standing_water_over_1h
+            - dry_depth
+            - pot_weight_relative
           properties:
             id:
               $ref: '#/components/schemas/Uuid'
             created_at:
               $ref: '#/components/schemas/Timestamp'
-            last_watered_on:
-              type: [string, 'null']
-              format: date
-            watering_interval_days:
-              type: [integer, 'null']
-            drainage:
-              type: string
-              enum: [good, poor, none]
             lighting:
               type: string
               enum: [low, medium, bright_indirect, direct_sun]
-            finger_test:
+            last_watered_on:
               type: string
-              enum: [dry, slightly_moist, wet]
-            pot_weight:
+              format: date
+            watering_method:
               type: string
-              enum: [lighter, as_expected, heavier]
+              enum: [through_drainage, partial, unknown]
+            pot_diameter_class:
+              type: string
+              enum: [lt_10, '10_15', '15_20', '20_30', gt_30, unknown]
+            drainage_holes:
+              $ref: '#/components/schemas/YesNoUnknown'
+            standing_water_over_1h:
+              $ref: '#/components/schemas/YesNoUnknown'
+            dry_depth:
+              type: string
+              enum: [not_dry, about_2_3cm, about_5cm, whole_root_ball_dry, unknown]
+            pot_weight_relative:
+              type: string
+              enum: [about_same, noticeably_lighter, very_light, unknown]
+            pot_weight_after_watering_g:
+              $ref: '#/components/schemas/DecimalNumber'
+            pot_weight_now_g:
+              $ref: '#/components/schemas/DecimalNumber'
+            repotted_or_moved:
+              type: string
+              enum: ['yes', 'no']
             sensor_reading:
-              type: [string, 'null']
-              description: A decimal number as text.
+              $ref: '#/components/schemas/DecimalNumber'
+            sensor_unit:
+              type: string
+              enum: [vwc_pct, raw]
+            air_temp_c:
+              $ref: '#/components/schemas/DecimalNumber'
+            air_rh_pct:
+              $ref: '#/components/schemas/DecimalNumber'
+            air_measured_at:
+              $ref: '#/components/schemas/Timestamp'
+            air_temp_min_c:
+              $ref: '#/components/schemas/DecimalNumber'
+            air_temp_max_c:
+              $ref: '#/components/schemas/DecimalNumber'
+            air_rh_min_pct:
+              $ref: '#/components/schemas/DecimalNumber'
+            air_rh_max_pct:
+              $ref: '#/components/schemas/DecimalNumber'
         photos:
           type: array
           items:

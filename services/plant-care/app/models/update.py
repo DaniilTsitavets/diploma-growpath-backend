@@ -13,26 +13,78 @@ class UpdateModel(Base):
 
     __tablename__ = "updates"
     __table_args__ = (
-        CheckConstraint("watering_interval_days BETWEEN 1 AND 365", name="watering_interval_days"),
-        CheckConstraint("drainage IN ('good', 'poor', 'none')", name="drainage"),
         CheckConstraint(
             "lighting IN ('low', 'medium', 'bright_indirect', 'direct_sun')", name="lighting"
         ),
-        CheckConstraint("finger_test IN ('dry', 'slightly_moist', 'wet')", name="finger_test"),
-        CheckConstraint("pot_weight IN ('lighter', 'as_expected', 'heavier')", name="pot_weight"),
+        CheckConstraint(
+            "watering_method IN ('through_drainage', 'partial', 'unknown')", name="watering_method"
+        ),
+        CheckConstraint(
+            "pot_diameter_class IN ('lt_10', '10_15', '15_20', '20_30', 'gt_30', 'unknown')",
+            name="pot_diameter_class",
+        ),
+        CheckConstraint("drainage_holes IN ('yes', 'no', 'unknown')", name="drainage_holes"),
+        CheckConstraint(
+            "standing_water_over_1h IN ('yes', 'no', 'unknown')", name="standing_water_over_1h"
+        ),
+        CheckConstraint(
+            "dry_depth IN "
+            "('not_dry', 'about_2_3cm', 'about_5cm', 'whole_root_ball_dry', 'unknown')",
+            name="dry_depth",
+        ),
+        CheckConstraint(
+            "pot_weight_relative IN ('about_same', 'noticeably_lighter', 'very_light', 'unknown')",
+            name="pot_weight_relative",
+        ),
+        CheckConstraint(
+            "pot_weight_after_watering_g > 0 AND pot_weight_after_watering_g <= 200000",
+            name="pot_weight_after_watering_g",
+        ),
+        CheckConstraint(
+            "pot_weight_now_g > 0 AND pot_weight_now_g <= 200000", name="pot_weight_now_g"
+        ),
+        CheckConstraint("repotted_or_moved IN ('yes', 'no')", name="repotted_or_moved"),
         CheckConstraint("sensor_reading >= 0", name="sensor_reading"),
+        CheckConstraint("sensor_unit IN ('vwc_pct', 'raw')", name="sensor_unit"),
+        CheckConstraint(
+            "(sensor_reading IS NULL) = (sensor_unit IS NULL)", name="sensor_reading_unit"
+        ),
+        CheckConstraint(
+            "sensor_unit IS DISTINCT FROM 'vwc_pct' OR sensor_reading <= 100", name="sensor_vwc_pct"
+        ),
+        CheckConstraint("air_temp_c BETWEEN -50 AND 60", name="air_temp_c"),
+        CheckConstraint("air_rh_pct BETWEEN 0 AND 100", name="air_rh_pct"),
+        CheckConstraint("air_temp_min_c BETWEEN -50 AND 60", name="air_temp_min_c"),
+        CheckConstraint("air_temp_max_c BETWEEN -50 AND 60", name="air_temp_max_c"),
+        CheckConstraint("air_temp_min_c <= air_temp_max_c", name="air_temp_range"),
+        CheckConstraint("air_rh_min_pct BETWEEN 0 AND 100", name="air_rh_min_pct"),
+        CheckConstraint("air_rh_max_pct BETWEEN 0 AND 100", name="air_rh_max_pct"),
+        CheckConstraint("air_rh_min_pct <= air_rh_max_pct", name="air_rh_range"),
         Index("ix_updates_journal_created", "journal_id", text("created_at DESC"), text("id DESC")),
     )
 
     id: Mapped[uuid.UUID] = mapped_column(primary_key=True)
     journal_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("journals.id"))
-    last_watered_on: Mapped[date | None]
-    watering_interval_days: Mapped[int | None]
-    drainage: Mapped[str]
     lighting: Mapped[str]
-    finger_test: Mapped[str]
-    pot_weight: Mapped[str]
+    last_watered_on: Mapped[date | None]
+    watering_method: Mapped[str] = mapped_column(server_default="unknown")
+    pot_diameter_class: Mapped[str] = mapped_column(server_default="unknown")
+    drainage_holes: Mapped[str] = mapped_column(server_default="unknown")
+    standing_water_over_1h: Mapped[str] = mapped_column(server_default="unknown")
+    dry_depth: Mapped[str] = mapped_column(server_default="unknown")
+    pot_weight_relative: Mapped[str] = mapped_column(server_default="unknown")
+    pot_weight_after_watering_g: Mapped[Decimal | None] = mapped_column(Numeric(10, 2))
+    pot_weight_now_g: Mapped[Decimal | None] = mapped_column(Numeric(10, 2))
+    repotted_or_moved: Mapped[str | None]
     sensor_reading: Mapped[Decimal | None] = mapped_column(Numeric(10, 2))
+    sensor_unit: Mapped[str | None]
+    air_temp_c: Mapped[Decimal | None] = mapped_column(Numeric(5, 2))
+    air_rh_pct: Mapped[Decimal | None] = mapped_column(Numeric(5, 2))
+    air_measured_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    air_temp_min_c: Mapped[Decimal | None] = mapped_column(Numeric(5, 2))
+    air_temp_max_c: Mapped[Decimal | None] = mapped_column(Numeric(5, 2))
+    air_rh_min_pct: Mapped[Decimal | None] = mapped_column(Numeric(5, 2))
+    air_rh_max_pct: Mapped[Decimal | None] = mapped_column(Numeric(5, 2))
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
 

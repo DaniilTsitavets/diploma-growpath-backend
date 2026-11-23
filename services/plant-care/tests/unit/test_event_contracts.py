@@ -108,7 +108,7 @@ def test_the_escalation_examples_satisfy_the_contract(name: str):
 
 def test_the_contract_rejects_a_context_of_another_version():
     payload = example_payloads(ESCALATION)["after a diagnosis"]
-    payload["context"]["schema_version"] = 2
+    payload["context"]["schema_version"] = 1
 
     assert payload_errors(ESCALATION, payload)
 
