@@ -11,6 +11,8 @@ class Conflict(Exception):
 class InvalidRequest(Exception):
     """The request is well formed but its content cannot be used (HTTP 422)."""
 
+    code = "validation-error"
+
 
 class Unavailable(Exception):
     """A dependency of the service did not answer (HTTP 503)."""

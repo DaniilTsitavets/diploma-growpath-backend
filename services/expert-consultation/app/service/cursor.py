@@ -9,6 +9,8 @@ SEPARATOR = "|"
 
 
 class InvalidCursor(InvalidRequest):
+    code = "invalid-cursor"
+
     def __init__(self) -> None:
         super().__init__("the cursor is not valid")
 

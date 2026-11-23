@@ -139,7 +139,7 @@ def test_the_queue_lists_open_tickets_with_a_cursor(harness: Harness, client: Te
 
     first = client.get("/v1/expert/tickets", headers=AS_EXPERT).json()
     second = client.get(
-        "/v1/expert/tickets", params={"after": first["next_cursor"]}, headers=AS_EXPERT
+        "/v1/expert/tickets", params={"cursor": first["next_cursor"]}, headers=AS_EXPERT
     ).json()
 
     assert [item["id"] for item in first["items"]] == [str(t.id) for t in tickets[:2]]
@@ -159,14 +159,44 @@ def test_the_queue_limit_is_honoured(harness: Harness, client: TestClient):
     assert body["next_cursor"] is not None
 
 
-@pytest.mark.parametrize(
-    "params", [{"limit": 0}, {"limit": "x"}, {"after": ""}, {"after": "garbage"}]
-)
-def test_a_bad_queue_query_is_422_problem_json(client: TestClient, params: dict):
+@pytest.mark.parametrize("params", [{"limit": 0}, {"limit": "x"}, {"cursor": ""}])
+def test_a_bad_queue_query_is_a_validation_error(client: TestClient, params: dict):
     response = client.get("/v1/expert/tickets", params=params, headers=AS_EXPERT)
 
     assert response.status_code == 422
     assert response.headers["content-type"] == PROBLEM_JSON
+    assert response.json()["code"] == "validation-error"
+
+
+def test_a_cursor_the_service_did_not_issue_is_422_invalid_cursor(client: TestClient):
+    response = client.get("/v1/expert/tickets", params={"cursor": "garbage"}, headers=AS_EXPERT)
+
+    assert response.status_code == 422
+    assert response.headers["content-type"] == PROBLEM_JSON
+    assert response.json()["code"] == "invalid-cursor"
+
+
+@pytest.mark.parametrize(
+    ("headers", "status", "code"),
+    [
+        ({}, 401, "unauthorized"),
+        ({"X-User-Id": "not-a-uuid"}, 401, "unauthorized"),
+        ({"X-User-Id": str(EXPERT), "X-User-Groups": "users"}, 403, "forbidden"),
+    ],
+    ids=["no user", "bad user", "not an expert"],
+)
+def test_an_unauthorized_caller_gets_a_coded_problem(
+    client: TestClient, headers: dict, status: int, code: str
+):
+    response = client.get("/v1/expert/tickets", headers=headers)
+
+    assert (response.status_code, response.json()["code"]) == (status, code)
+
+
+def test_a_missing_ticket_is_404_not_found(client: TestClient):
+    response = client.get(f"/v1/expert/tickets/{uuid.uuid4()}", headers=AS_EXPERT)
+
+    assert (response.status_code, response.json()["code"]) == (404, "not-found")
 
 
 def test_a_ticket_is_shown_with_its_context_and_presigned_photo_urls(
