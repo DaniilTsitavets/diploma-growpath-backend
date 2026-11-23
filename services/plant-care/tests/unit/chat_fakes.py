@@ -160,13 +160,16 @@ class ChatScenario:
         self.sections = [make_section(1), make_section(2)]
         self.uow.knowledge.found = self.sections
 
-    def service(self, model: FakeChatModel, top_k: int = 4, history_turns: int = 3) -> ChatService:
+    def service(
+        self, model: FakeChatModel, top_k: int = 4, history_turns: int = 3, min_rank: float = 0.8
+    ) -> ChatService:
         return ChatService(
             lambda: self.uow,
             self.quota,
             model,
             EffortPolicy(self.tiers),
             top_k,
+            min_rank,
             history_turns,
             default_page_size=2,
             max_page_size=3,

@@ -99,6 +99,8 @@ class Settings(BaseSettings):
 
     # At most 4: `chat_turn_sources.rank` is limited to 1-4 by a CHECK.
     chat_top_k: int = Field(default=4, ge=1, le=4)
+    # Minimum ts_rank_cd of a full-text match to count as relevant; see docs/chat-retrieval.md.
+    chat_min_rank: float = Field(default=0.8, ge=0)
     chat_history_turns: int = Field(default=3, ge=0)
     chat_history_answer_chars: int = Field(default=1000, ge=1)
     chat_model_timeout_seconds: float = Field(default=8.0, gt=0)

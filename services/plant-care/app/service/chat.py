@@ -61,6 +61,7 @@ class ChatService:
         model: ChatModel,
         effort_policy: EffortPolicy,
         top_k: int,
+        min_rank: float,
         history_turns: int,
         default_page_size: int,
         max_page_size: int,
@@ -70,6 +71,7 @@ class ChatService:
         self._model = model
         self._effort_policy = effort_policy
         self._top_k = top_k
+        self._min_rank = min_rank
         self._history_turns = history_turns
         self._default_page_size = default_page_size
         self._max_page_size = max_page_size
@@ -122,7 +124,7 @@ class ChatService:
             stored = uow.chat_turns.get(turn_id)
             if stored is not None:
                 return self._same_journal(stored, journal_id)
-            sections = uow.knowledge.search(question, journal.species, self._top_k)
+            sections = uow.knowledge.search(question, journal.species, self._top_k, self._min_rank)
             recent = uow.chat_turns.page(journal_id, self._history_turns, None)
         history = [PriorTurn(turn.question, turn.answer) for turn in reversed(recent)]
         return Preparation(journal.species, sections, history)

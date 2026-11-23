@@ -3,6 +3,7 @@ from collections.abc import Collection
 
 from sqlalchemy import (
     Boolean,
+    Float,
     Text,
     bindparam,
     cast,
@@ -96,14 +97,17 @@ class SqlAlchemyKnowledgeRepository:
         )
         return {slug: content_sha256 for slug, content_sha256 in rows}
 
-    def search(self, question: str, species: str, limit: int) -> list[RetrievedSection]:
+    def search(
+        self, question: str, species: str, limit: int, min_rank: float = 0.0
+    ) -> list[RetrievedSection]:
         """Sections matching any word of the question, best first; topped up from the species' own.
 
         Sections of the journal's species and general ones are searched; on equal rank the
-        species' section comes first. Only the species' sections fill the remaining places.
+        species' section comes first. A match ranked below `min_rank` does not count as found.
+        Only the species' sections fill the remaining places.
         """
         tsquery = build_tsquery(self._lexemes(question))
-        found = [] if tsquery is None else self._match(tsquery, species, limit)
+        found = [] if tsquery is None else self._match(tsquery, species, limit, min_rank)
         if len(found) < limit:
             found += self._top_up(species, limit - len(found), {section.id for section in found})
         return found
@@ -128,17 +132,21 @@ class SqlAlchemyKnowledgeRepository:
         vector = func.to_tsvector(ENGLISH, cast(question, Text))
         return self._session.execute(select(func.tsvector_to_array(vector))).scalar_one()
 
-    def _match(self, tsquery: str, species: str, limit: int) -> list[RetrievedSection]:
+    def _match(
+        self, tsquery: str, species: str, limit: int, min_rank: float
+    ) -> list[RetrievedSection]:
         query = cast(bindparam("tsquery", tsquery, type_=Text), TSQUERY)
+        rank = func.ts_rank_cd(KbSectionModel.search_vector, query)
         rows = self._session.execute(
             select(*SECTION_COLUMNS)
             .join(KbDocumentModel, KbDocumentModel.id == KbSectionModel.document_id)
             .where(
                 KbSectionModel.search_vector.op("@@", return_type=Boolean)(query),
+                rank >= bindparam("min_rank", min_rank, type_=Float),
                 or_(KbDocumentModel.species.is_(None), _species_matches(species)),
             )
             .order_by(
-                func.ts_rank_cd(KbSectionModel.search_vector, query).desc(),
+                rank.desc(),
                 KbDocumentModel.species.is_(None),
                 KbDocumentModel.slug,
                 KbSectionModel.position,

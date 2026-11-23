@@ -174,6 +174,62 @@ def test_a_heading_match_ranks_above_a_body_match(session: Session):
     assert headings(repo.search("pinching", "Basil", 4))[:2] == ["Pinching", "Harvest"]
 
 
+def minimum_rank_documents(session: Session) -> SqlAlchemyKnowledgeRepository:
+    return seed_documents(
+        session,
+        make_document(
+            "basil",
+            "Basil",
+            {
+                "Intro": "Welcome.",
+                "Pinching": "Remove the tips.",
+                "Harvest": "Pinching the tips gives more leaves.",
+            },
+        ),
+        make_document("general", None, {"Misc": "Pinching is rarely needed."}),
+    )
+
+
+def test_a_match_below_the_minimum_rank_does_not_count(session: Session):
+    repo = minimum_rank_documents(session)
+
+    found = repo.search("pinching", "Basil", 4, min_rank=0.8)
+
+    assert headings(found) == ["Pinching", "Intro", "Harvest"]
+
+
+def test_a_match_exactly_at_the_minimum_rank_is_kept_and_one_above_it_is_not(session: Session):
+    repo = minimum_rank_documents(session)
+    heading_rank = session.scalar(
+        text(
+            "SELECT ts_rank_cd(search_vector, 'pinch'::tsquery) "
+            "FROM kb_sections WHERE heading = 'Pinching'"
+        )
+    )
+
+    at = repo.search("pinching", "Basil", 4, min_rank=heading_rank)
+    above = repo.search("pinching", "Basil", 4, min_rank=heading_rank + 0.01)
+
+    assert headings(at) == ["Pinching", "Intro", "Harvest"]
+    assert headings(above) == ["Intro", "Pinching", "Harvest"]
+
+
+def test_the_species_top_up_is_not_affected_by_the_minimum_rank(session: Session):
+    repo = minimum_rank_documents(session)
+
+    found = repo.search("pinching", "Basil", 4, min_rank=100.0)
+
+    assert headings(found) == ["Intro", "Pinching", "Harvest"]
+
+
+def test_a_zero_minimum_rank_keeps_every_match(session: Session):
+    repo = minimum_rank_documents(session)
+
+    found = repo.search("pinching", "Basil", 4, min_rank=0.0)
+
+    assert headings(found) == ["Pinching", "Harvest", "Misc", "Intro"]
+
+
 def test_the_stemmer_matches_inflected_words(session: Session):
     repo = seed_documents(
         session, make_document("basil", "Basil", {"Water": "Water the plants every week."})

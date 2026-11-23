@@ -146,6 +146,7 @@ def create_app(
         chat_model,
         effort_policy,
         settings.chat_top_k,
+        settings.chat_min_rank,
         settings.chat_history_turns,
         settings.chat_history_default_page_size,
         settings.chat_history_max_page_size,
