@@ -1,0 +1,68 @@
+# Builds the images of changed services after CI passes on main and opens a PR
+# with the new image tag in the GitOps repository. Can also be started by hand.
+name: Release images
+run-name: Release images (${{ github.event_name == 'workflow_dispatch' && inputs.service || github.sha }})
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - services/**
+      - libs/**
+      - pyproject.toml
+      - uv.lock
+  workflow_dispatch:
+    inputs:
+      service:
+        description: Service to build
+        type: choice
+        options: [all, commerce, entitlement, plant-care, expert-consultation]
+        default: all
+
+permissions:
+  contents: read
+
+concurrency:
+  group: build
+  cancel-in-progress: false
+
+jobs:
+  ci:
+    name: Run CI
+    if: github.event_name == 'push'
+    uses: ./.github/workflows/ci.yml
+
+  select:
+    name: Select services
+    needs: ci
+    if: ${{ !cancelled() && needs.ci.result != 'failure' }}
+    runs-on: ubuntu-latest
+    outputs:
+      services: ${{ steps.pick.outputs.services }}
+    steps:
+      - name: Check out the repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+
+      - name: Pick services to build
+        id: pick
+        env:
+          INPUT: ${{ inputs.service }}
+          BEFORE: ${{ github.event.before }}
+        run: .github/scripts/select-services.sh
+
+  build:
+    name: Build ${{ matrix.service }} image
+    needs: select
+    if: needs.select.outputs.services != '[]'
+    strategy:
+      fail-fast: false
+      matrix:
+        service: ${{ fromJSON(needs.select.outputs.services) }}
+    permissions:
+      contents: read
+      id-token: write
+    uses: ./.github/workflows/reusable-build-image.yml
+    with:
+      service: ${{ matrix.service }}
