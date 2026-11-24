@@ -92,12 +92,32 @@ jobs:
           token: ${{ steps.app.outputs.token }}
           path: gitops
 
-      - name: Open a PR with the new image tag
+      - name: Set the image tag in the values file
         if: steps.gitops.outputs.enabled == 'true'
+        id: values
         working-directory: gitops
         env:
-          GH_TOKEN: ${{ steps.app.outputs.token }}
           TAG: ${{ steps.tag.outputs.value }}
-          IMAGE: ${{ steps.ecr.outputs.registry }}/growpath/${{ inputs.service }}
-          SOURCE_URL: ${{ github.server_url }}/${{ github.repository }}/commit/${{ github.sha }}
-        run: ../.github/scripts/bump-image-tag.sh
+        run: |
+          file="apps/values/${SERVICE}.yaml"
+          if [ ! -f "$file" ]; then
+            echo "::notice::$file does not exist yet, skipping the tag bump"
+            exit 0
+          fi
+          yq -i '.image.tag = strenv(TAG)' "$file"
+
+      - name: Open a PR with the new image tag
+        if: steps.gitops.outputs.enabled == 'true'
+        uses: peter-evans/create-pull-request@3ffccacd46053766916f087ce41d627c0b8cf2d1 # v8
+        with:
+          path: gitops
+          token: ${{ steps.app.outputs.token }}
+          branch: bump/${{ inputs.service }}-${{ steps.tag.outputs.value }}
+          base: main
+          commit-message: Bump ${{ inputs.service }} image to ${{ steps.tag.outputs.value }}
+          title: Bump ${{ inputs.service }} image to ${{ steps.tag.outputs.value }}
+          author: growpath-ci[bot] <growpath-ci[bot]@users.noreply.github.com>
+          committer: growpath-ci[bot] <growpath-ci[bot]@users.noreply.github.com>
+          body: |
+            * Image ${{ steps.ecr.outputs.registry }}/growpath/${{ inputs.service }}:${{ steps.tag.outputs.value }}
+            * Source commit ${{ github.server_url }}/${{ github.repository }}/commit/${{ github.sha }}
