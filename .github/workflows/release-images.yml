@@ -1,4 +1,7 @@
-name: Build and deploy
+# Builds the images of changed services after CI passes on main and opens a PR
+# with the new image tag in the GitOps repository. Can also be started by hand.
+name: Release images
+run-name: Release images (${{ github.event_name == 'workflow_dispatch' && inputs.service || github.sha }})
 
 on:
   push:
@@ -25,6 +28,7 @@ concurrency:
 
 jobs:
   ci:
+    name: Run CI
     if: github.event_name == 'push'
     uses: ./.github/workflows/ci.yml
 
@@ -36,7 +40,8 @@ jobs:
     outputs:
       services: ${{ steps.pick.outputs.services }}
     steps:
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - name: Check out the repository
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
           fetch-depth: 0
 
@@ -48,7 +53,7 @@ jobs:
         run: .github/scripts/select-services.sh
 
   build:
-    name: Build ${{ matrix.service }}
+    name: Build ${{ matrix.service }} image
     needs: select
     if: needs.select.outputs.services != '[]'
     strategy:
@@ -58,6 +63,6 @@ jobs:
     permissions:
       contents: read
       id-token: write
-    uses: ./.github/workflows/_build-service.yml
+    uses: ./.github/workflows/reusable-build-image.yml
     with:
       service: ${{ matrix.service }}

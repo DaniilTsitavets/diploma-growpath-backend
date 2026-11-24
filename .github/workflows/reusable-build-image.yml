@@ -1,4 +1,6 @@
-name: Build one service
+# Builds one service image, pushes it to ECR and opens a PR with the new tag in the GitOps repository.
+# Called once per service by release-images.yml.
+name: Build image
 
 on:
   workflow_call:
@@ -17,14 +19,15 @@ env:
 
 jobs:
   image:
-    name: Image and tag bump
+    name: Build, push and bump the tag
     runs-on: ubuntu-latest
     environment: prod
     permissions:
       contents: read
       id-token: write
     steps:
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - name: Check out the repository
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
 
       - name: Derive the image tag
         id: tag
