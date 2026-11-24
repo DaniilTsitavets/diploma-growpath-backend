@@ -1,9 +1,5 @@
 name: Deploy images
 
-# Builds the images of the services that changed after CI passed on main, pushes them to ECR
-# and opens one PR per service in the GitOps repository with the new image tag.
-# Manual run: pick services (comma separated, or "all") to rebuild without a code change.
-
 on:
   workflow_run:
     workflows: [CI]
@@ -12,7 +8,7 @@ on:
   workflow_dispatch:
     inputs:
       services:
-        description: Services to build, comma separated (commerce, entitlement, plant-care, expert-consultation) or all
+        description: "Comma separated: commerce, entitlement, plant-care, expert-consultation, or all"
         default: all
         required: true
 
@@ -28,44 +24,30 @@ env:
   GITOPS_REPOSITORY: diploma-growpath-argocd
 
 jobs:
-  detect:
+  select:
+    name: Select services
     if: github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success'
     runs-on: ubuntu-latest
     outputs:
       services: ${{ steps.pick.outputs.services }}
     steps:
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - name: Check out the commit that passed CI
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
           ref: ${{ github.event.workflow_run.head_sha || github.sha }}
           fetch-depth: 2
-      - id: pick
+
+      - name: Pick services to build
+        id: pick
         env:
           EVENT: ${{ github.event_name }}
           INPUT: ${{ inputs.services }}
-        run: |
-          all='["commerce","entitlement","plant-care","expert-consultation"]'
-          if [ "$EVENT" = workflow_dispatch ]; then
-            if [ "$INPUT" = all ]; then
-              picked="$all"
-            else
-              picked=$(jq -cn --argjson all "$all" --arg input "$INPUT" \
-                '($input | split(",") | map(gsub(" "; ""))) as $want | $all | map(select(. as $s | $want | index($s)))')
-            fi
-          else
-            files=$(git diff --name-only HEAD^ HEAD)
-            if echo "$files" | grep -qE '^(libs/|pyproject\.toml$|uv\.lock$)'; then
-              picked="$all"
-            else
-              picked=$(jq -cn --argjson all "$all" --arg files "$files" \
-                '$all | map(select(. as $s | $files | split("\n") | any(startswith("services/" + $s + "/"))))')
-            fi
-          fi
-          echo "services=$picked" >> "$GITHUB_OUTPUT"
-          echo "Building: $picked"
+        run: .github/scripts/select-services.sh
 
   build:
-    needs: detect
-    if: needs.detect.outputs.services != '[]'
+    name: Build ${{ matrix.service }}
+    needs: select
+    if: needs.select.outputs.services != '[]'
     runs-on: ubuntu-latest
     environment: prod
     permissions:
@@ -74,24 +56,35 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        service: ${{ fromJSON(needs.detect.outputs.services) }}
+        service: ${{ fromJSON(needs.select.outputs.services) }}
     env:
       SERVICE: ${{ matrix.service }}
       SOURCE_SHA: ${{ github.event.workflow_run.head_sha || github.sha }}
     steps:
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - name: Check out the commit that passed CI
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
           ref: ${{ env.SOURCE_SHA }}
-      - id: tag
+
+      - name: Derive the image tag
+        id: tag
         run: echo "value=${SOURCE_SHA::12}" >> "$GITHUB_OUTPUT"
-      - uses: aws-actions/configure-aws-credentials@7474bc4690e29a8392af63c5b98e7449536d5c3a # v4
+
+      - name: Assume the AWS push role
+        uses: aws-actions/configure-aws-credentials@7474bc4690e29a8392af63c5b98e7449536d5c3a # v4
         with:
           role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
           aws-region: ${{ env.AWS_REGION }}
-      - id: ecr
+
+      - name: Log in to ECR
+        id: ecr
         uses: aws-actions/amazon-ecr-login@7290e214a610b32bc0eef81748948b6d466a8783 # v2
-      - uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f # v3
-      - uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8 # v6
+
+      - name: Set up Buildx
+        uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f # v3
+
+      - name: Build and push the image
+        uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8 # v6
         with:
           context: .
           file: services/${{ matrix.service }}/Dockerfile
@@ -102,11 +95,14 @@ jobs:
           cache-from: type=gha,scope=${{ matrix.service }}
           cache-to: type=gha,scope=${{ matrix.service }},mode=max
 
-      - id: gitops
+      - name: Check that the GitOps App is configured
+        id: gitops
         env:
           APP_ID: ${{ secrets.GITOPS_APP_ID }}
         run: echo "enabled=$([ -n "$APP_ID" ] && echo true || echo false)" >> "$GITHUB_OUTPUT"
-      - if: steps.gitops.outputs.enabled == 'true'
+
+      - name: Create a GitOps repository token
+        if: steps.gitops.outputs.enabled == 'true'
         id: app
         uses: actions/create-github-app-token@fee1f7d63c2ff003460e3d139729b119787bc349 # v2
         with:
@@ -114,37 +110,21 @@ jobs:
           private-key: ${{ secrets.GITOPS_APP_PRIVATE_KEY }}
           owner: ${{ github.repository_owner }}
           repositories: ${{ env.GITOPS_REPOSITORY }}
-      - if: steps.gitops.outputs.enabled == 'true'
+
+      - name: Check out the GitOps repository
+        if: steps.gitops.outputs.enabled == 'true'
         uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
           repository: ${{ github.repository_owner }}/${{ env.GITOPS_REPOSITORY }}
           token: ${{ steps.app.outputs.token }}
           path: gitops
-      - if: steps.gitops.outputs.enabled == 'true'
+
+      - name: Open a PR with the new image tag
+        if: steps.gitops.outputs.enabled == 'true'
         working-directory: gitops
         env:
           GH_TOKEN: ${{ steps.app.outputs.token }}
           TAG: ${{ steps.tag.outputs.value }}
           IMAGE: ${{ steps.ecr.outputs.registry }}/growpath/${{ matrix.service }}
           SOURCE_URL: ${{ github.server_url }}/${{ github.repository }}/commit/${{ env.SOURCE_SHA }}
-        run: |
-          file="apps/values/${SERVICE}.yaml"
-          if [ ! -f "$file" ]; then
-            echo "::notice::$file does not exist yet, skipping the tag bump"
-            exit 0
-          fi
-          yq -i '.image.tag = strenv(TAG)' "$file"
-          if git diff --quiet; then
-            echo "Tag is already $TAG"
-            exit 0
-          fi
-          branch="bump/${SERVICE}-${TAG}"
-          git config user.name "growpath-ci[bot]"
-          git config user.email "growpath-ci[bot]@users.noreply.github.com"
-          git checkout -b "$branch"
-          git commit -am "Bump ${SERVICE} image to ${TAG}"
-          git push origin "$branch"
-          gh pr create --base main --head "$branch" \
-            --title "Bump ${SERVICE} image to ${TAG}" \
-            --body "* Image ${IMAGE}:${TAG}
-          * Source commit ${SOURCE_URL}"
+        run: ../.github/scripts/bump-image-tag.sh
