@@ -1,21 +1,21 @@
 #!/usr/bin/env bash
-# Prints the services to build as a JSON array into $GITHUB_OUTPUT (key "services").
-# Input env: EVENT (workflow_dispatch or workflow_run), INPUT (dispatch services list).
+# Writes the services to build as a JSON array to $GITHUB_OUTPUT (key "services").
+# Input env: INPUT (service name or "all", manual runs), BEFORE (head of the branch before the push).
 set -euo pipefail
 
 all='["commerce","entitlement","plant-care","expert-consultation"]'
 
-if [ "$EVENT" = workflow_dispatch ]; then
+if [ "$GITHUB_EVENT_NAME" = workflow_dispatch ]; then
   if [ "$INPUT" = all ]; then
     picked="$all"
   else
-    picked=$(jq -cn --argjson all "$all" --arg input "$INPUT" '
-      ($input | split(",") | map(gsub(" "; ""))) as $wanted
-      | $all | map(select(. as $s | $wanted | index($s)))')
+    picked=$(jq -cn --arg service "$INPUT" '[$service]')
   fi
+elif ! git cat-file -e "${BEFORE}^{commit}" 2>/dev/null; then
+  # A new branch has no previous head to compare with.
+  picked="$all"
 else
-  # The squash commit has exactly one parent, so HEAD^..HEAD is the merged change.
-  changed=$(git diff --name-only HEAD^ HEAD)
+  changed=$(git diff --name-only "$BEFORE" HEAD)
   if echo "$changed" | grep -qE '^(libs/|pyproject\.toml$|uv\.lock$)'; then
     picked="$all"
   else
