@@ -55,7 +55,7 @@ jobs:
   build:
     name: Build ${{ matrix.service }} image
     needs: select
-    if: needs.select.outputs.services != '[]'
+    if: ${{ !cancelled() && needs.select.result == 'success' && needs.select.outputs.services != '[]' }}
     strategy:
       fail-fast: false
       matrix:
