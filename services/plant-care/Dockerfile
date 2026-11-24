@@ -9,7 +9,7 @@ COPY pyproject.toml uv.lock ./
 COPY libs libs
 COPY services services
 RUN uv sync --frozen --no-dev --no-editable --package plant-care \
-    && useradd --system --no-create-home app
+    && useradd --system --uid 10001 --no-create-home app
 
 WORKDIR /srv/services/plant-care
 USER app
