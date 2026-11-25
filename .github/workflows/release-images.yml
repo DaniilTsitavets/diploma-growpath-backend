@@ -120,15 +120,15 @@ jobs:
       - name: Check that the GitOps App is configured
         id: gitops
         env:
-          APP_ID: ${{ secrets.GITOPS_APP_ID }}
-        run: echo "enabled=$([ -n "$APP_ID" ] && echo true || echo false)" >> "$GITHUB_OUTPUT"
+          APP_CLIENT_ID: ${{ secrets.GITOPS_APP_CLIENT_ID }}
+        run: echo "enabled=$([ -n "$APP_CLIENT_ID" ] && echo true || echo false)" >> "$GITHUB_OUTPUT"
 
       - name: Create a GitOps repository token
         if: steps.gitops.outputs.enabled == 'true'
         id: app
         uses: actions/create-github-app-token@f418cff399f7aef4c2f0ad47e25ca7a6abbdd6fc # v3.4.0
         with:
-          app-id: ${{ secrets.GITOPS_APP_ID }}
+          client-id: ${{ secrets.GITOPS_APP_CLIENT_ID }}
           private-key: ${{ secrets.GITOPS_APP_PRIVATE_KEY }}
           owner: ${{ github.repository_owner }}
           repositories: ${{ env.GITOPS_REPOSITORY }}
