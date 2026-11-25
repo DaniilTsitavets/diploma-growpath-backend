@@ -141,19 +141,22 @@ jobs:
           token: ${{ steps.app.outputs.token }}
           path: gitops
 
-      - name: Set the image tag in the values file
+      - name: Set the image tag in the values files
         if: steps.gitops.outputs.enabled == 'true'
         id: values
         working-directory: gitops
         env:
           TAG: ${{ steps.tag.outputs.value }}
         run: |
-          file="apps/values/${SERVICE}.yaml"
-          if [ ! -f "$file" ]; then
-            echo "::notice::$file does not exist yet, skipping the tag bump"
+          # The service itself and its one-off jobs (for example plant-care-ingestion) share one image.
+          files=$(ls "apps/prod/${SERVICE}.yaml" apps/prod/"${SERVICE}"-*.yaml 2>/dev/null || true)
+          if [ -z "$files" ]; then
+            echo "::notice::No values for ${SERVICE} in apps/prod yet, skipping the tag bump"
             exit 0
           fi
-          yq -i '.image.tag = strenv(TAG)' "$file"
+          for file in $files; do
+            yq -i '.image.tag = strenv(TAG)' "$file"
+          done
 
       - name: Open a PR with the new image tag
         if: steps.gitops.outputs.enabled == 'true'
