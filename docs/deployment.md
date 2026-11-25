@@ -14,7 +14,7 @@ and follow this document. Facts below come from the code (`app/config.py`, `app/
 | User | non-root, numeric UID `10001` (set in the Dockerfile; `runAsNonRoot` needs a numeric UID) |
 | Entry | the image `CMD` migrates and then starts `uvicorn`; on Kubernetes override it (see below) |
 | Writable paths | none required; mount an `emptyDir` on `/tmp` if `readOnlyRootFilesystem` is on |
-| Architecture | the images are built for the builder's architecture; build `linux/amd64` (and `linux/arm64` if Karpenter may pick Graviton) |
+| Architecture | the release workflow publishes one multi-architecture tag (`linux/amd64` and `linux/arm64`), so Karpenter may pick either x86 or Graviton nodes |
 
 ### Probes
 
