@@ -116,6 +116,23 @@ The service never waits for either, and an empty knowledge base does not fail re
 manifests are in this repository (EKS is out of scope here); this paragraph describes how the same
 container would be run.
 
+**Planned: vector retrieval (S3 Vectors).** Retrieval will move from PostgreSQL full-text search to
+Amazon S3 Vectors with Bedrock embeddings, because the corpus grows beyond the plant and problem records. It
+is decided, not built: the code described above is unchanged until it lands. Decisions so far:
+
+- Corpus: the 15 catalog plants and 5 problem records already imported, plus the PlantSolve blog articles
+  (`/api/v1/blogs/`, CC BY 4.0 per post, about 185 posts). Only articles about plant care and plant problems
+  are taken (categories such as business, services and hydroponics are left out).
+- The link from a problem record to blog posts is broad (118 of 185 posts for overwatering), so it is stored
+  only as a weak `problem_slug` tag, never used as a filter.
+- PostgreSQL stays the source of truth (documents, sections, hashes, citations); the vectors are an index
+  keyed by a stable section id, so a repeated import overwrites instead of duplicating.
+- Every chunk keeps its source name, licence and URL, and the rule "no used source means `not_in_kb`" stays.
+  The relevance threshold (`PLANT_CARE_CHAT_MIN_RANK`, a `ts_rank` scale today) has to be recalibrated for the
+  similarity score.
+- The import command and image stay the same (`python -m app.knowledge_import`); it gains an embedding and
+  upsert step and needs Bedrock and S3 Vectors access besides the database.
+
 ### Catalog images
 
 Item pictures live in a separate public-read S3 bucket, `growpath-media` (the policy allows reading
